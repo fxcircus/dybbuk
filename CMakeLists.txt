@@ -34,6 +34,10 @@ juce_add_plugin(Dybbuk
 # Sources shared by the plugin and the headless UI renderer. Keep DSP-only
 # files in ENGINE_SOURCES so EngineTest never drags in the editor.
 set(ENGINE_SOURCES
+    Source/dsp/ChipClock.cpp
+    Source/dsp/PTStage.cpp
+    Source/dsp/TimeFilterLoop.cpp
+    Source/dsp/DybbukEngine.cpp
     Source/dsp/ExampleEngine.cpp)
 
 set(PLUGIN_SOURCES
@@ -91,6 +95,7 @@ target_compile_definitions(EngineTest PRIVATE
 target_link_libraries(EngineTest
     PRIVATE
         juce::juce_dsp
+        juce::juce_audio_formats
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)

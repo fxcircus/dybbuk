@@ -81,10 +81,14 @@ found by the user rather than by the build.
   side effect of another change.
 
 ## Project-specific
-- Repo: <git remote, or "not yet a repo">
+- Repo: local git only, no remote configured yet (commit to main; push once a
+  remote exists).
 - Push directly to main unless told otherwise.
-- Breaking previously saved sessions/presets: <allowed / not allowed>.
-  Saying "breaking saved sets is fine" early removes a lot of migration work.
+- Breaking previously saved sessions/presets: allowed until the first tagged
+  release. Nothing has been saved with this plugin yet, so parameter IDs and
+  state layout may still change without migration code.
+- Source spec: `dybbuk-plan.md` (what we are emulating and why). `docs/DESIGN.md`
+  is the technical design derived from it; `docs/PLAN.md` holds the phase gates.
 
 ## Value readouts (apply to every new parameter)
 
