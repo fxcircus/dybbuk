@@ -1352,6 +1352,121 @@ void generative()
            "peak " + juce::String (peakOf (agitOut, 0, (int) agitOut.size()), 4));
 }
 
+
+// Phase 6: thirty minutes of audio with everything moving, which at 0.18 % of
+// realtime costs about three seconds. Looks for the failures that only appear
+// over time: a drifting DC offset, a slowly growing loop, a denormal stall, a
+// state that goes non-finite once an hour.
+void soak()
+{
+    std::printf ("soak: 30 minutes with every parameter sweeping\n");
+    constexpr double sr = 48000.0;
+    constexpr int block = 128;
+    const double minutes = 30.0;
+
+    juce::ScopedNoDenormals noDenormals;
+
+    auto engine = std::make_unique<DybbukEngine>();
+    engine->prepare (sr, block);
+
+    juce::AudioBuffer<float> buffer (2, block);
+    double phase = 0.0;
+
+    const int blocks = (int) (minutes * 60.0 * sr / block);
+    double sumEarly = 0.0, sumLate = 0.0, dcSum = 0.0;
+    int countEarly = 0, countLate = 0, countDc = 0;
+    float peak = 0.0f, monoPeak = 0.0f;
+    bool finite = true;
+    int nonFiniteBlock = -1;
+
+    const double started = juce::Time::getMillisecondCounterHiRes();
+
+    for (int b = 0; b < blocks; ++b)
+    {
+        const double t = b * block / sr;
+
+        DybbukEngine::Params p;
+        // Everything sweeps on prime-ish periods so the combination never
+        // settles into one repeating configuration.
+        p.time01 = 0.5f + 0.45f * (float) std::sin (t * 0.031);
+        p.decay = 0.9f + 0.25f * (float) std::sin (t * 0.017);
+        p.filterHz = 200.0f * std::pow (60.0f, 0.5f + 0.5f * (float) std::sin (t * 0.023));
+        p.resonance01 = 0.5f + 0.45f * (float) std::sin (t * 0.041);
+        p.absorb01 = 0.4f + 0.4f * (float) std::sin (t * 0.013);
+        p.blend01 = 0.7f;
+        p.strengthDb = 10.0f + 10.0f * (float) std::sin (t * 0.029);
+        p.agitate01 = 0.6f + 0.4f * (float) std::sin (t * 0.011);
+        p.agitSpeedHz = 0.2f * std::pow (200.0f, 0.5f + 0.5f * (float) std::sin (t * 0.037));
+        p.timeMod01 = 0.5f + 0.5f * (float) std::sin (t * 0.019);
+        // Constant, not stepped: switching character on halfway through would
+        // show up as a level change and look like the loop creeping.
+        p.tonesLevel01 = 0.3f;
+        p.spread01 = 0.6f;
+        p.bypass = std::fmod (t, 300.0) > 290.0; // in and out of circuit every five minutes
+
+        for (int i = 0; i < block; ++i)
+        {
+            const float v = std::fmod (t, 7.0) < 3.0 ? 0.35f * (float) std::sin (phase) : 0.0f;
+            phase += 220.0 / sr * juce::MathConstants<double>::twoPi;
+            buffer.setSample (0, i, v);
+            buffer.setSample (1, i, v);
+        }
+
+        engine->process (buffer, p);
+
+        for (int i = 0; i < block; ++i)
+        {
+            const float y = buffer.getSample (0, i);
+            const float mono = 0.5f * (y + buffer.getSample (1, i));
+            if (! std::isfinite (y) || ! std::isfinite (mono))
+            {
+                if (finite)
+                    nonFiniteBlock = b;
+                finite = false;
+            }
+            else
+            {
+                peak = juce::jmax (peak, std::abs (y));
+                monoPeak = juce::jmax (monoPeak, std::abs (mono));
+                dcSum += (double) y;
+                ++countDc;
+                // Five minute windows, so the comparison averages over many
+                // cycles of every sweep rather than catching two phases.
+                if (t > 60.0 && t < 360.0) { sumEarly += (double) y * y; ++countEarly; }
+                if (t > minutes * 60.0 - 300.0) { sumLate += (double) y * y; ++countLate; }
+            }
+        }
+
+        if (b % 40 == 0) // a Clear every ~100 ms of audio time, mid-runaway
+            if (std::fmod (t, 137.0) < 0.2)
+                engine->requestClear();
+    }
+
+    const double elapsed = (juce::Time::getMillisecondCounterHiRes() - started) / 1000.0;
+    const double earlyDb = dbfs (std::sqrt (sumEarly / juce::jmax (1, countEarly)));
+    const double lateDb = dbfs (std::sqrt (sumLate / juce::jmax (1, countLate)));
+    const double dcOffset = dcSum / juce::jmax (1, countDc);
+
+    check ("stays finite for 30 minutes", finite,
+           finite ? "no non-finite samples" : "first at block " + juce::String (nonFiniteBlock));
+    // The headroom contract: the centre (what a mono listener hears, and what
+    // Out is calibrated against) stays inside full scale even with Decay in
+    // the runaway zone and Strength at +20 dB. Spread's side component sits on
+    // top of that by design, the way any mid-side widener does, which is why
+    // it is measured separately rather than folded into the same limit.
+    check ("the mono sum stays inside full scale", monoPeak < 1.0f,
+           "mono peak " + juce::String (monoPeak, 4) + ", stereo peak with Spread at 60 % "
+               + juce::String (peak, 4));
+    check ("level does not creep", std::abs (lateDb - earlyDb) < 3.0,
+           juce::String (earlyDb, 1) + " dBFS over minutes 1 to 6, " + juce::String (lateDb, 1)
+               + " over the last five");
+    check ("no DC offset accumulates", std::abs (dcOffset) < 0.002,
+           "mean sample " + juce::String (dcOffset, 6));
+    note ("cost", juce::String (elapsed, 1) + " s of compute for " + juce::String (minutes, 0)
+                      + " minutes of audio (" + juce::String (100.0 * elapsed / (minutes * 60.0), 3)
+                      + " % of realtime)");
+}
+
 // Diagnostic, not a gate: where does the loop cross unity and start to sing?
 void probe()
 {
@@ -1515,7 +1630,7 @@ const Scenario kScenarios[] = {
     { "agitation", agitation }, { "follower", follower }, { "interference", interference },
     { "drift", drift },         { "generative", generative },
     { "tones", tones },         { "spread", spread },
-    { "cpu", cpu },       { "probe", probe },
+    { "cpu", cpu },             { "soak", soak },       { "probe", probe },
 };
 
 } // namespace

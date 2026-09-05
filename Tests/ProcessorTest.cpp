@@ -267,6 +267,55 @@ void presetsMakeSound()
     }
 }
 
+// Phase 6: a mono track feeding a stereo effect is the common Ableton case,
+// and it must not leave one side silent or stale.
+void monoToStereo()
+{
+    std::printf ("mono to stereo: a mono input fills both outputs\n");
+
+    DybbukProcessor p;
+
+    juce::AudioProcessor::BusesLayout layout;
+    layout.inputBuses.add (juce::AudioChannelSet::mono());
+    layout.outputBuses.add (juce::AudioChannelSet::stereo());
+
+    check ("mono in, stereo out is offered", p.checkBusesLayoutSupported (layout), "");
+    check ("and can be applied", p.setBusesLayout (layout), "");
+
+    p.prepareToPlay (48000.0, 128);
+    p.apvts.getParameter (params::id::blend)->setValueNotifyingHost (0.7f);
+
+    juce::AudioBuffer<float> buffer (2, 128);
+    juce::MidiBuffer midi;
+    double phase = 0.0;
+    float peakL = 0.0f, peakR = 0.0f, biggestDifference = 0.0f;
+
+    for (int b = 0; b < 200; ++b)
+    {
+        buffer.clear();
+        for (int i = 0; i < 128; ++i)
+        {
+            const float v = 0.4f * (float) std::sin (phase);
+            phase += 220.0 / 48000.0 * juce::MathConstants<double>::twoPi;
+            buffer.setSample (0, i, v); // only the mono input channel is written
+        }
+        p.processBlock (buffer, midi);
+
+        for (int i = 0; i < 128; ++i)
+        {
+            peakL = juce::jmax (peakL, std::abs (buffer.getSample (0, i)));
+            peakR = juce::jmax (peakR, std::abs (buffer.getSample (1, i)));
+            biggestDifference = juce::jmax (biggestDifference,
+                                            std::abs (buffer.getSample (0, i) - buffer.getSample (1, i)));
+        }
+    }
+
+    check ("both outputs carry signal", peakL > 0.05f && peakR > 0.05f,
+           "L peak " + juce::String (peakL, 3) + ", R peak " + juce::String (peakR, 3));
+    check ("and they match with Spread off", biggestDifference < 1.0e-6f,
+           "largest L minus R is " + juce::String (biggestDifference, 9));
+}
+
 void bypassAndAudio()
 {
     std::printf ("bypass: crossfades to dry, and the loop keeps its state\n");
@@ -420,6 +469,7 @@ int main()
     presetRoundTrip();
     factoryPresetsLoad();
     presetsMakeSound();
+    monoToStereo();
     bypassAndAudio();
 
     std::printf ("\n%d failures\n", failures);

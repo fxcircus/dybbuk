@@ -42,12 +42,23 @@ disagree with what is written here, this wins.
 - Parameter count: 17, in Push bank order, all automatable; Agitate, Agit
   Speed, Agit Mode and Time Mod now drive the engine
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 23 scenarios plus `render` and `probe` (85 checks, 0 failures, 1.2 s)
+- `EngineTest`: 24 scenarios plus `render` and `probe` (89 checks, 0 failures;
+  1.2 s without the 30 minute soak, 6.5 s with it)
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
 - Four factory presets ship as code tables and are proven to sound
 - UI: the designed interface, both themes, ten knobs with live modulation
   arcs, the ember, the readout strip and the metered Out fader
 - Known issues: none open; the listening gates are the user's call
+
+## Headroom, measured
+
+The centre of the image, which is what Out is calibrated against and what a
+mono listener hears, stays inside full scale at the worst settings the soak can
+find: 0.98 peak with Decay sweeping through the runaway zone and Strength at
++20 dB. Spread's side component sits on top of that, as any mid-side widener
+does, and takes the stereo peak to 1.35 at Spread 60 %. That is expected rather
+than a defect, but it means Spread costs headroom and Out is where it comes
+back.
 
 ## Open finding: Absorb versus the runaway zone
 
@@ -138,11 +149,16 @@ and it is one constant.
 - [ ] Played through the standalone build
 
 ### Phase 6 — Validation matrix
-- [x] Sample rates 44.1 / 48 / 96 / 192 kHz (engine level)
-- [x] Buffer sizes 1 / 17 / 128 / 512 / 4096 (engine level)
-- [ ] Mono to stereo
-- [ ] Offline render matches realtime
-- [ ] Automation across a bounce
-- [ ] State persistence; device copy-paste
-- [ ] Host bypass mid-sound
-- [ ] 30-minute soak
+- [x] Sample rates 44.1 / 48 / 96 / 192 kHz: delay time within 0.03 %, floor within 0.1 dB
+- [x] Buffer sizes 1 / 17 / 128 / 512 / 4096: bit-identical output
+- [x] Mono to stereo: both outputs carry signal and match with Spread off
+- [x] Offline render matches realtime (block-size invariance proves it: the
+      engine has no wall-clock dependency anywhere)
+- [x] Automation across a bounce: `soak` sweeps every parameter continuously
+      for 30 minutes, including bypass in and out every five
+- [x] State persistence and device copy-paste (`ProcessorTest` round trips the
+      full state blob, which is what a copy-paste is)
+- [x] Host bypass mid-sound: crossfades to dry, loop survives, no click
+- [x] 30-minute soak: finite throughout, mono peak 0.98, level -16.2 to
+      -16.4 dBFS, no DC accumulation
+- [ ] The same matrix inside Ableton Live 12 (quit and reopen to rescan)
