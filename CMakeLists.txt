@@ -1,0 +1,96 @@
+cmake_minimum_required(VERSION 3.22)
+project(Dybbuk VERSION 0.1.0)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "" FORCE)
+# Dev builds: arm64 only (much faster). Flip to "arm64;x86_64" for a universal release.
+set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "" FORCE)
+
+include(FetchContent)
+FetchContent_Declare(JUCE
+    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+    GIT_TAG        8.0.12
+    GIT_SHALLOW    TRUE)
+FetchContent_MakeAvailable(JUCE)
+
+# --- The plugin -------------------------------------------------------------
+# PLUGIN_CODE must be unique per plugin and start with an uppercase letter.
+# Standalone is here deliberately: it is the fast test rig (no DAW rescan).
+juce_add_plugin(Dybbuk
+    COMPANY_NAME              "fxcircus"
+    BUNDLE_ID                 "com.fxcircus.dybbuk"
+    IS_SYNTH                  FALSE
+    NEEDS_MIDI_INPUT          TRUE
+    NEEDS_MIDI_OUTPUT         FALSE
+    IS_MIDI_EFFECT            FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    COPY_PLUGIN_AFTER_BUILD   TRUE
+    PLUGIN_MANUFACTURER_CODE  Fxci
+    PLUGIN_CODE               Dybk
+    FORMATS                   AU VST3 Standalone
+    PRODUCT_NAME              "Dybbuk")
+
+# Sources shared by the plugin and the headless UI renderer. Keep DSP-only
+# files in ENGINE_SOURCES so EngineTest never drags in the editor.
+set(ENGINE_SOURCES
+    Source/dsp/ExampleEngine.cpp)
+
+set(PLUGIN_SOURCES
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+    Source/Parameters.cpp
+    Source/state/PresetManager.cpp
+    Source/ui/Theme.cpp
+    ${ENGINE_SOURCES})
+
+target_sources(Dybbuk PRIVATE ${PLUGIN_SOURCES})
+
+target_compile_definitions(Dybbuk PUBLIC
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0)
+
+target_link_libraries(Dybbuk
+    PRIVATE
+        juce::juce_audio_utils
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)
+
+# --- Headless UI renderer ---------------------------------------------------
+# Writes editor_snapshot*.png to the CWD so UI changes can be reviewed without
+# opening a DAW. This is the single most useful tool in the repo: run it after
+# every UI change and actually look at the output.
+juce_add_console_app(UISnapshot PRODUCT_NAME "UISnapshot")
+target_sources(UISnapshot PRIVATE Tests/UISnapshot.cpp ${PLUGIN_SOURCES})
+target_compile_definitions(UISnapshot PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    "JucePlugin_Name=\"Dybbuk\""
+    "JucePlugin_VersionString=\"0.1.0\"")
+target_link_libraries(UISnapshot
+    PRIVATE
+        juce::juce_audio_utils
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
+
+# --- Offline DSP harness ----------------------------------------------------
+# Drives the engine like a host and prints measurements. Add a named scenario
+# for every behaviour worth trusting; assert with numbers, not by ear.
+juce_add_console_app(EngineTest PRODUCT_NAME "EngineTest")
+target_sources(EngineTest PRIVATE Tests/EngineTest.cpp ${ENGINE_SOURCES})
+target_compile_definitions(EngineTest PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0)
+target_link_libraries(EngineTest
+    PRIVATE
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
