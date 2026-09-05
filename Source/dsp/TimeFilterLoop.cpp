@@ -1,5 +1,7 @@
 #include "TimeFilterLoop.h"
 
+#include "ModConstants.h"
+
 void TimeFilterLoop::prepare (double sampleRate, int maxBlockSize)
 {
     juce::ignoreUnused (maxBlockSize); // the loop holds no scratch; the engine chunks
@@ -29,6 +31,8 @@ void TimeFilterLoop::prepare (double sampleRate, int maxBlockSize)
         tapWeight[(size_t) i] = pt::kTapWeightRaw[i] / sum;
 
     clearStep = 1.0f / (pt::kClearFadeSec * (float) sampleRate);
+    aLoopEnvAttack = 1.0f - std::exp (-1.0f / (modk::kLoopEnvAttackMs * 0.001f * (float) sampleRate));
+    aLoopEnvRelease = 1.0f - std::exp (-1.0f / (modk::kLoopEnvReleaseMs * 0.001f * (float) sampleRate));
     energyRelease = std::exp (-1.0f / (pt::kEnergyReleaseSec * (float) sampleRate));
 
     firstBlock = true;
@@ -59,14 +63,23 @@ void TimeFilterLoop::flushAll() noexcept
     sat.reset();
     clock.reset();
     fb = 0.0f;
+    loopEnv = 0.0f;
+    lastOut = 0.0f;
 }
 
 void TimeFilterLoop::refreshLoopCoeffs() noexcept
 {
-    const float fc = juce::jlimit (20.0f, 0.45f * (float) sr, cutoffSmooth.skip (pt::kCtrlInterval));
+    // Knob value first (smoothed), then the modulation offset on top. Filter
+    // modulation is in octaves so a sweep sounds the same wherever the knob
+    // sits, which is the trap the sibling plugin's tone sweep already fell in.
+    const float knobHz = cutoffSmooth.skip (pt::kCtrlInterval);
+    const float modulatedHz = std::abs (modFilterOct) > 1.0e-9f
+                                  ? knobHz * std::exp2 (modFilterOct)
+                                  : knobHz;
+    const float fc = juce::jlimit (20.0f, 0.45f * (float) sr, modulatedHz);
     loopFilter.setG (std::tan (pt::kPi * fc / (float) sr));
 
-    const float res = resSmooth.skip (pt::kCtrlInterval);
+    const float res = juce::jlimit (0.0f, 1.0f, resSmooth.skip (pt::kCtrlInterval) + modResonance);
     // k = 1/Q. The last of the knob travel takes k slightly negative, which
     // is an actively resonating filter; the state limit is what bounds it.
     const float over = juce::jlimit (0.0f, 1.0f,
@@ -75,13 +88,13 @@ void TimeFilterLoop::refreshLoopCoeffs() noexcept
                     - pt::kResOverdrive * (over * over * (3.0f - 2.0f * over));
     loopFilter.setK (k);
 
-    const float a = absorbSmooth.skip (pt::kCtrlInterval);
+    const float a = juce::jlimit (0.0f, 1.0f, absorbSmooth.skip (pt::kCtrlInterval) + modAbsorb);
     absorbShelfDepth = pt::kAbsorbShelfMax * a;
     sat.setDrive (pt::kSatDrive * (1.0f + pt::kAbsorbDrive * a));
     absorbOutGain = std::pow (10.0f, -pt::kAbsorbOutMaxDb * a * 0.05f);
     absorbFbGain = std::pow (10.0f, -pt::kAbsorbFbMaxDb * pt::kAbsorbFeedbackShare * a * 0.05f);
 
-    decayGain = decaySmooth.skip (pt::kCtrlInterval);
+    decayGain = juce::jlimit (0.0f, pt::kDecayMax, decaySmooth.skip (pt::kCtrlInterval) + modDecay);
 }
 
 void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& p, const float* modOct)
@@ -98,6 +111,11 @@ void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& 
 
     if (! std::isfinite (fb)) // backstop: a poisoned loop never recovers on its own
         flushAll();
+
+    modFilterOct = p.filterModOct;
+    modResonance = p.resonanceMod;
+    modDecay = p.decayMod;
+    modAbsorb = p.absorbMod;
 
     clock.setTime01 (p.time01);
     decaySmooth.setTargetValue (juce::jlimit (0.0f, pt::kDecayMax, p.decay));
@@ -186,6 +204,10 @@ void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& 
 
         const float mag = std::abs (y);
         energyEnv = mag > energyEnv ? mag : energyEnv * energyRelease;
+
+        // The loop's own envelope, which is what Interference listens to.
+        loopEnv += (mag - loopEnv) * (mag > loopEnv ? aLoopEnvAttack : aLoopEnvRelease);
+        lastOut = y;
 
         lastFsChip = f.fsChip;
     }

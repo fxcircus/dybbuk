@@ -37,6 +37,9 @@ set(ENGINE_SOURCES
     Source/dsp/ChipClock.cpp
     Source/dsp/PTStage.cpp
     Source/dsp/TimeFilterLoop.cpp
+    Source/dsp/Agitation.cpp
+    Source/dsp/Interference.cpp
+    Source/dsp/ModMatrix.cpp
     Source/dsp/DybbukEngine.cpp)
 
 set(PLUGIN_SOURCES

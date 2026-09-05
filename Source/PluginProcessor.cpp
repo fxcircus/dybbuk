@@ -125,6 +125,10 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
     p.strengthDb = pStrength->load();
     p.decay = pDecay->load();
+    p.agitate01 = pAgitate->load() * 0.01f;
+    p.agitSpeedHz = pAgitSpeed->load();
+    p.agitGateMode = pAgitMode->load() >= 0.5f;
+    p.timeMod01 = pTimeMod->load() * 0.01f;
     p.filterHz = pFilter->load();
     p.resonance01 = pResonance->load() * 0.01f;
     p.absorb01 = pAbsorb->load() * 0.01f;

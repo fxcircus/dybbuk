@@ -39,14 +39,26 @@ disagree with what is written here, this wins.
 
 ## Current state
 
-- Parameter count: 17, in Push bank order, all automatable
+- Parameter count: 17, in Push bank order, all automatable; Agitate, Agit
+  Speed, Agit Mode and Time Mod now drive the engine
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 15 scenarios plus `render` (55 checks, 0 failures, 0.2 s)
+- `EngineTest`: 21 scenarios plus `render` and `probe` (78 checks, 0 failures, 1.2 s)
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
 - Four factory presets ship as code tables and are proven to sound
 - Known issues: the editor is an interim layout (playable, not the designed
-  one); Agitate, Agit Speed, Time Mod, Agit Mode, Tones and Spread are
-  declared and automatable but not yet read by the engine
+  one); Tones and Spread are declared and automatable but not yet read by the
+  engine (Phase 4)
+
+## Open finding: Absorb versus the runaway zone
+
+The default Absorb of 20 % makes self-oscillation impossible at any Decay.
+Absorb removes up to 4 dB per iteration from the feedback and the loop has only
+1.2 dB of margin at Decay 1.15, so a fifth of the knob is enough to damp it
+completely: -9.1 dBFS at Absorb 0 against -48.4 dBFS at Absorb 0.2 (run
+`EngineTest probe`). That is the manual's "diminished into the earth" working
+as described, but it means the red zone at the top of Decay does nothing in the
+default patch. Whether `kAbsorbFbMaxDb` should come down is an ear question,
+and it is one constant.
 
 ## Measured (48 kHz unless stated)
 
@@ -94,9 +106,14 @@ disagree with what is written here, this wins.
 - [x] pluginval strictness 10 and `auval` pass
 
 ### Phase 3 — Modulation
-- [ ] Agitation, Input Follower, Interference, Drift
-- [ ] Audio-rate Time modulation path
-- [ ] Generative milestone: no input, Interference plus Decay high, evolving and never exactly repeating
+- [x] Agitation, Input Follower, Interference, Drift
+- [x] Audio-rate Time modulation path (Time only; everything else on a 32-sample tick)
+- [x] Three hero routes and the Agitate macro
+- [x] **Generative milestone passed.** No input at any point: self-oscillates
+      at -11.5 dBFS, correlation falls from 0.89 at 2 s to -0.28 at 40 s with
+      no rebound, a 1e-5 nudge changes the output 141 % a minute later, energy
+      spread 0.79 across twelve 5 s windows
+- [ ] Listened to (`EngineTest render` writes dybbuk_generative.wav, 40 s of it)
 
 ### Phase 4 — Playability and presets
 - [ ] Played through the standalone build

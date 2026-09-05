@@ -196,6 +196,81 @@ const InFn kSilence = [] (double) { return 0.0f; };
 
 InFn sine (double hz, double amp) { return [hz, amp] (double t) { return (float) (amp * std::sin (juce::MathConstants<double>::twoPi * hz * t)); }; }
 
+
+// Drives the whole engine, which is what the modulation scenarios need: the
+// sources only exist above the loop.
+std::vector<float> renderEngine (double sr, int block, double seconds,
+                                 const InFn& in, DybbukEngine::Params p, unsigned int seed,
+                                 std::vector<float>* energyOut = nullptr,
+                                 double energyRateHz = 50.0)
+{
+    juce::ScopedNoDenormals noDenormals;
+
+    auto engine = std::make_unique<DybbukEngine>();
+    engine->prepare (sr, block);
+    if (seed != 0u)
+        engine->seedForTests (seed);
+
+    const int total = (int) (seconds * sr);
+    std::vector<float> out ((size_t) total, 0.0f);
+    juce::AudioBuffer<float> buffer (2, block);
+
+    const int energyEvery = juce::jmax (1, (int) (sr / energyRateHz));
+    int sinceEnergy = 0;
+
+    int pos = 0;
+    while (pos < total)
+    {
+        const int len = juce::jmin (block, total - pos);
+        for (int i = 0; i < len; ++i)
+        {
+            const float v = in ((double) (pos + i) / sr);
+            buffer.setSample (0, i, v);
+            buffer.setSample (1, i, v);
+        }
+        engine->process (buffer, p);
+        for (int i = 0; i < len; ++i)
+        {
+            out[(size_t) (pos + i)] = buffer.getSample (0, i);
+            if (energyOut != nullptr && ++sinceEnergy >= energyEvery)
+            {
+                sinceEnergy = 0;
+                energyOut->push_back (engine->getLoopEnergy());
+            }
+        }
+        pos += len;
+    }
+    return out;
+}
+
+// Normalised autocorrelation of a series at one lag, mean removed. A texture
+// that repeats every N seconds shows a peak here; one that never repeats does
+// not.
+double autocorrelation (const std::vector<float>& x, int lag)
+{
+    const int n = (int) x.size() - lag;
+    if (n < 16)
+        return 0.0;
+    double mean = 0.0;
+    for (float v : x)
+        mean += v;
+    mean /= (double) x.size();
+
+    double num = 0.0, den = 0.0;
+    for (int i = 0; i < n; ++i)
+    {
+        const double a = x[(size_t) i] - mean;
+        const double b = x[(size_t) (i + lag)] - mean;
+        num += a * b;
+    }
+    for (size_t i = 0; i < x.size(); ++i)
+    {
+        const double a = x[i] - mean;
+        den += a * a;
+    }
+    return den > 1.0e-12 ? num / den : 0.0;
+}
+
 // --- scenarios -----------------------------------------------------------
 
 // The chip is a fixed memory read at a variable clock, so the delay must come
@@ -805,13 +880,22 @@ void render()
     constexpr double sr = 48000.0;
     std::printf ("render: writing wav files to the working directory\n");
 
-    struct Patch { const char* name; float time01, decay, filterHz, res, absorb, blend; };
+    struct Patch
+    {
+        const char* name;
+        float time01, decay, filterHz, res, absorb, blend;
+        float agitate, agitSpeed, timeMod;
+        bool silent; // no input at all: the self-playing texture
+    };
     const Patch patches[] = {
-        { "dybbuk_short_clean", time01ForSeconds (0.08), 0.55f, 12000.0f, 0.15f, 0.0f, 0.5f },
-        { "dybbuk_echoverb", time01ForSeconds (0.18), 0.82f, 2200.0f, 0.35f, 0.25f, 0.55f },
-        { "dybbuk_wowflutter", time01ForSeconds (0.55), 0.7f, 1400.0f, 0.3f, 0.6f, 0.5f },
-        { "dybbuk_batcave", time01ForSeconds (2.2), 0.9f, 800.0f, 0.45f, 0.4f, 0.7f },
-        { "dybbuk_runaway", time01ForSeconds (0.25), 1.12f, 3000.0f, 0.5f, 0.2f, 0.8f },
+        { "dybbuk_short_clean", time01ForSeconds (0.08), 0.55f, 12000.0f, 0.15f, 0.0f, 0.5f, 0.0f, 0.35f, 0.0f, false },
+        { "dybbuk_echoverb", time01ForSeconds (0.18), 0.82f, 2200.0f, 0.35f, 0.25f, 0.55f, 0.15f, 0.12f, 0.08f, false },
+        { "dybbuk_wowflutter", time01ForSeconds (0.55), 0.7f, 1400.0f, 0.3f, 0.6f, 0.5f, 0.45f, 0.45f, 0.0f, false },
+        { "dybbuk_batcave", time01ForSeconds (2.2), 0.9f, 800.0f, 0.45f, 0.4f, 0.7f, 0.7f, 6.5f, 0.35f, false },
+        { "dybbuk_runaway", time01ForSeconds (0.25), 1.12f, 3000.0f, 0.5f, 0.2f, 0.8f, 0.3f, 0.5f, 0.2f, false },
+        { "dybbuk_clang", time01ForSeconds (0.12), 0.8f, 6000.0f, 0.3f, 0.0f, 0.6f, 0.2f, 0.35f, 0.85f, false },
+        // The Phase 3 milestone, as a sound: nothing is played into this one.
+        { "dybbuk_generative", time01ForSeconds (0.9), 1.1f, 4000.0f, 0.4f, 0.0f, 1.0f, 0.8f, 0.2f, 0.6f, true },
     };
 
     // A plucked-string stand-in: exponentially decaying detuned partials, so
@@ -837,8 +921,11 @@ void render()
         p.resonance01 = patch.res;
         p.absorb01 = patch.absorb;
         p.blend01 = patch.blend;
+        p.agitate01 = patch.agitate;
+        p.agitSpeedHz = patch.agitSpeed;
+        p.timeMod01 = patch.timeMod;
 
-        const double seconds = 12.0;
+        const double seconds = patch.silent ? 40.0 : 12.0;
         const int total = (int) (seconds * sr);
         juce::AudioBuffer<float> file (2, total);
         juce::AudioBuffer<float> buffer (2, 128);
@@ -852,7 +939,7 @@ void render()
             {
                 const double t = (double) (pos + i) / sr;
                 float v = 0.0f;
-                if (t < 6.0)
+                if (! patch.silent && t < 6.0)
                 {
                     const int noteIndex = (int) (t / 1.5);
                     const double localT = t - noteIndex * 1.5;
@@ -886,6 +973,368 @@ void render()
     }
 }
 
+
+// The agitation generator: period, shape, and the anti-aliasing that stops a
+// fast generator turning into noise on the filter.
+void agitation()
+{
+    std::printf ("agitation: period and shape of the function generator\n");
+    constexpr double sr = 48000.0;
+
+    for (double hz : { 0.5, 4.0, 40.0 })
+    {
+        Agitation gen;
+        gen.prepare (sr);
+        gen.setSpeedHz ((float) hz);
+        gen.setMode (Agitation::Mode::loop);
+
+        const int n = (int) (sr * juce::jmax (4.0, 6.0 / hz));
+        std::vector<float> out ((size_t) n, 0.0f);
+        for (int i = 0; i < n; ++i)
+            out[(size_t) i] = gen.processSample (false);
+
+        // Count rising zero crossings of (value - 0.5) to get the period.
+        int cycles = 0;
+        int firstCross = -1, lastCross = -1;
+        for (int i = 1; i < n; ++i)
+            if (out[(size_t) (i - 1)] < 0.5f && out[(size_t) i] >= 0.5f)
+            {
+                ++cycles;
+                if (firstCross < 0)
+                    firstCross = i;
+                lastCross = i;
+            }
+
+        const double measured = cycles > 1 ? (double) (lastCross - firstCross) / (cycles - 1) / sr : 0.0;
+        const double wanted = 1.0 / hz;
+        double lo = 1.0, hi = 0.0;
+        for (float v : out)
+        {
+            lo = juce::jmin (lo, (double) v);
+            hi = juce::jmax (hi, (double) v);
+        }
+
+        check ("period matches the speed", std::abs (measured - wanted) / wanted < 0.02,
+               juce::String (hz, 2) + " Hz: " + juce::String (measured * 1000.0, 2) + " ms measured, "
+                   + juce::String (wanted * 1000.0, 2) + " ms wanted");
+        check ("spans the full range", lo < 0.05 && hi > 0.95,
+               juce::String (hz, 2) + " Hz: " + juce::String (lo, 3) + " to " + juce::String (hi, 3));
+    }
+
+    // Gate mode fires one cycle per onset and rests at zero between them.
+    {
+        Agitation gen;
+        InputFollower env;
+        gen.prepare (sr);
+        env.prepare (sr);
+        gen.setSpeedHz (2.0f);
+        gen.setMode (Agitation::Mode::gate);
+
+        int onsets = 0;
+        double restSum = 0.0;
+        int restCount = 0;
+        const int n = (int) (sr * 4.0);
+        for (int i = 0; i < n; ++i)
+        {
+            const double t = (double) i / sr;
+            // A pluck every second: 30 ms of tone, then silence.
+            const double local = std::fmod (t, 1.0);
+            const float x = local < 0.03 ? (float) (0.5 * std::sin (juce::MathConstants<double>::twoPi * 220.0 * t)) : 0.0f;
+            const bool onset = env.processSample (x);
+            if (onset)
+                ++onsets;
+            const float y = gen.processSample (onset);
+            if (local > 0.8) // well after the one-shot has finished
+            {
+                restSum += (double) y;
+                ++restCount;
+            }
+        }
+
+        check ("gate fires once per note", onsets == 4,
+               juce::String (onsets) + " onsets from 4 notes");
+        check ("gate rests at zero between notes", restSum / juce::jmax (1, restCount) < 0.02,
+               "mean " + juce::String (restSum / juce::jmax (1, restCount), 4) + " while resting");
+    }
+}
+
+// The envelope follower: the plan's 5 ms attack and 100 ms release.
+void follower()
+{
+    std::printf ("follower: attack and release times on the input\n");
+    constexpr double sr = 48000.0;
+
+    InputFollower env;
+    env.prepare (sr);
+
+    // A step of amplitude 0.5 held, then removed.
+    int attackSamples = -1, releaseSamples = -1;
+    const int n = (int) (sr * 1.0);
+    for (int i = 0; i < n; ++i)
+    {
+        const double t = (double) i / sr;
+        const float x = t < 0.5 ? 0.5f : 0.0f;
+        env.processSample (x);
+        if (attackSamples < 0 && env.getEnv() > 0.5f * 0.632f)
+            attackSamples = i;
+        if (t >= 0.5 && releaseSamples < 0 && env.getEnv() < 0.5f * 0.368f)
+            releaseSamples = i - (int) (0.5 * sr);
+    }
+
+    const double attackMs = 1000.0 * attackSamples / sr;
+    const double releaseMs = 1000.0 * releaseSamples / sr;
+    check ("attack near 5 ms", attackMs > 2.0 && attackMs < 9.0,
+           juce::String (attackMs, 2) + " ms to 63 %");
+    check ("release near 100 ms", releaseMs > 60.0 && releaseMs < 160.0,
+           juce::String (releaseMs, 1) + " ms to 37 %");
+}
+
+// Interference must be silent when the loop is silent and wild when it is hot.
+// A source that wanders on its own would detune the delay at rest.
+void interference()
+{
+    std::printf ("interference: chaos tracks the loop's own energy\n");
+    constexpr double sr = 48000.0;
+
+    auto runAt = [] (float loopEnv)
+    {
+        Interference intf;
+        intf.prepare (sr);
+        intf.seed (11u);
+
+        double sum = 0.0;
+        int count = 0;
+        const int ticks = (int) (sr / modk::kControlBlock * 8.0); // 8 seconds
+        for (int t = 0; t < ticks; ++t)
+        {
+            intf.tick (loopEnv, 0.0f);
+            for (int i = 0; i < modk::kControlBlock; ++i)
+            {
+                const float v = intf.nextSample();
+                if (t > ticks / 2) // after the energy follower has settled
+                {
+                    sum += (double) v * v;
+                    ++count;
+                }
+            }
+        }
+        return std::sqrt (sum / juce::jmax (1, count));
+    };
+
+    const double quiet = runAt (0.0f);
+    const double warm = runAt (0.05f);   // about -26 dBFS
+    const double hot = runAt (0.5f);     // about -6 dBFS
+
+    check ("silent loop produces no modulation", quiet < 0.01,
+           "RMS " + juce::String (quiet, 5) + " at rest");
+    check ("wakes up with the loop", warm > quiet * 3.0 && warm > 0.01,
+           "RMS " + juce::String (warm, 4) + " when warm");
+    check ("wilder when the loop is hot", hot > warm,
+           "RMS " + juce::String (hot, 4) + " when hot versus " + juce::String (warm, 4) + " warm");
+}
+
+// Tell 4, at the engine level: the always-on drift means two runs of the same
+// settings never land in the same place, but the pitch stays within cents.
+void drift()
+{
+    std::printf ("drift: always-on wow, tiny but never absent\n");
+    constexpr double sr = 48000.0;
+
+    DybbukEngine::Params p;
+    p.time01 = 0.5f;
+    p.decay = 0.7f;
+    p.blend01 = 1.0f;
+    p.filterHz = 8000.0f;
+
+    const auto a = renderEngine (sr, 128, 4.0, sine (300.0, 0.35), p, 0u);
+    const auto b = renderEngine (sr, 128, 4.0, sine (300.0, 0.35), p, 0u);
+
+    std::vector<float> diff (a.size(), 0.0f);
+    for (size_t i = 0; i < a.size(); ++i)
+        diff[i] = a[i] - b[i];
+
+    const double relative = rmsOf (diff, 0, (int) diff.size())
+                            / juce::jmax (rmsOf (a, 0, (int) a.size()), 1.0e-9);
+
+    // Pitch of the wet tail must still be the input pitch to within a few cents.
+    const int from = (int) (2.0 * sr), n = (int) (1.5 * sr);
+    const double f = zeroCrossFreq (a, from, n, sr);
+    const double cents = 1200.0 * std::log2 (f / 300.0);
+
+    check ("two runs differ", relative > 1.0e-4,
+           "relative difference " + juce::String (relative * 100.0, 3) + " %");
+    check ("but the pitch is unmoved", std::abs (cents) < 60.0,
+           juce::String (f, 1) + " Hz, " + juce::String (cents, 1) + " cents off 300 Hz");
+}
+
+// THE MILESTONE. dybbuk-plan.md phase 3: with no input, Interference plus a
+// high Decay must produce an evolving self-playing texture that never exactly
+// repeats. This is the pass/fail test for the whole concept.
+//
+// It is measured in two halves, because the two claims need different
+// conditions. Non-repetition is tested with Agitate at 0, where the only
+// things moving are Interference into Time, the drift trim and the chip's own
+// noise: with the agitation running, its cycle is a deliberate periodic
+// driver and would show up as exactly the correlation this looks for.
+// Evolution is tested with Agitate up, which is what makes the texture go
+// somewhere over minutes.
+void generative()
+{
+    std::printf ("generative: no input, self-playing, evolving, never repeating\n");
+    constexpr double sr = 48000.0;
+    const double seconds = 60.0;
+
+    DybbukEngine::Params base;
+    base.time01 = 0.55f;
+    base.decay = 1.1f;
+    base.filterHz = 4000.0f;
+    base.resonance01 = 0.4f;
+    // Absorb 0: the one setting the milestone cannot share with the defaults.
+    // Absorb takes up to 4 dB per iteration out of the feedback and the loop
+    // has only 1.2 dB of margin at Decay 1.15, so even Absorb 20 % damps
+    // self-oscillation completely (measured -9.1 dBFS at Absorb 0 against
+    // -48.4 dBFS at Absorb 0.2: run `EngineTest probe`). That is Absorb doing
+    // what the manual says, diminishing the signal into the earth, but it
+    // means the runaway zone only exists at low Absorb.
+    base.absorb01 = 0.0f;
+    base.blend01 = 1.0f;
+    base.timeMod01 = 0.6f;
+
+    // --- half one: chaos alone, no periodic driver anywhere ------------------
+    DybbukEngine::Params chaos = base;
+    chaos.agitate01 = 0.0f;
+
+    std::vector<float> energy;
+    const auto out = renderEngine (sr, 128, seconds, kSilence, chaos, 7u, &energy, 50.0);
+
+    const double level = dbfs (rmsOf (out, (int) (20.0 * sr), (int) (35.0 * sr)));
+    check ("self-oscillates from nothing", level > -45.0,
+           juce::String (level, 1) + " dBFS over 20 to 55 s, with no input at any point");
+    check ("stays bounded", peakOf (out, 0, (int) out.size()) < 0.98 && allFinite (out),
+           "peak " + juce::String (peakOf (out, 0, (int) out.size()), 4));
+
+    // What "never repeats" actually means: the correlation has to fall away
+    // with lag and stay down. A slowly wandering envelope correlates strongly
+    // at short lags whether or not it repeats, so a flat threshold across all
+    // lags measures smoothness, not repetition. A recurring texture instead
+    // shows correlation dropping and then climbing back at its period.
+    juce::String curve;
+    for (int lagSec : { 2, 5, 10, 20, 30, 40 })
+        curve += juce::String (lagSec) + "s=" + juce::String (autocorrelation (energy, lagSec * 50), 2) + " ";
+
+    double longLagWorst = 0.0;
+    int longLagAt = 0;
+    double runningMin = 1.0, biggestRebound = 0.0;
+    int reboundAt = 0;
+    for (int lagSec = 2; lagSec <= 40; ++lagSec)
+    {
+        const double c = std::abs (autocorrelation (energy, lagSec * 50));
+        if (lagSec >= 10 && c > longLagWorst)
+        {
+            longLagWorst = c;
+            longLagAt = lagSec;
+        }
+        if (c - runningMin > biggestRebound)
+        {
+            biggestRebound = c - runningMin;
+            reboundAt = lagSec;
+        }
+        runningMin = juce::jmin (runningMin, c);
+    }
+
+    check ("correlation falls away with lag", longLagWorst < 0.6,
+           "worst beyond 10 s is " + juce::String (longLagWorst, 3) + " at "
+               + juce::String (longLagAt) + " s   [" + curve.trim() + "]");
+    check ("no recurring pattern", biggestRebound < 0.3,
+           "largest climb back is " + juce::String (biggestRebound, 3) + " at "
+               + juce::String (reboundAt) + " s (a loop would climb to near 1.0)");
+
+    // Chaotic, not merely noisy: one extra sample of input at the very start
+    // sends it somewhere completely different a minute later.
+    const auto nudged = renderEngine (sr, 128, seconds,
+                                      [] (double t) { return t < 1.0e-5 ? 1.0e-5f : 0.0f; }, chaos, 7u);
+    std::vector<float> diff (out.size(), 0.0f);
+    for (size_t i = 0; i < out.size(); ++i)
+        diff[i] = out[i] - nudged[i];
+    const int tail = (int) (50.0 * sr);
+    const double divergence = rmsOf (diff, tail, (int) (9.0 * sr))
+                              / juce::jmax (rmsOf (out, tail, (int) (9.0 * sr)), 1.0e-9);
+    check ("chaotic, not merely noisy", divergence > 0.3,
+           "a 1e-5 nudge at t=0 changes the output at 50 s by "
+               + juce::String (divergence * 100.0, 1) + " %");
+
+    // ... but still reproducible when seeded, or no other test could rely on it.
+    const auto repeat = renderEngine (sr, 128, 5.0, kSilence, chaos, 7u);
+    const auto repeat2 = renderEngine (sr, 128, 5.0, kSilence, chaos, 7u);
+    check ("reproducible when seeded", fnvHash (repeat) == fnvHash (repeat2),
+           "hash " + juce::String::toHexString ((int) fnvHash (repeat)));
+
+    // --- half two: with the agitation running, it has to go somewhere --------
+    DybbukEngine::Params agitated = base;
+    agitated.agitate01 = 0.8f;
+    agitated.agitSpeedHz = 0.2f;
+
+    std::vector<float> agitEnergy;
+    const auto agitOut = renderEngine (sr, 128, seconds, kSilence, agitated, 7u, &agitEnergy, 50.0);
+
+    const int windowSamples = 5 * 50;
+    std::vector<double> windowMeans;
+    for (size_t start = 0; start + (size_t) windowSamples <= agitEnergy.size(); start += (size_t) windowSamples)
+    {
+        double sum = 0.0;
+        for (int i = 0; i < windowSamples; ++i)
+            sum += agitEnergy[start + (size_t) i];
+        windowMeans.push_back (sum / windowSamples);
+    }
+    double spread = 0.0;
+    for (double a : windowMeans)
+        for (double b : windowMeans)
+            spread = juce::jmax (spread, std::abs (a - b));
+
+    check ("evolves rather than droning", spread > 0.08,
+           juce::String ((int) windowMeans.size()) + " five-second windows, energy spread "
+               + juce::String (spread, 3));
+    check ("agitated texture stays bounded",
+           peakOf (agitOut, 0, (int) agitOut.size()) < 0.98 && allFinite (agitOut),
+           "peak " + juce::String (peakOf (agitOut, 0, (int) agitOut.size()), 4));
+}
+
+// Diagnostic, not a gate: where does the loop cross unity and start to sing?
+void probe()
+{
+    std::printf ("probe: level after 30 s with no input, across Decay / Absorb / Filter\n");
+    constexpr double sr = 48000.0;
+
+    struct Case { float decay, absorb, filterHz, time01, res; };
+    const Case cases[] = {
+        { 1.15f, 0.0f, 8000.0f, 0.30f, 0.3f },
+        { 1.15f, 0.0f, 4000.0f, 0.55f, 0.4f },
+        { 1.15f, 0.2f, 4000.0f, 0.55f, 0.4f },
+        { 1.10f, 0.0f, 4000.0f, 0.55f, 0.4f },
+        { 1.10f, 0.0f, 8000.0f, 0.55f, 0.4f },
+        { 1.10f, 0.0f, 8000.0f, 0.30f, 0.4f },
+        { 1.05f, 0.0f, 8000.0f, 0.30f, 0.4f },
+        { 1.15f, 0.0f, 18000.0f, 0.30f, 0.0f },
+    };
+
+    for (const auto& c : cases)
+    {
+        DybbukEngine::Params p;
+        p.time01 = c.time01;
+        p.decay = c.decay;
+        p.filterHz = c.filterHz;
+        p.resonance01 = c.res;
+        p.absorb01 = c.absorb;
+        p.blend01 = 1.0f;
+        const auto out = renderEngine (sr, 128, 30.0, kSilence, p, 7u);
+        note ("level",
+              "Decay " + juce::String (c.decay, 2) + " Absorb " + juce::String (c.absorb, 2)
+                  + " Filter " + juce::String (c.filterHz, 0) + " Time " + juce::String (c.time01, 2)
+                  + " Res " + juce::String (c.res, 1) + ": "
+                  + juce::String (dbfs (rmsOf (out, (int) (25.0 * sr), (int) (4.0 * sr))), 1) + " dBFS");
+    }
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -893,7 +1342,10 @@ const Scenario kScenarios[] = {
     { "bandwidth", bandwidth }, { "repitch", repitch },   { "threestep", threestep },
     { "runaway", runaway },     { "bleed", bleed },       { "fm", fm },
     { "clear", clear },         { "nan", nan },           { "nonidentical", nonidentical },
-    { "blockmatrix", blockmatrix }, { "srmatrix", srmatrix }, { "cpu", cpu },
+    { "blockmatrix", blockmatrix }, { "srmatrix", srmatrix },
+    { "agitation", agitation }, { "follower", follower }, { "interference", interference },
+    { "drift", drift },         { "generative", generative },
+    { "cpu", cpu },       { "probe", probe },
 };
 
 } // namespace

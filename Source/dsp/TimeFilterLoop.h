@@ -29,6 +29,14 @@ public:
         float filterHz = 18000.0f;
         float resonance01 = 0.2f;
         float absorb01 = 0.0f;
+
+        // Modulation offsets, already combined by the matrix. They are applied
+        // AFTER the knob smoothers, so a knob still glides over 30 ms while
+        // modulation reaches the coefficients at control rate undamped.
+        float filterModOct = 0.0f;
+        float resonanceMod = 0.0f;
+        float decayMod = 0.0f;
+        float absorbMod = 0.0f;
     };
 
     void prepare (double sampleRate, int maxBlockSize);
@@ -43,6 +51,11 @@ public:
     void requestTimeSnap() noexcept { snapRequested.store (true, std::memory_order_release); }
 
     void seedForTests (unsigned int s) noexcept;
+
+    // Read by Interference, on the audio thread, between blocks. Plain floats:
+    // same thread, no publication needed.
+    float getLoopEnvelope() const noexcept { return loopEnv; }
+    float getLastSample() const noexcept { return lastOut; }
 
     // Engine to UI. Tearing is fine: these are pictures, not data.
     std::atomic<float> uiLoopEnergy { 0.0f };   // 0 to 1, log mapped over 60 dB, for the ember
@@ -67,6 +80,8 @@ private:
     float fb = 0.0f;
     float decayGain = 0.0f, absorbOutGain = 1.0f, absorbFbGain = 1.0f, absorbShelfDepth = 0.0f;
     float energyEnv = 0.0f, energyRelease = 0.999f;
+    float loopEnv = 0.0f, lastOut = 0.0f, aLoopEnvAttack = 0.5f, aLoopEnvRelease = 0.01f;
+    float modFilterOct = 0.0f, modResonance = 0.0f, modDecay = 0.0f, modAbsorb = 0.0f;
     int controlCountdown = 0; // persists across blocks: smoothing must not depend on host block size
 
     enum class ClearPhase { idle, fadingOut, fadingIn };
