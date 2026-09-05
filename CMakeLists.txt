@@ -37,14 +37,14 @@ set(ENGINE_SOURCES
     Source/dsp/ChipClock.cpp
     Source/dsp/PTStage.cpp
     Source/dsp/TimeFilterLoop.cpp
-    Source/dsp/DybbukEngine.cpp
-    Source/dsp/ExampleEngine.cpp)
+    Source/dsp/DybbukEngine.cpp)
 
 set(PLUGIN_SOURCES
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/Parameters.cpp
     Source/state/PresetManager.cpp
+    Source/state/FactoryPresets.cpp
     Source/ui/Theme.cpp
     ${ENGINE_SOURCES})
 
@@ -77,6 +77,27 @@ target_compile_definitions(UISnapshot PRIVATE
     "JucePlugin_Name=\"Dybbuk\""
     "JucePlugin_VersionString=\"0.1.0\"")
 target_link_libraries(UISnapshot
+    PRIVATE
+        juce::juce_audio_utils
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
+
+# --- State harness ----------------------------------------------------------
+# Round trips every parameter and every readout through save/restore. The bug
+# class this exists for is state that silently fails to save: CLAUDE.md calls
+# it the most common one across these projects, and it is always the user who
+# finds it.
+juce_add_console_app(ProcessorTest PRODUCT_NAME "ProcessorTest")
+target_sources(ProcessorTest PRIVATE Tests/ProcessorTest.cpp ${PLUGIN_SOURCES})
+target_compile_definitions(ProcessorTest PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    "JucePlugin_Name=\"Dybbuk\""
+    "JucePlugin_VersionString=\"0.1.0\"")
+target_link_libraries(ProcessorTest
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp

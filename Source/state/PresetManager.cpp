@@ -1,11 +1,14 @@
 #include "PresetManager.h"
 
+#include "FactoryPresets.h"
+
 namespace
 {
     // Not JucePlugin_* macros: the console-app test targets don't define them.
     constexpr auto companyFolder = "fxcircus";
     constexpr auto productFolder = "Dybbuk";
     constexpr auto presetExtension = ".preset";
+    constexpr auto presetRootTag = "DybbukPreset";
     constexpr auto factoryDefaultName = "Init";
 
     juce::String formatPatentDate (juce::Time t)
@@ -56,6 +59,8 @@ juce::Array<PresetManager::Info> PresetManager::getPresets()
     juce::Array<Info> factory, user, starred;
 
     factory.add ({ factoryDefaultName, {}, true, isStarred (factoryDefaultName) });
+    for (int i = 0; i < numFactoryPresets(); ++i)
+        factory.add ({ factoryPreset (i).name, {}, true, isStarred (factoryPreset (i).name) });
 
     auto files = userFolder().findChildFiles (juce::File::findFiles, false,
                                               "*" + juce::String (presetExtension));
@@ -86,17 +91,58 @@ void PresetManager::applyFactoryDefaults()
 {
     for (auto* parameter : processor.getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
+            if (! params::performanceParams().contains (ranged->paramID)) // never bypass or un-bypass
+                ranged->setValueNotifyingHost (ranged->getDefaultValue());
+}
+
+// A preset saved before a parameter existed has no VALUE node for it. Without
+// this the parameter silently keeps whatever the last patch left on the knob,
+// which reads as "that preset sounds different every time you load it".
+void PresetManager::restoreMissingParameterDefaults (const juce::ValueTree& incoming)
+{
+    for (auto* parameter : processor.getParameters())
+    {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter);
+        if (ranged == nullptr || params::performanceParams().contains (ranged->paramID))
+            continue;
+
+        bool found = false;
+        for (int i = 0; i < incoming.getNumChildren(); ++i)
+        {
+            const auto child = incoming.getChild (i);
+            if (child.hasType ("PARAM") && child.getProperty ("id").toString() == ranged->paramID)
+            {
+                found = true;
+                break;
+            }
+        }
+        if (! found)
             ranged->setValueNotifyingHost (ranged->getDefaultValue());
+    }
+}
+
+bool PresetManager::loadFactoryPreset (const juce::String& name)
+{
+    for (int i = 0; i < numFactoryPresets(); ++i)
+    {
+        const auto& fp = factoryPreset (i);
+        if (name != fp.name)
+            continue;
+
+        applyFactoryDefaults();
+        for (int v = 0; v < fp.numValues; ++v)
+            if (auto* parameter = apvts.getParameter (fp.values[v].id))
+                parameter->setValueNotifyingHost (parameter->convertTo0to1 (fp.values[v].value));
+        return true;
+    }
+    return false;
 }
 
 void PresetManager::finishLoad (const juce::String& name)
 {
-    // A preset never arrives mid-performance: drop the performance controls so
-    // nothing is left latched from the previous preset.
-    for (const auto& id : params::performanceParams())
-        if (auto* parameter = apvts.getParameter (id))
-            parameter->setValueNotifyingHost (0.0f);
-
+    // Performance controls are deliberately left alone. Forcing them to zero
+    // here (as the template did) would take a bypassed plugin back into
+    // circuit the moment someone browsed presets.
     setCurrentName (name);
     dirty.store (false, std::memory_order_relaxed);
     processor.updateHostDisplay();
@@ -106,25 +152,54 @@ bool PresetManager::loadPreset (const Info& info)
 {
     if (info.factory)
     {
-        applyFactoryDefaults();
-        referenceState = juce::ValueTree(); // factory: reset means defaults
+        if (! loadFactoryPreset (info.name))
+            applyFactoryDefaults(); // "Init"
+
+        referenceState = apvts.copyState(); // reset reverts to what the table said
         if (applyExtraState)
             applyExtraState();
         finishLoad (info.name);
-        apvts.state.removeProperty ("presetDate", nullptr); // back to 1948
+        apvts.state.removeProperty ("presetDate", nullptr);
         return true;
     }
 
     const auto xml = juce::parseXML (info.file);
-    if (xml == nullptr || ! xml->hasTagName ("SustainerPreset"))
+    if (xml == nullptr || ! xml->hasTagName (presetRootTag))
         return false;
 
     auto* stateXml = xml->getFirstChildElement();
     if (stateXml == nullptr || ! stateXml->hasTagName (apvts.state.getType()))
         return false;
 
-    apvts.replaceState (juce::ValueTree::fromXml (*stateXml));
-    referenceState = apvts.copyState(); // carries the seat properties too
+    // Loading a preset must not change how the editor looks or whether the
+    // plugin is in circuit, so both are lifted out and put back afterwards.
+    juce::NamedValueSet keptProperties;
+    for (const auto& prop : params::editorOnlyProperties())
+        if (apvts.state.hasProperty (prop))
+            keptProperties.set (prop, apvts.state.getProperty (prop));
+
+    auto* bypassParam = apvts.getParameter (params::id::bypass);
+    const float bypassBefore = bypassParam != nullptr ? bypassParam->getValue() : 0.0f;
+
+    auto incoming = juce::ValueTree::fromXml (*stateXml);
+    if (migrateState)
+        migrateState (incoming);
+
+    apvts.replaceState (incoming);
+    restoreMissingParameterDefaults (incoming);
+
+    for (const auto& prop : params::editorOnlyProperties())
+    {
+        if (keptProperties.contains (prop))
+            apvts.state.setProperty (prop, keptProperties[prop], nullptr);
+        else
+            apvts.state.removeProperty (prop, nullptr);
+    }
+
+    if (bypassParam != nullptr && std::abs (bypassParam->getValue() - bypassBefore) > 1.0e-6f)
+        bypassParam->setValueNotifyingHost (bypassBefore);
+
+    referenceState = apvts.copyState();
     if (applyExtraState)
         applyExtraState();
     finishLoad (info.name);
@@ -147,13 +222,16 @@ bool PresetManager::saveCurrent (const juce::String& name)
     auto folder = userFolder();
     folder.createDirectory();
 
-    juce::XmlElement root ("SustainerPreset");
+    juce::XmlElement root (presetRootTag);
     root.setAttribute ("name", trimmed);
     root.setAttribute ("pluginVersion", JucePlugin_VersionString);
     root.setAttribute ("created", juce::Time::getCurrentTime().toISO8601 (true));
     auto state = apvts.copyState();
     if (stampExtraState)
         stampExtraState (state);
+    for (const auto& prop : params::editorOnlyProperties())
+        state.removeProperty (prop, nullptr); // a preset never carries someone else's theme
+    state.removeProperty ("presetDate", nullptr); // re-derived from "created" on load
     referenceState = state; // what was saved is what reset reverts to
     root.addChildElement (state.createXml().release());
 

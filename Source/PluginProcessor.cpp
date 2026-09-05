@@ -1,12 +1,23 @@
 #include "PluginProcessor.h"
 
 #include "PluginEditor.h"
+#include "dsp/TimeMap.h"
 
 namespace
 {
-    // Bump when the state layout changes; setStateInformation can then migrate
-    // older sessions instead of silently mis-reading them.
+    // Bump only when an existing id changes meaning, range or units, or when a
+    // root property is renamed. Adding or removing a parameter is not a bump:
+    // an absent VALUE falls back to the default, a stale one is ignored.
     constexpr int currentStateVersion = 1;
+
+    // Runs on every incoming tree before it replaces the live one, session or
+    // preset, so an older saved layout can be brought forward.
+    void migrateState (juce::ValueTree& tree)
+    {
+        const int version = (int) tree.getProperty ("stateVersion", 0);
+        juce::ignoreUnused (version); // nothing has shipped before version 1
+        tree.setProperty ("stateVersion", currentStateVersion, nullptr);
+    }
 }
 
 DybbukProcessor::DybbukProcessor()
@@ -17,14 +28,27 @@ DybbukProcessor::DybbukProcessor()
 {
     setLatencySamples (0);
 
-    pDrive  = apvts.getRawParameterValue (params::id::drive);
-    pTone   = apvts.getRawParameterValue (params::id::tone);
-    pMix    = apvts.getRawParameterValue (params::id::mix);
-    pBypass = apvts.getRawParameterValue (params::id::bypass);
+    pTime       = apvts.getRawParameterValue (params::id::time);
+    pDecay      = apvts.getRawParameterValue (params::id::decay);
+    pFilter     = apvts.getRawParameterValue (params::id::filter);
+    pResonance  = apvts.getRawParameterValue (params::id::resonance);
+    pAbsorb     = apvts.getRawParameterValue (params::id::absorb);
+    pBlend      = apvts.getRawParameterValue (params::id::blend);
+    pAgitate    = apvts.getRawParameterValue (params::id::agitate);
+    pAgitSpeed  = apvts.getRawParameterValue (params::id::agitspeed);
+    pStrength   = apvts.getRawParameterValue (params::id::strength);
+    pOut        = apvts.getRawParameterValue (params::id::out);
+    pTimeMod    = apvts.getRawParameterValue (params::id::timemod);
+    pTimeSync   = apvts.getRawParameterValue (params::id::timesync);
+    pAgitMode   = apvts.getRawParameterValue (params::id::agitmode);
+    pTonesLevel = apvts.getRawParameterValue (params::id::toneslevel);
+    pTonesPitch = apvts.getRawParameterValue (params::id::tonespitch);
+    pSpread     = apvts.getRawParameterValue (params::id::spread);
+    pBypass     = apvts.getRawParameterValue (params::id::bypass);
 
-    // Presets carry non-parameter state through these hooks.
     presetManager.stampExtraState = [this] (juce::ValueTree& s) { stampExtraState (s); };
     presetManager.applyExtraState = [this] { applyExtraState (apvts.state); };
+    presetManager.migrateState = [] (juce::ValueTree& t) { migrateState (t); };
 }
 
 void DybbukProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -40,7 +64,7 @@ void DybbukProcessor::releaseResources() {}
 
 bool DybbukProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    const auto in  = layouts.getMainInputChannelSet();
+    const auto in = layouts.getMainInputChannelSet();
     const auto out = layouts.getMainOutputChannelSet();
 
     if (out != juce::AudioChannelSet::stereo())
@@ -58,30 +82,65 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     if (numSamples == 0)
         return;
 
-    // Mono in, stereo out: duplicate rather than leaving channel 1 stale.
     if (getTotalNumInputChannels() < 2 && buffer.getNumChannels() > 1)
         buffer.copyFrom (1, 0, buffer, 0, 0, numSamples);
 
-    // One snapshot per block — the engine never sees the APVTS.
-    ExampleEngine::Params p;
-    p.driveDb = pDrive->load();
-    p.toneHz  = pTone->load();
-    p.mixPct  = pMix->load();
-    // Bypass: crossfade to the dry input over 20 ms rather than hard-switch.
-    // The engine keeps running (feed it silence if its state must not collect
-    // what plays while out of circuit — an engine-specific decision), so wet
-    // state survives the trip and a host automating bypass never clicks.
+    // Resolve Time Sync here, not in the engine: the engine never sees an
+    // AudioPlayHead, which is what lets EngineTest drive sync by writing two
+    // numbers. Free and synced Time end up in the same field and therefore
+    // go through the same smoother, so changing division smears the pitch
+    // exactly like turning the knob.
+    double barBeats = 4.0;
+    if (auto* playHead = getPlayHead())
+    {
+        if (const auto pos = playHead->getPosition())
+        {
+            const double bpm = pos->getBpm().orFallback (lastKnownBpm);
+            if (std::isfinite (bpm) && bpm > 1.0 && bpm < 999.0)
+                lastKnownBpm = bpm;
+
+            const auto sig = pos->getTimeSignature().orFallback (juce::AudioPlayHead::TimeSignature {});
+            if (sig.numerator > 0 && sig.denominator > 0)
+                barBeats = sig.numerator * 4.0 / sig.denominator;
+        }
+    }
+
+    beatsPerBar.store ((float) barBeats, std::memory_order_relaxed);
+
+    DybbukEngine::Params p;
+    const float timeKnob = pTime->load();
+
+    if (pTimeSync->load() >= 0.5f)
+    {
+        const auto synced = timemap::syncedDelaySeconds (timemap::divisionIndexForTime01 (timeKnob),
+                                                         lastKnownBpm, barBeats);
+        p.time01 = pt::time01ForDelaySeconds ((float) synced.seconds);
+        syncClamped.store (synced.clamped, std::memory_order_relaxed);
+    }
+    else
+    {
+        p.time01 = timeKnob;
+        syncClamped.store (false, std::memory_order_relaxed);
+    }
+
+    p.strengthDb = pStrength->load();
+    p.decay = pDecay->load();
+    p.filterHz = pFilter->load();
+    p.resonance01 = pResonance->load() * 0.01f;
+    p.absorb01 = pAbsorb->load() * 0.01f;
+    p.blend01 = pBlend->load() * 0.01f;
+    p.outDb = pOut->load();
+
     const bool wantBypass = pBypass->load() >= 0.5f;
+    p.bypass = wantBypass;
+
     bypassMix.setTargetValue (wantBypass ? 1.0f : 0.0f);
-    const bool blending = wantBypass || bypassMix.isSmoothing()
-                          || bypassMix.getCurrentValue() > 0.0f;
+    const bool blending = wantBypass || bypassMix.isSmoothing() || bypassMix.getCurrentValue() > 0.0f;
 
     if (blending)
         for (int ch = 0; ch < juce::jmin (bypassDry.getNumChannels(), buffer.getNumChannels()); ++ch)
             bypassDry.copyFrom (ch, 0, buffer, ch, 0,
                                 juce::jmin (numSamples, bypassDry.getNumSamples()));
-
-    p.bypass = wantBypass;
 
     engine.process (buffer, p);
 
@@ -102,14 +161,20 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
 void DybbukProcessor::stampExtraState (juce::ValueTree& state) const
 {
-    // Example: state.setProperty ("myThing", value, nullptr);
-    juce::ignoreUnused (state);
+    state.setProperty ("stateVersion", currentStateVersion, nullptr);
+    // No engine-side extra state yet. The loop's contents are deliberately not
+    // saved: a reloaded session starts empty, as the hardware would after
+    // power up. Theme and window scale are editor properties already on the
+    // tree, kept out of preset files by PresetManager.
 }
 
 void DybbukProcessor::applyExtraState (const juce::ValueTree& state)
 {
-    // Example: engine.requestThing ((float) state.getProperty ("myThing", 0.0));
     juce::ignoreUnused (state);
+    // A freshly loaded patch may be a long way from where Time was. Snap the
+    // clock instead of gliding across the whole range, which would otherwise
+    // chirp everything currently in the buffer.
+    engine.requestTimeSnap();
 }
 
 juce::AudioProcessorEditor* DybbukProcessor::createEditor()
@@ -120,7 +185,6 @@ juce::AudioProcessorEditor* DybbukProcessor::createEditor()
 void DybbukProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
-    state.setProperty ("stateVersion", currentStateVersion, nullptr);
     stampExtraState (state);
 
     if (auto xml = state.createXml())
@@ -134,7 +198,12 @@ void DybbukProcessor::setStateInformation (const void* data, int sizeInBytes)
     if (xml == nullptr || ! xml->hasTagName (apvts.state.getType()))
         return;
 
-    apvts.replaceState (juce::ValueTree::fromXml (*xml));
+    auto incoming = juce::ValueTree::fromXml (*xml);
+    migrateState (incoming);
+
+    // A session reload is the one case where the theme SHOULD come from the
+    // file: it is the user's own window, saved as they left it.
+    apvts.replaceState (incoming);
     applyExtraState (apvts.state);
     presetManager.refreshReferenceFromDisk();
 }

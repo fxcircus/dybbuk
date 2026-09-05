@@ -4,7 +4,7 @@
 // Run it from wherever you want the files, then LOOK AT THE OUTPUT. A UI
 // change that hasn't been looked at isn't finished.
 //
-//   cd /tmp && .../UISnapshot   ->  editor_snapshot.png, editor_snapshot_dark.png
+//   cd /tmp && .../UISnapshot   ->  editor_snapshot*.png (idle, active, alt theme, each preset)
 #include "../Source/PluginEditor.h"
 #include "../Source/PluginProcessor.h"
 
@@ -53,15 +53,28 @@ int main()
         snap ("editor_snapshot_active.png");
     }
 
-    // Dark mode through the REAL construction path — set the property and
-    // rebuild the editor. Flipping the global on a live editor would miss
-    // colours that components cached at construction, which is exactly the
-    // class of bug this catches.
+    // The alternate theme through the REAL construction path: set the
+    // property and rebuild the editor. Flipping the global on a live editor
+    // would miss colours that components cached at construction, which is
+    // exactly the class of bug this catches.
     editor.reset();
-    processor.apvts.state.setProperty ("darkMode", true, nullptr);
+    processor.apvts.state.setProperty (theme::kThemeProperty, 1, nullptr);
     editor.reset (processor.createEditor());
-    snap ("editor_snapshot_dark.png");
-    theme::setDarkMode (false);
+    snap ("editor_snapshot_alt.png");
+
+    // Every factory preset, which also reviews every readout in the tables.
+    processor.apvts.state.setProperty (theme::kThemeProperty, theme::kDefaultTheme, nullptr);
+    for (const auto& info : processor.presetManager.getPresets())
+    {
+        if (! info.factory)
+            continue;
+        processor.presetManager.loadPreset (info);
+        editor.reset();
+        editor.reset (processor.createEditor());
+        const auto file = "editor_snapshot_" + info.name.toLowerCase().replaceCharacter (' ', '_') + ".png";
+        snap (file.toRawUTF8());
+    }
+    theme::setTheme (theme::kDefaultTheme);
 
     editor.reset();
     return 0;

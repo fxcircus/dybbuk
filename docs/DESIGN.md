@@ -1,0 +1,121 @@
+# Dybbuk — technical design
+
+`dybbuk-plan.md` is the source spec: what we are emulating and why. This file
+is the entry point to how, and `docs/PROGRESS.md` is what actually shipped.
+When they disagree, PROGRESS wins.
+
+## 0. Reading guide
+
+| File | Answers |
+|---|---|
+| `design/01-core.md` | the PT2399 model, the loop, filters, saturator, Clear, every tuning constant |
+| `design/02-modulation.md` | Agitation, Interference, the follower, drift, the mod matrix (Phase 3) |
+| `design/03-params-state-engine.md` | the parameter table, readouts, Time Sync, state, presets, the engine facade |
+| `design/04-ui.md` | canvas coordinates, theme tokens, knob and ember specs, the readout strip |
+| `design/05-verification.md` | the scenario suite and the manual gates |
+| `design/inputs/` | the raw independent designs and the judge verdicts they were merged from |
+
+## 1. Signal flow
+
+```
+in L+R -> mono sum -> STRENGTH (gain into a soft clip)
+       -> loop sum node <---------------------------------+
+       -> chip 1 -> chip 2 -> chip 3  (series, one clock)  |
+       -> tap sum (weights normalised to 1)                |
+       -> FILTER (TPT SVF, bounded resonance state)        |
+       -> ABSORB (high shelf cut, then attenuation)        |
+       -> loop saturator (asymmetric tanh) + DC blocker    |
+       -> Clear gain ------------------- DECAY (0..1.15) --+
+       -> wet
+wet + dry -> equal power BLEND -> OUT -> L+R
+```
+
+Per host sample, inside one chip stage: input MFB, write guard, zero or more
+chip ticks (write resampling onto the chip's clock grid, converter distortion,
+noise-shaped quantisation, memory write and read, DAC pole), read resampling,
+reconstruction filter tracking the clock, hiss, clock bleed, output MFB.
+
+Per block: the processor snapshots parameters, resolves Time Sync from the
+transport, and crossfades bypass. The engine chunks anything longer than the
+block size it was prepared for.
+
+## 2. Files
+
+| Path | Role |
+|---|---|
+| `Source/dsp/ChipConstants.h` | every tunable constant and the Time to fs_chip mapping |
+| `Source/dsp/TimeMap.h` | note divisions and the sync conversions |
+| `Source/dsp/Rng.h`, `OnePole.h`, `TptSvf.h`, `LoopSaturator.h` | small header-only building blocks |
+| `Source/dsp/ChipClock.{h,cpp}` | the variable clock: one phase accumulator, one control-rate frame |
+| `Source/dsp/PTCore.h` | the silicon: memory, converter distortion, quantiser, DAC pole |
+| `Source/dsp/PTStage.{h,cpp}` | one chip with its analog board |
+| `Source/dsp/TimeFilterLoop.{h,cpp}` | the feedback loop and the Clear machine |
+| `Source/dsp/DybbukEngine.{h,cpp}` | mono sum, Strength, blend, out, the UI atomics |
+| `Source/Parameters.{h,cpp}` | the layout, ranges and readouts |
+| `Source/PluginProcessor.{h,cpp}` | parameter snapshot, Time Sync, bypass crossfade, state |
+| `Source/state/PresetManager.{h,cpp}`, `FactoryPresets.{h,cpp}` | presets |
+| `Source/ui/Theme.{h,cpp}`, `Source/PluginEditor.{h,cpp}` | the editor (interim; Phase 5 builds the designed one) |
+| `Tests/EngineTest.cpp` | 15 DSP scenarios plus `render` |
+| `Tests/ProcessorTest.cpp` | state, readouts, presets, bypass |
+| `Tests/UISnapshot.cpp` | the editor to PNGs, both themes and every preset |
+
+## 3. Cross-cutting rules
+
+- **Level convention.** 1.0 is 0 dBFS and the chip's converter full scale.
+  Nominal loop level is 0.3 to 0.7 peak; the THD calibration is pinned to 0.5.
+- **Control rate.** Slow coefficients refresh every 16 samples on a counter
+  that persists across block boundaries, so smoothing never depends on how the
+  host chops up time. Only the clock's phase increment runs at true audio
+  rate, because that is where the FM character lives.
+- **Smoothing.** Time is a 20 ms ramp in log fs (a constant-rate pitch glide).
+  Decay, Filter, Resonance and Absorb are 30 ms. Bypass is a 20 ms crossfade.
+- **Threading.** Parameters are cached atomics read once per block into a
+  plain struct. UI commands travel as atomic counters (Clear, Time snap).
+  Engine state reaches the UI only through atomics the editor polls.
+- **Non-finite containment.** Two defences, because one is not enough: a
+  per-sample guard at the loop sum node catches NaN, inf and absurd values,
+  and a per-block `isfinite` check on the feedback state flushes a loop that
+  was poisoned some other way.
+- **Theme.** An integer property on the APVTS root, default 0 (dark brass).
+  Stripped from preset files, preserved across preset loads, restored from a
+  session.
+
+## 4. Open questions for the user
+
+These are listening calls. Each is a compile-time constant or a number, so
+answering them is a rebuild, not a rewrite.
+
+1. **Feedback topology.** Tap sum (the plan's literal reading, shipped) versus
+   a pure series loop where the delay is the whole chain. Tap sum combs
+   deeply, so off-peak material dies fast even at Decay 1.0. `kFeedbackFromTapSum`.
+2. **FM law.** Exponential in octaves (shipped) versus linear in clock rate.
+   The hardware's VCO is current controlled and the Strega's CV conditioning
+   is unmeasured. `kFmLawLinear`.
+3. **Bit and noise calibration.** 11 bits down to 8, hiss from -86 to -48 dBFS.
+   The only anchors are the plan's "-90 dBFS at short times" and "clearly
+   audible hiss".
+4. **Write guard poles.** One, by default. Whether an overclocked chip folds
+   8 kHz down to 200 Hz is exactly the long-Time character question.
+   `kGuardPoles` takes 0, 1 or 2.
+5. **Wet makeup.** Tap normalisation costs the first echo 8 dB. `kWetMakeup`
+   would give it back at the cost of lifting the noise floor by the same 8 dB.
+6. **Preset tuning.** Echo-Verb currently decays to nothing by 4 s, which may
+   be shorter than "a dark dwelling reverb" wants.
+
+## 5. What was rejected, and why
+
+Three PT core designs and two modulation designs were written independently
+and scored by four judge lenses. The core here is the chip-fidelity design
+(the only one that models THD growing with Time against the ElectroSmash
+table), with grafts from the other two: the robustness design's wrapped phase
+accumulator and per-sample input guard, and the musicality design's persistent
+control-rate counter, post-reconstruction hiss and relative Clear criterion.
+
+The judges' fatal findings against the winning design, all fixed here: a
+control cadence that restarted every block (so smoothing times depended on
+block size), an unsnapped clock smoother (a start-up chirp after every
+prepare), an unwrapped phase accumulator, and missing non-finite containment.
+
+Rejected outright: per-chip clock detune (`kStageDetune`), which is musically
+attractive but needs per-stage phase accumulators and breaks the single shared
+clock frame. Parked in `docs/IDEAS.md`.

@@ -52,7 +52,11 @@ public:
     const juce::ValueTree& getReferenceState() const { return referenceState; }
     void refreshReferenceFromDisk(); // after a session reload
 
-    // Hooks for state that lives outside the parameters (the seating figure):
+    // Called on an incoming tree before it replaces the live one, so an older
+    // saved layout can be brought forward. Set by the processor.
+    std::function<void (juce::ValueTree&)> migrateState;
+
+    // Hooks for state that lives outside the parameters:
     // stamp adds it to the tree being saved; apply pushes a freshly loaded
     // tree's copy back to the engine.
     std::function<void (juce::ValueTree&)> stampExtraState;
@@ -68,6 +72,8 @@ public:
 private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void applyFactoryDefaults();
+    void restoreMissingParameterDefaults (const juce::ValueTree& incoming);
+    bool loadFactoryPreset (const juce::String& name);
     void finishLoad (const juce::String& name);
     void loadFavourites();
     void saveFavourites() const;

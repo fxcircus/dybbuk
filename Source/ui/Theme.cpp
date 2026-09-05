@@ -2,23 +2,45 @@
 
 namespace theme
 {
-    juce::Colour background { 0xfff2efe6 };
-    juce::Colour ink        { 0xff1a1a1a };
-    juce::Colour faded      { 0xff8a8578 };
-    juce::Colour accent     { 0xffb03a2e };
+    juce::Colour background { 0xff15110c };
+    juce::Colour panel      { 0xff1e1913 };
+    juce::Colour ink        { 0xffe9dcc0 };
+    juce::Colour faded      { 0xff8a7a5c };
+    juce::Colour accent     { 0xffc9a227 };
+    juce::Colour ember      { 0xffff7b3a };
+    juce::Colour runaway    { 0xffd2452f };
 
-    namespace { bool darkMode = false; }
+    namespace { int current = kDefaultTheme; }
 
-    void setDarkMode (bool shouldBeDark)
+    void setTheme (int index)
     {
-        darkMode = shouldBeDark;
-        background = shouldBeDark ? juce::Colour (0xff141412) : juce::Colour (0xfff2efe6);
-        ink        = shouldBeDark ? juce::Colour (0xffe8e4d8) : juce::Colour (0xff1a1a1a);
-        faded      = shouldBeDark ? juce::Colour (0xff6f6a5e) : juce::Colour (0xff8a8578);
-        accent     = shouldBeDark ? juce::Colour (0xffc75d4f) : juce::Colour (0xffb03a2e);
+        current = juce::jlimit (0, kThemeCount - 1, index);
+
+        if (current == 0) // dark brass: the default, and what the plan describes
+        {
+            background = juce::Colour (0xff15110c);
+            panel      = juce::Colour (0xff1e1913);
+            ink        = juce::Colour (0xffe9dcc0);
+            faded      = juce::Colour (0xff8a7a5c);
+            accent     = juce::Colour (0xffc9a227);
+            ember      = juce::Colour (0xffff7b3a);
+            runaway    = juce::Colour (0xffd2452f);
+        }
+        else // parchment: the light alternate
+        {
+            background = juce::Colour (0xffefe8db);
+            panel      = juce::Colour (0xffe2d9c6);
+            ink        = juce::Colour (0xff2b2419);
+            faded      = juce::Colour (0xff8b7f66);
+            accent     = juce::Colour (0xff96701a);
+            ember      = juce::Colour (0xffcf5a1e);
+            runaway    = juce::Colour (0xffb03020);
+        }
     }
 
-    bool isDarkMode() { return darkMode; }
+    int currentTheme() { return current; }
+
+    const char* themeName (int index) { return index == 0 ? "brass" : "parchment"; }
 
     float textWidth (const juce::Font& font, const juce::String& text)
     {

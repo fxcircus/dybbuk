@@ -24,6 +24,13 @@ disagree with what is written here, this wins.
   giving the 8 dB back on the wet output would also lift the noise floor by
   8 dB and break the plan's "-90 dBFS at short times". Level is Blend and Out's
   job. Revisit after the first real playthrough.
+- **Four template preset behaviours were wrong for a delay and are fixed.**
+  The template wrote the theme into every preset file and restored it on load
+  (so loading a preset changed your colours), forced performance parameters to
+  zero on load (so browsing presets took a bypassed plugin back into circuit),
+  left parameters absent from an older preset at whatever the knob happened to
+  hold, and still used the Infinite Sustainer preset tag. All four are fixed in
+  `PresetManager`, and `ProcessorTest` covers each one.
 - **Decay 1.0 is not infinity.** The chips and filters lose about 0.23 dB per
   iteration, so unity Decay decays slowly and the true infinity point sits
   near 1.03. This is physically honest and the runaway ceiling at 1.15 is
@@ -32,12 +39,14 @@ disagree with what is written here, this wins.
 
 ## Current state
 
-- Parameter count: 4 (still the template's placeholder set; Phase 2 replaces it)
-- Formats: VST3 / AU / Standalone
-- Test scenarios in `EngineTest`: 15 plus `render` (55 checks, 0 failures, 0.2 s)
-- Engine: `DybbukEngine` built and measured, not yet wired to the processor
-- Known issues: the plugin still runs the template's `ExampleEngine`; the
-  editor is still the template placeholder
+- Parameter count: 17, in Push bank order, all automatable
+- Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
+- `EngineTest`: 15 scenarios plus `render` (55 checks, 0 failures, 0.2 s)
+- `ProcessorTest`: state, readouts, presets, bypass (0 failures)
+- Four factory presets ship as code tables and are proven to sound
+- Known issues: the editor is an interim layout (playable, not the designed
+  one); Agitate, Agit Speed, Time Mod, Agit Mode, Tones and Spread are
+  declared and automatable but not yet read by the engine
 
 ## Measured (48 kHz unless stated)
 
@@ -77,10 +86,12 @@ disagree with what is written here, this wins.
       real one.
 
 ### Phase 2 — Parameters and state
-- [ ] Full parameter set wired, engine swapped in for `ExampleEngine`
-- [ ] All parameters automatable in the host
-- [ ] Session save/reload restores everything, parameters and extra state
-- [ ] pluginval strictness 10 passes
+- [x] Full parameter set wired, `DybbukEngine` swapped in for `ExampleEngine`
+- [x] All parameters automatable, first eight in Push bank 1 order
+- [x] Session save/reload restores every parameter plus theme and window scale
+- [x] A preset never changes the theme and never takes the plugin in or out of circuit
+- [x] Time Sync resolves from the host transport, clamps, and smears like the knob
+- [x] pluginval strictness 10 and `auval` pass
 
 ### Phase 3 — Modulation
 - [ ] Agitation, Input Follower, Interference, Drift

@@ -3,12 +3,15 @@
 #include "PluginProcessor.h"
 #include "ui/Theme.h"
 
-// A fixed-size canvas scaled to the window with the aspect ratio locked. Lay
-// everything out in canvas coordinates once, in the constructor; resized()
-// only applies the scale transform. This keeps a hand-drawn UI honest at every
-// window size and is far less work than per-component responsive layout.
+// Interim editor: the real one (canvas coordinates, brass knobs, the ember,
+// the readout strip) is specified in docs/design/04-ui.md and lands in Phase
+// 5. This version exists so the standalone build is playable now, which is
+// what the Phase 1 and Phase 3 listening gates need.
+//
+// It keeps the pattern the real one uses: a fixed canvas laid out once in the
+// constructor and scaled to the window with the aspect locked.
 class DybbukEditor : public juce::AudioProcessorEditor,
-                             private juce::Timer
+                     private juce::Timer
 {
 public:
     explicit DybbukEditor (DybbukProcessor& p);
@@ -17,8 +20,8 @@ public:
     void resized() override;
 
 private:
-    static constexpr int canvasW = 620;
-    static constexpr int canvasH = 380;
+    static constexpr int canvasW = 720;
+    static constexpr int canvasH = 576;
 
     struct Canvas : juce::Component
     {
@@ -26,24 +29,37 @@ private:
         std::function<void (juce::Graphics&)> onPaint;
     };
 
+    struct Knob
+    {
+        juce::Slider slider;
+        juce::Label label;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+    };
+
     void timerCallback() override;
-    juce::RangedAudioParameter& param (const char* id) const;
+    void addKnob (Knob& knob, const char* paramID, const char* text, const char* tooltip,
+                  int x, int y, int size);
+    void applyTheme();
 
     DybbukProcessor& proc;
     Canvas canvas;
 
-    juce::Slider driveSlider, toneSlider, mixSlider;
-    juce::Label driveLabel, toneLabel, mixLabel;
-    juce::ToggleButton bypassButton { "Bypass" };
+    Knob timeKnob, decayKnob, filterKnob, blendKnob;
+    Knob timeModKnob, strengthKnob, resonanceKnob, absorbKnob;
+    Knob agitateKnob, agitSpeedKnob, outKnob;
 
-    // Attachments own the parameter<->control link. Declare them AFTER the
-    // controls so they are destroyed first.
-    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    juce::ToggleButton syncButton { "Sync" }, bypassButton { "Bypass" };
+    juce::ComboBox agitModeBox;
+    juce::TextButton clearButton { "Clear" }, themeButton { "Theme" };
+
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
-    std::unique_ptr<SliderAttachment> driveAttach, toneAttach, mixAttach;
-    std::unique_ptr<ButtonAttachment> bypassAttach;
+    using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    std::unique_ptr<ButtonAttachment> syncAttach, bypassAttach;
+    std::unique_ptr<ComboAttachment> agitModeAttach;
 
     float meterLevel = 0.0f;
+    float emberLevel = 0.0f;
+    juce::String delayText;
 
     juce::TooltipWindow tooltipWindow { this, 650 };
 
