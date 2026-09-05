@@ -86,4 +86,10 @@ namespace modk
     inline constexpr float kTimeModMaxOct = 2.0f;    // Time Mod at 100 %, independent of the macro
     inline constexpr float kTimeModClampOct = 2.0f;  // total excursion from everything stacked
     inline constexpr float kLoopEnvCeiling = 100.0f; // sanitises the one modulation feedback input
+
+    // --- Tones and Spread (the optional character, both off by default) ------
+    inline constexpr float kTonesFullLevel = 0.35f;  // drone level into the loop at Tones 100 %
+    inline constexpr float kTonesSubMix    = 0.45f;  // how much sub sits under the drone
+    inline constexpr float kSpreadMaxMs    = 14.0f;  // Haas offset behind the side component
+    inline constexpr float kSpreadMaxWidth = 0.9f;   // side gain at Spread 100 %
 } // namespace modk

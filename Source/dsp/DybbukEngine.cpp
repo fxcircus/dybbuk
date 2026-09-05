@@ -1,5 +1,7 @@
 #include "DybbukEngine.h"
 
+#include <algorithm>
+
 namespace
 {
     // Strength is one knob for gain and drive, so it has to stay clean at
@@ -44,6 +46,11 @@ void DybbukEngine::prepare (double sampleRate, int maxBlockSize)
     interference.prepare (sampleRate);
     drift.prepare (sampleRate);
     matrix.prepare (sampleRate);
+    tones.prepare (sampleRate);
+
+    spreadSize = juce::jmax (2, (int) (modk::kSpreadMaxMs * 0.001 * sampleRate) + 2);
+    spreadDelay.assign ((size_t) spreadSize, 0.0f);
+    spreadWrite = 0;
 
     monoBuf.assign ((size_t) maxBlock, 0.0f);
     wetBuf.assign ((size_t) maxBlock, 0.0f);
@@ -69,6 +76,9 @@ void DybbukEngine::reset() noexcept
     interference.reset();
     drift.reset();
     matrix.reset();
+    tones.reset();
+    std::fill (spreadDelay.begin(), spreadDelay.end(), 0.0f);
+    spreadWrite = 0;
     samplesUntilTick = modk::kControlBlock;
     agitSum = 0.0f;
     agitMean = 0.0f;
@@ -98,6 +108,7 @@ void DybbukEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     dryGainSmooth.setTargetValue (std::cos (b * 0.5f * pt::kPi));
     outSmooth.setTargetValue (gainFromDb (p.outDb));
 
+    tones.setPitch (p.tonesPitchHz);
     agitation.setSpeedHz (p.agitSpeedHz);
     agitation.setMode (p.agitGateMode ? Agitation::Mode::gate : Agitation::Mode::loop);
     matrix.setMacro (p.agitate01, p.timeMod01);
@@ -165,7 +176,18 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
             const bool onset = follower.processSample (driven);
             agitSum += agitation.processSample (onset);
 
-            mod[k] = matrix.timeOctave (interference.nextSample(), drift.nextSample());
+            // The internal oscillator leaks into the delay, as it does on the
+            // hardware through the Activation Constant. Its sub-harmonic is
+            // normalled to the Time modulation input, which is where the
+            // metallic ring-mod sidebands come from: a periodic modulator
+            // gives discrete sidebands where a chaotic one gives noise.
+            tones.advance();
+            if (p.tonesLevel01 > 0.0f)
+                mono[k] = driven + p.tonesLevel01 * modk::kTonesFullLevel
+                                       * (tones.main() + modk::kTonesSubMix * tones.sub());
+
+            mod[k] = matrix.timeOctave (interference.nextSample(), drift.nextSample())
+                     + p.timeMod01 * modk::kTimeModMaxOct * tones.sub();
         }
 
         TimeFilterLoop::Params lp;
@@ -196,15 +218,41 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
 
     float peak = blockPeak;
     const float blendMod = matrix.offsets().blend;
+    const float spread = juce::jlimit (0.0f, 1.0f, p.spread01);
+    const int spreadTaps = juce::jmax (1, (int) (spread * (float) (spreadSize - 2)));
+
     for (int i = 0; i < len; ++i)
     {
         const float dry = 0.5f * (left[i] + right[i]);
         const float outGain = outSmooth.getNextValue();
         const float wetGain = juce::jlimit (0.0f, 1.5f, wetGainSmooth.getNextValue() + blendMod);
-        const float y = (dry * dryGainSmooth.getNextValue() + wet[i] * wetGain) * outGain;
-        for (int ch = 0; ch < numChannels; ++ch)
-            buffer.getWritePointer (ch, start)[i] = y;
-        const float mag = std::abs (y);
+        const float dryGain = dryGainSmooth.getNextValue();
+
+        float side = 0.0f;
+        if (spread > 0.0f)
+        {
+            spreadDelay[(size_t) spreadWrite] = wet[i];
+            int readIndex = spreadWrite - spreadTaps;
+            if (readIndex < 0)
+                readIndex += spreadSize;
+            // The side is the difference between the wet and its delayed self,
+            // so L + R sums back to exactly the wet: wide in stereo, unchanged
+            // in mono, and bit-identical to the hardware at Spread 0.
+            side = 0.5f * spread * modk::kSpreadMaxWidth
+                   * (wet[i] - spreadDelay[(size_t) readIndex]);
+            if (++spreadWrite >= spreadSize)
+                spreadWrite = 0;
+        }
+
+        const float centre = dry * dryGain + wet[i] * wetGain;
+        const float l = (centre + side * wetGain) * outGain;
+        const float r = (centre - side * wetGain) * outGain;
+
+        buffer.getWritePointer (0, start)[i] = l;
+        if (numChannels > 1)
+            buffer.getWritePointer (1, start)[i] = r;
+
+        const float mag = juce::jmax (std::abs (l), std::abs (r));
         peak = mag > peak ? mag : peak;
     }
 

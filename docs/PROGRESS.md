@@ -42,12 +42,10 @@ disagree with what is written here, this wins.
 - Parameter count: 17, in Push bank order, all automatable; Agitate, Agit
   Speed, Agit Mode and Time Mod now drive the engine
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 21 scenarios plus `render` and `probe` (78 checks, 0 failures, 1.2 s)
+- `EngineTest`: 23 scenarios plus `render` and `probe` (85 checks, 0 failures, 1.2 s)
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
 - Four factory presets ship as code tables and are proven to sound
-- Known issues: the editor is an interim layout (playable, not the designed
-  one); Tones and Spread are declared and automatable but not yet read by the
-  engine (Phase 4)
+- Known issues: the editor is an interim layout (playable, not the designed one)
 
 ## Open finding: Absorb versus the runaway zone
 
@@ -115,10 +113,15 @@ and it is one constant.
       spread 0.79 across twelve 5 s windows
 - [ ] Listened to (`EngineTest render` writes dybbuk_generative.wav, 40 s of it)
 
-### Phase 4 — Playability and presets
+### Phase 4 — Playability, character and presets
+- [x] Optional Tones injection: triangle drone plus a sub-harmonic, off by default
+- [x] Time Mod is normalled to the Tones sub, as on the hardware, so it gives
+      discrete ring-mod sidebands rather than the chaotic FM it had before
+- [x] Optional stereo Spread: the side is a difference, so the mono sum is
+      bit-identical and Spread 0 is exactly the hardware's mono
+- [x] Preset save / load / rename / delete (`ProcessorTest`)
+- [x] Four factory presets, each proven to apply, sound and stay bounded
 - [ ] Played through the standalone build
-- [ ] Preset save / load / rename / delete
-- [ ] Four factory presets (Echo-Verb, Wow and Flutter, Bat Cave, Breathing)
 
 ### Phase 5 — UI
 - [ ] Both themes rendered and reviewed

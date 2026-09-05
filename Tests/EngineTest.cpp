@@ -271,6 +271,44 @@ double autocorrelation (const std::vector<float>& x, int lag)
     return den > 1.0e-12 ? num / den : 0.0;
 }
 
+
+// Stereo variant, for the spread scenario.
+void renderEngineStereo (double sr, int block, double seconds, const InFn& in,
+                         DybbukEngine::Params p, unsigned int seed,
+                         std::vector<float>& outL, std::vector<float>& outR)
+{
+    juce::ScopedNoDenormals noDenormals;
+
+    auto engine = std::make_unique<DybbukEngine>();
+    engine->prepare (sr, block);
+    if (seed != 0u)
+        engine->seedForTests (seed);
+
+    const int total = (int) (seconds * sr);
+    outL.assign ((size_t) total, 0.0f);
+    outR.assign ((size_t) total, 0.0f);
+    juce::AudioBuffer<float> buffer (2, block);
+
+    int pos = 0;
+    while (pos < total)
+    {
+        const int len = juce::jmin (block, total - pos);
+        for (int i = 0; i < len; ++i)
+        {
+            const float v = in ((double) (pos + i) / sr);
+            buffer.setSample (0, i, v);
+            buffer.setSample (1, i, v);
+        }
+        engine->process (buffer, p);
+        for (int i = 0; i < len; ++i)
+        {
+            outL[(size_t) (pos + i)] = buffer.getSample (0, i);
+            outR[(size_t) (pos + i)] = buffer.getSample (1, i);
+        }
+        pos += len;
+    }
+}
+
 // --- scenarios -----------------------------------------------------------
 
 // The chip is a fixed memory read at a variable clock, so the delay must come
@@ -885,17 +923,22 @@ void render()
         const char* name;
         float time01, decay, filterHz, res, absorb, blend;
         float agitate, agitSpeed, timeMod;
-        bool silent; // no input at all: the self-playing texture
+        bool silent;    // no input at all: the self-playing texture
+        bool sweepTime; // Time swept by hand across the run: the plan's tell 1
     };
     const Patch patches[] = {
-        { "dybbuk_short_clean", time01ForSeconds (0.08), 0.55f, 12000.0f, 0.15f, 0.0f, 0.5f, 0.0f, 0.35f, 0.0f, false },
-        { "dybbuk_echoverb", time01ForSeconds (0.18), 0.82f, 2200.0f, 0.35f, 0.25f, 0.55f, 0.15f, 0.12f, 0.08f, false },
-        { "dybbuk_wowflutter", time01ForSeconds (0.55), 0.7f, 1400.0f, 0.3f, 0.6f, 0.5f, 0.45f, 0.45f, 0.0f, false },
-        { "dybbuk_batcave", time01ForSeconds (2.2), 0.9f, 800.0f, 0.45f, 0.4f, 0.7f, 0.7f, 6.5f, 0.35f, false },
-        { "dybbuk_runaway", time01ForSeconds (0.25), 1.12f, 3000.0f, 0.5f, 0.2f, 0.8f, 0.3f, 0.5f, 0.2f, false },
-        { "dybbuk_clang", time01ForSeconds (0.12), 0.8f, 6000.0f, 0.3f, 0.0f, 0.6f, 0.2f, 0.35f, 0.85f, false },
+        { "dybbuk_short_clean", time01ForSeconds (0.08), 0.55f, 12000.0f, 0.15f, 0.0f, 0.5f, 0.0f, 0.35f, 0.0f, false, false },
+        { "dybbuk_echoverb", time01ForSeconds (0.18), 0.82f, 2200.0f, 0.35f, 0.25f, 0.55f, 0.15f, 0.12f, 0.08f, false, false },
+        { "dybbuk_wowflutter", time01ForSeconds (0.55), 0.7f, 1400.0f, 0.3f, 0.6f, 0.5f, 0.45f, 0.45f, 0.0f, false, false },
+        { "dybbuk_batcave", time01ForSeconds (2.2), 0.9f, 800.0f, 0.45f, 0.4f, 0.7f, 0.7f, 6.5f, 0.35f, false, false },
+        { "dybbuk_runaway", time01ForSeconds (0.25), 1.12f, 3000.0f, 0.5f, 0.2f, 0.8f, 0.3f, 0.5f, 0.2f, false, false },
+        { "dybbuk_clang", time01ForSeconds (0.12), 0.8f, 6000.0f, 0.3f, 0.0f, 0.6f, 0.2f, 0.35f, 0.85f, false, false },
         // The Phase 3 milestone, as a sound: nothing is played into this one.
-        { "dybbuk_generative", time01ForSeconds (0.9), 1.1f, 4000.0f, 0.4f, 0.0f, 1.0f, 0.8f, 0.2f, 0.6f, true },
+        { "dybbuk_generative", time01ForSeconds (0.9), 1.1f, 4000.0f, 0.4f, 0.0f, 1.0f, 0.8f, 0.2f, 0.6f, true, false },
+        // Tell 1, the one the plan says to stop and tune on if it is wrong:
+        // sweeping Time must smear the pitch of what is already in the loop
+        // like tape, never crossfade between two clean delays.
+        { "dybbuk_timesweep", time01ForSeconds (0.12), 0.72f, 9000.0f, 0.2f, 0.0f, 0.65f, 0.0f, 0.35f, 0.0f, false, true },
     };
 
     // A plucked-string stand-in: exponentially decaying detuned partials, so
@@ -939,7 +982,7 @@ void render()
             {
                 const double t = (double) (pos + i) / sr;
                 float v = 0.0f;
-                if (! patch.silent && t < 6.0)
+                if (! patch.silent && (patch.sweepTime ? t < 2.0 : t < 6.0))
                 {
                     const int noteIndex = (int) (t / 1.5);
                     const double localT = t - noteIndex * 1.5;
@@ -948,6 +991,16 @@ void render()
                 buffer.setSample (0, i, v);
                 buffer.setSample (1, i, v);
             }
+            if (patch.sweepTime)
+            {
+                // Down to 1.2 s and back, by hand, over the whole take.
+                const double t = (double) pos / sr;
+                const double phase = t / seconds;
+                const double target = phase < 0.5 ? 0.12 + (1.2 - 0.12) * (phase * 2.0)
+                                                  : 1.2 - (1.2 - 0.12) * ((phase - 0.5) * 2.0);
+                p.time01 = time01ForSeconds (target);
+            }
+
             engine->process (buffer, p);
             for (int ch = 0; ch < 2; ++ch)
                 file.copyFrom (ch, pos, buffer, ch, 0, len);
@@ -1335,6 +1388,122 @@ void probe()
     }
 }
 
+
+// The optional character: a drone that leaks into the delay, and its
+// sub-harmonic driving the clock. Both off by default.
+void tones()
+{
+    std::printf ("tones: the internal oscillator and its sub-harmonic\n");
+    constexpr double sr = 48000.0;
+
+    DybbukEngine::Params p;
+    p.time01 = 0.35f;
+    p.decay = 0.4f;
+    p.filterHz = 12000.0f;
+    p.blend01 = 1.0f;
+    p.tonesPitchHz = 110.0f;
+
+    const auto off = renderEngine (sr, 128, 2.0, kSilence, p, 7u);
+    check ("silent with Tones at zero", dbfs (rmsOf (off, (int) sr, (int) sr)) < -60.0,
+           juce::String (dbfs (rmsOf (off, (int) sr, (int) sr)), 1) + " dBFS");
+
+    p.tonesLevel01 = 0.6f;
+    const auto on = renderEngine (sr, 128, 2.0, kSilence, p, 7u);
+    const int from = (int) (1.0 * sr), n = (int) (0.9 * sr);
+    const double fundamental = goertzelAmp (on, from, n, 110.0, sr);
+    const double subTone = goertzelAmp (on, from, n, 55.0, sr);
+    const double level = dbfs (rmsOf (on, from, n));
+
+    check ("drone appears at the set pitch", dbfs (fundamental) > -40.0,
+           "110 Hz at " + juce::String (dbfs (fundamental), 1) + " dBFS, overall "
+               + juce::String (level, 1) + " dBFS");
+    check ("the sub-harmonic is under it", dbfs (subTone) > -50.0,
+           "55 Hz at " + juce::String (dbfs (subTone), 1) + " dBFS");
+
+    // Time Mod is normalled to the sub, so it should put sidebands a
+    // sub-harmonic apart around a played tone, with no drone in the mix.
+    DybbukEngine::Params fmParams;
+    fmParams.time01 = time01ForSeconds (0.1);
+    fmParams.decay = 0.0f;
+    fmParams.blend01 = 1.0f;
+    fmParams.filterHz = 18000.0f;
+    fmParams.tonesPitchHz = 200.0f; // sub at 100 Hz
+    // A modest index: at full depth the deviation is two octaves and the
+    // energy spreads so far that "sidebands" stops being the right word.
+    fmParams.timeMod01 = 0.12f;
+
+    const double subHz = 100.0;
+    auto measure = [&] (float depth)
+    {
+        DybbukEngine::Params q = fmParams;
+        q.timeMod01 = depth;
+        const auto fmOut = renderEngine (sr, 128, 2.0, sine (990.0, 0.3), q, 7u);
+        double grid = 0.0, halfGrid = 0.0;
+        for (int k = 1; k <= 4; ++k)
+            for (double sign : { -1.0, 1.0 })
+            {
+                const double g = goertzelAmp (fmOut, from, n, 990.0 + sign * k * subHz, sr);
+                grid += g * g;
+                const double h = goertzelAmp (fmOut, from, n, 990.0 + sign * (k - 0.5) * subHz, sr);
+                halfGrid += h * h;
+            }
+        const double car = std::pow (goertzelAmp (fmOut, from, n, 990.0, sr), 2.0);
+        return std::array<double, 3> { grid, halfGrid, car };
+    };
+
+    const auto modded = measure (0.12f);
+    const auto clean = measure (0.0f);
+
+    // The comparison that cannot be fooled: the same measurement with the
+    // depth at zero. The grid-to-half-grid ratio alone is muddied by the
+    // three-tap comb, which puts structure every 10 Hz at this delay.
+    check ("Time Mod puts sidebands on the sub-harmonic grid",
+           modded[0] > 0.02 * modded[2] && modded[0] > 100.0 * clean[0],
+           "grid/carrier " + juce::String (modded[0] / juce::jmax (modded[2], 1.0e-18), 3)
+               + " with Time Mod, " + juce::String (clean[0] / juce::jmax (clean[2], 1.0e-18), 6)
+               + " without; grid/half-grid "
+               + juce::String (modded[0] / juce::jmax (modded[1], 1.0e-18), 1));
+}
+
+// Hardware-true mono is the default. Spread widens without ever breaking the
+// mono sum, because the side signal is a difference.
+void spread()
+{
+    std::printf ("spread: wide in stereo, unchanged in mono\n");
+    constexpr double sr = 48000.0;
+
+    DybbukEngine::Params p;
+    p.time01 = 0.35f;
+    p.decay = 0.7f;
+    p.filterHz = 9000.0f;
+    p.blend01 = 1.0f;
+
+    std::vector<float> monoL, monoR, wideL, wideR;
+    renderEngineStereo (sr, 128, 2.0, sine (330.0, 0.35), p, 7u, monoL, monoR);
+    p.spread01 = 1.0f;
+    renderEngineStereo (sr, 128, 2.0, sine (330.0, 0.35), p, 7u, wideL, wideR);
+
+    double monoDiff = 0.0, wideDiff = 0.0, sumDiff = 0.0;
+    double sumRef = 0.0;
+    for (size_t i = 0; i < monoL.size(); ++i)
+    {
+        monoDiff = juce::jmax (monoDiff, (double) std::abs (monoL[i] - monoR[i]));
+        wideDiff = juce::jmax (wideDiff, (double) std::abs (wideL[i] - wideR[i]));
+        const double a = 0.5 * ((double) monoL[i] + monoR[i]);
+        const double b = 0.5 * ((double) wideL[i] + wideR[i]);
+        sumDiff = juce::jmax (sumDiff, std::abs (a - b));
+        sumRef = juce::jmax (sumRef, std::abs (a));
+    }
+
+    check ("Spread 0 is true mono", monoDiff < 1.0e-6,
+           "largest L minus R is " + juce::String (monoDiff, 9));
+    check ("Spread 1 actually widens", wideDiff > 0.02,
+           "largest L minus R is " + juce::String (wideDiff, 4));
+    check ("the mono sum is untouched", sumDiff < 1.0e-5 * juce::jmax (sumRef, 1.0e-6),
+           "mono sums differ by at most " + juce::String (sumDiff, 9) + " against a peak of "
+               + juce::String (sumRef, 4));
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -1345,6 +1514,7 @@ const Scenario kScenarios[] = {
     { "blockmatrix", blockmatrix }, { "srmatrix", srmatrix },
     { "agitation", agitation }, { "follower", follower }, { "interference", interference },
     { "drift", drift },         { "generative", generative },
+    { "tones", tones },         { "spread", spread },
     { "cpu", cpu },       { "probe", probe },
 };
 

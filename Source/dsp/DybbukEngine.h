@@ -8,6 +8,7 @@
 #include "Interference.h"
 #include "ModMatrix.h"
 #include "TimeFilterLoop.h"
+#include "Tones.h"
 
 // The whole effect, mono core with stereo I/O, matching the hardware:
 //
@@ -35,6 +36,10 @@ public:
         float agitSpeedHz = 0.35f;
         bool agitGateMode = false;
         float timeMod01 = 0.0f;
+
+        float tonesLevel01 = 0.0f;
+        float tonesPitchHz = 110.0f;
+        float spread01 = 0.0f;
 
         bool bypass = false;
     };
@@ -71,8 +76,16 @@ private:
     Interference interference;
     Drift drift;
     ModMatrix matrix;
+    Tones tones;
 
     std::vector<float> monoBuf, wetBuf, modBuf;
+
+    // Short delay behind the stereo spread. The side component is the
+    // difference between the wet and its delayed self, so the mono sum is
+    // exactly the wet: Spread can never make the plugin sound broken in mono,
+    // and at 0 it is bit-identical to the hardware's true mono.
+    std::vector<float> spreadDelay;
+    int spreadWrite = 0, spreadSize = 1;
 
     juce::SmoothedValue<float> strengthSmooth, dryGainSmooth, wetGainSmooth, outSmooth;
 
