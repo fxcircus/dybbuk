@@ -49,6 +49,13 @@ set(PLUGIN_SOURCES
     Source/state/PresetManager.cpp
     Source/state/FactoryPresets.cpp
     Source/ui/Theme.cpp
+    Source/ui/BrassKnob.cpp
+    Source/ui/PillToggle.cpp
+    Source/ui/Ember.cpp
+    Source/ui/ReadoutStrip.cpp
+    Source/ui/OutSlider.cpp
+    Source/ui/ClearButton.cpp
+    Source/ui/PresetBar.cpp
     ${ENGINE_SOURCES})
 
 target_sources(Dybbuk PRIVATE ${PLUGIN_SOURCES})

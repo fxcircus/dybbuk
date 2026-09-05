@@ -28,9 +28,9 @@ public:
     float getDelaySeconds() const { return engine.getDelaySeconds(); }
     int getClearsServed() const { return engine.getClearsServed(); }
     // Live modulation depth per destination, -1 to 1, for the knob rings.
-    float getTimeMod() const { return engine.getTimeMod(); }
-    float getFilterMod() const { return engine.getFilterMod(); }
-    float getDecayMod() const { return engine.getDecayMod(); }
+    float getTimeModDepthOct() const { return engine.getTimeModDepthOct(); }
+    float getFilterModOct() const { return engine.getFilterModOct(); }
+    float getDecayModLinear() const { return engine.getDecayModLinear(); }
     bool isSyncClamped() const { return syncClamped.load (std::memory_order_relaxed); }
     // Enough for the editor to resolve a synced Time itself, so its readout is
     // right the moment the window opens rather than after the first block.

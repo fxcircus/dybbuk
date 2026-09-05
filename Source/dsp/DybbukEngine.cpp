@@ -129,9 +129,9 @@ void DybbukEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
         processChunk (buffer, start, juce::jmin (maxBlock, n - start), p);
 
     uiOutputLevel.store (blockPeak, std::memory_order_relaxed);
-    uiTimeMod.store (matrix.modNorm (ModMatrix::dstTime), std::memory_order_relaxed);
-    uiFilterMod.store (matrix.modNorm (ModMatrix::dstFilter), std::memory_order_relaxed);
-    uiDecayMod.store (matrix.modNorm (ModMatrix::dstDecay), std::memory_order_relaxed);
+    uiTimeMod.store (matrix.timeColumnDepth(), std::memory_order_relaxed);
+    uiFilterMod.store (matrix.offsets().filterOct, std::memory_order_relaxed);
+    uiDecayMod.store (matrix.offsets().decay, std::memory_order_relaxed);
     uiInterference.store (interference.energy01(), std::memory_order_relaxed);
 }
 

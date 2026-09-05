@@ -47,6 +47,8 @@ public:
 
     const Offsets& offsets() const noexcept { return out; }
     float macroValue() const noexcept { return macro; }
+    // Peak Time excursion in octaves, which is the band the knob draws.
+    float timeColumnDepth() const noexcept { return timeDepth; }
 
     // For the UI's modulated knob rings: how far each destination is being
     // pushed, normalised to its own full scale.

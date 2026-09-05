@@ -62,9 +62,11 @@ public:
 
     // Modulation, published for the knob rings: how far each destination is
     // being pushed right now, normalised to its own full scale.
-    float getTimeMod() const noexcept { return uiTimeMod.load (std::memory_order_relaxed); }
-    float getFilterMod() const noexcept { return uiFilterMod.load (std::memory_order_relaxed); }
-    float getDecayMod() const noexcept { return uiDecayMod.load (std::memory_order_relaxed); }
+    // In musical units, so the editor does not have to know the matrix scales:
+    // octaves of chip clock, octaves of cutoff, and linear feedback gain.
+    float getTimeModDepthOct() const noexcept { return uiTimeMod.load (std::memory_order_relaxed); }
+    float getFilterModOct() const noexcept { return uiFilterMod.load (std::memory_order_relaxed); }
+    float getDecayModLinear() const noexcept { return uiDecayMod.load (std::memory_order_relaxed); }
     float getInterferenceEnergy() const noexcept { return uiInterference.load (std::memory_order_relaxed); }
 
 private:

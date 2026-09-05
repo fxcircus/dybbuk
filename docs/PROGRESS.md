@@ -45,7 +45,9 @@ disagree with what is written here, this wins.
 - `EngineTest`: 23 scenarios plus `render` and `probe` (85 checks, 0 failures, 1.2 s)
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
 - Four factory presets ship as code tables and are proven to sound
-- Known issues: the editor is an interim layout (playable, not the designed one)
+- UI: the designed interface, both themes, ten knobs with live modulation
+  arcs, the ember, the readout strip and the metered Out fader
+- Known issues: none open; the listening gates are the user's call
 
 ## Open finding: Absorb versus the runaway zone
 
@@ -113,6 +115,18 @@ and it is one constant.
       spread 0.79 across twelve 5 s windows
 - [ ] Listened to (`EngineTest render` writes dybbuk_generative.wav, 40 s of it)
 
+### Phase 5 — UI
+- [x] Both themes rendered and reviewed (brass default, parchment alternate)
+- [x] Ten knobs on the designed 720 x 576 canvas, sized large / medium-large / medium
+- [x] Decay's runaway zone drawn in red on the ring, and named in the readout
+- [x] Live modulation arcs: the pointer is what you set, the dot is what you hear
+- [x] Time shows detents and note names while synced, and says when a division is capped
+- [x] The ember, animated from loop energy, hotter and redder in runaway
+- [x] Readout strip instead of tooltips, sticky to the last control touched
+- [x] Full-width Out fader with the meter behind it and a peak hold
+- [x] Shift-drag fine adjust, double-click Decay to Clear
+- [x] Window scales, aspect locked; pluginval Editor and Editor Automation pass
+
 ### Phase 4 — Playability, character and presets
 - [x] Optional Tones injection: triangle drone plus a sub-harmonic, off by default
 - [x] Time Mod is normalled to the Tones sub, as on the hardware, so it gives
@@ -122,11 +136,6 @@ and it is one constant.
 - [x] Preset save / load / rename / delete (`ProcessorTest`)
 - [x] Four factory presets, each proven to apply, sound and stay bounded
 - [ ] Played through the standalone build
-
-### Phase 5 — UI
-- [ ] Both themes rendered and reviewed
-- [ ] Readout strip on every control
-- [ ] Window scales, aspect locked
 
 ### Phase 6 — Validation matrix
 - [x] Sample rates 44.1 / 48 / 96 / 192 kHz (engine level)
