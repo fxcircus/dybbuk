@@ -56,9 +56,9 @@ int main()
 
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
 
-    auto snap = [&editor] (const juce::String& name)
+    auto snapAfter = [&editor] (const juce::String& name, int settleMs)
     {
-        juce::MessageManager::getInstance()->runDispatchLoopUntil (250);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (settleMs);
         const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
         const auto file = juce::File::getCurrentWorkingDirectory().getChildFile (name);
         file.deleteFile();
@@ -67,6 +67,8 @@ int main()
         std::printf ("wrote %s (%d x %d)\n", file.getFileName().toRawUTF8(), image.getWidth(),
                      image.getHeight());
     };
+
+    auto snap = [&snapAfter] (const juce::String& name) { snapAfter (name, 250); };
 
     // 1. At rest, defaults, brass.
     snap ("editor_snapshot.png");
@@ -93,13 +95,22 @@ int main()
     snap ("editor_snapshot_synced.png");
     setParam (processor, params::id::timesync, 0.0f);
 
-    // 5. The alternate theme, rebuilt through the real path.
+    // 5. The theme cross-fade, caught in the middle. The dispatch loop runs the
+    // editor's timer, so a short wait after the toggle lands part way through
+    // the 350 ms dissolve: this frame should show both sheets at once.
+    if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
+    {
+        d->toggleTheme();
+        snapAfter ("editor_snapshot_theme_fade.png", 110);
+    }
+
+    // 6. The alternate sheet, settled, rebuilt through the real path.
     processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::Kind::light, nullptr);
     rebuild (processor, editor);
     pushAudio (processor, 120, true);
     snap ("editor_snapshot_light.png");
 
-    // 6. Every factory preset, which also reviews every readout in the tables.
+    // 7. Every factory preset, which also reviews every readout in the tables.
     processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::kDefaultTheme, nullptr);
     for (const auto& info : processor.presetManager.getPresets())
     {

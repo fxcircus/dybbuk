@@ -147,6 +147,7 @@ and it is one constant.
 - [x] IN and OUT trims on the edges, hatched meters climbing solid ink rails, peak holds
 - [x] Shift-drag fine adjust, double-click Decay to Clear
 - [x] Three typefaces embedded; verified the Hebrew wordmark renders
+- [x] Switching sheets cross-fades the whole plate over 350 ms, reviewed mid-dissolve
 - [x] Window scales, aspect locked; pluginval Editor and Editor Automation pass
 - [x] Fixed a shutdown crash the fonts introduced: a static Typeface::Ptr
       released its font after JUCE had torn down, which throws on a dead mutex

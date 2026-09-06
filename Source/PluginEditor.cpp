@@ -11,6 +11,9 @@ namespace
 
     // Layout, read off the canvas. The plate is a fixed sheet; nothing here is
     // responsive, which is what keeps a hand-drawn window honest at every size.
+    // The canvas transitions its sheet over 350 ms.
+    constexpr float kThemeFadeSeconds = 0.35f;
+
     constexpr int kHeaderH = 52;
     constexpr int kRuleY = 62;
     constexpr int kFaderW = 60;
@@ -123,15 +126,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
 
     plate.addAndMakeVisible (themeMark);
     themeMark.setBounds (canvasW - 30 - 70, kHeaderH / 2 - 11, 70, 22);
-    themeMark.onClick = [this]
-    {
-        const int next = (static_cast<int> (theme::currentTheme()) + 1) % theme::kThemeCount;
-        theme::setTheme (next);
-        // A property, not a parameter: the sheet you work on must never dirty
-        // the preset or appear in a host automation lane.
-        proc.apvts.state.setProperty (theme::kThemeProperty, next, nullptr);
-        applyTheme();
-    };
+    themeMark.onClick = [this] { toggleTheme(); };
 
     // --- faders on both edges -------------------------------------------------
     inFader = std::make_unique<VerticalFader> (param (params::id::input), "IN");
@@ -262,6 +257,9 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     });
 
 
+    plate.addChildComponent (themeFade);
+    themeFade.setBounds (0, 0, canvasW, canvasH);
+
     applyTheme();
     startTimerHz (kUiHz);
 
@@ -272,6 +270,24 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
 }
 
 DybbukEditor::~DybbukEditor() = default;
+
+void DybbukEditor::toggleTheme()
+{
+    // Grab the outgoing sheet before anything changes colour. Captured at 2x
+    // so it stays crisp while the window is scaled up; it lives for 350 ms.
+    themeFade.setVisible (false); // never photograph the overlay itself
+    themeFade.image = plate.createComponentSnapshot (plate.getLocalBounds(), false, 2.0f);
+    themeFade.progress = 1.0f;
+    themeFade.setVisible (true);
+    themeFade.toFront (false);
+
+    const int next = (static_cast<int> (theme::currentTheme()) + 1) % theme::kThemeCount;
+    theme::setTheme (next);
+    // A property, not a parameter: the sheet you work on must never dirty the
+    // preset or appear in a host automation lane.
+    proc.apvts.state.setProperty (theme::kThemeProperty, next, nullptr);
+    applyTheme();
+}
 
 void DybbukEditor::applyTheme()
 {
@@ -338,6 +354,18 @@ void DybbukEditor::timerCallback()
     clearStamp.tick();
 
     presetHeader.tick();
+
+    if (themeFade.progress > 0.0f)
+    {
+        themeFade.progress = juce::jmax (0.0f, themeFade.progress
+                                                   - 1.0f / (kThemeFadeSeconds * (float) kUiHz));
+        if (themeFade.progress <= 0.0f)
+        {
+            themeFade.setVisible (false);
+            themeFade.image = juce::Image(); // 2x of the whole plate is worth releasing
+        }
+        themeFade.repaint();
+    }
 }
 
 void DybbukEditor::resized()

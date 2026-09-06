@@ -23,6 +23,10 @@ public:
 
     void resized() override;
 
+    // The action the theme mark performs. Public so UISnapshot can exercise
+    // the cross-fade without a mouse.
+    void toggleTheme();
+
 private:
     static constexpr int canvasW = 900;
     static constexpr int canvasH = 620;
@@ -33,6 +37,30 @@ private:
     {
         void paint (juce::Graphics& g) override;
         std::function<void (juce::Graphics&)> onPaint;
+    };
+
+    // A still of the outgoing sheet, fading out over the recoloured one. The
+    // whole plate is captured rather than just the background, because every
+    // line, letter and needle changes colour too, and fading only the paper
+    // under fully-swapped ink reads as a flicker rather than a dissolve.
+    struct ThemeFade : juce::Component
+    {
+        ThemeFade() { setInterceptsMouseClicks (false, false); }
+
+        void paint (juce::Graphics& g) override
+        {
+            if (progress <= 0.0f || ! image.isValid())
+                return;
+
+            // Eased, so the old sheet holds for a moment and then lets go
+            // rather than dimming at a constant rate.
+            const float eased = progress * progress * (3.0f - 2.0f * progress);
+            g.setOpacity (eased);
+            g.drawImage (image, getLocalBounds().toFloat());
+        }
+
+        juce::Image image;
+        float progress = 0.0f; // 1 at the moment of the switch, 0 when finished
     };
 
     void timerCallback() override;
@@ -52,6 +80,7 @@ private:
     std::unique_ptr<VerticalFader> inFader, outFader;
     std::unique_ptr<DiamondToggle> bypassToggle, syncToggle;
     std::unique_ptr<RailSwitch> modeSwitch;
+    ThemeFade themeFade;
     Lamp lamp;
     ClearStamp clearStamp;
     PresetHeader presetHeader { proc.presetManager };
