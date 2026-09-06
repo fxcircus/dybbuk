@@ -15,7 +15,10 @@ public:
     void reset() noexcept;
     void seedForTests (unsigned int s) noexcept { rng.seed (s); }
 
-    inline float processSample (float x, const ChipClock::Frame& f) noexcept
+    // bleedGate scales the clock bleed by what is in the loop, so an empty
+    // loop is silent rather than humming at half the chip clock.
+    inline float processSample (float x, const ChipClock::Frame& f,
+                                float bleedGate = 1.0f) noexcept
     {
         if (f.ctrlStamp != lastCtrlStamp)
         {
@@ -59,8 +62,8 @@ public:
             if ((f.nTicks & 1) != 0)
                 sub = -sub;
         }
-        if (f.bleedLvl > 0.0f)
-            r += f.bleedLvl * pt::fastTanh (bleedEnv + pt::kBleedSubRatio * sub);
+        if (f.bleedLvl > 0.0f && bleedGate > 0.0f)
+            r += f.bleedLvl * bleedGate * pt::fastTanh (bleedEnv + pt::kBleedSubRatio * sub);
 
         return outSvf.lowpass (r);
     }

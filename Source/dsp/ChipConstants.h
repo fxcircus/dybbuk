@@ -72,12 +72,21 @@ namespace pt
     inline constexpr int   kGuardPoles = 1;     // 0, 1 or 2 tracking write-guard poles (long-Time character)
 
     // Clock bleed: the ticking and burbling the Strega exposes instead of hiding.
+    //
+    // Tuned down hard after a playthrough. Once the clock falls into the audio
+    // band a steady pulse train is not "ticking", it is a tone: at a 1 s delay
+    // the fs/2 square sat at 2.75 kHz and -44 dBFS, audible with no input at
+    // all, and Clear could not touch it because the clock makes it rather than
+    // the buffer. Three changes: the fs/2 square is off, the level is 15 dB
+    // lower, and what is left is gated by what is actually in the loop, so it
+    // rides the repeats instead of standing on its own.
     inline constexpr float kBleedOnsetHz  = 20000.0f; // audible from 275 ms down
-    inline constexpr float kBleedMaxAmp   = 0.01f;    // -40 dBFS at the bottom of the range
+    inline constexpr float kBleedMaxAmp   = 0.0018f;  // -55 dBFS at the bottom of the range
     inline constexpr float kBleedCurve    = 1.5f;
     inline constexpr float kInvLogBleed   = 0.3860600f; // 1 / ln(20000 / 1500)
-    inline constexpr float kBleedSubRatio = 0.5f;       // fs_chip/2 burble under the tick train
+    inline constexpr float kBleedSubRatio = 0.0f;       // the fs_chip/2 square: the squeal, off
     inline constexpr float kBleedTickTau  = 40.0e-6f;
+    inline constexpr float kBleedGateScale = 4.0f;      // loop level at which bleed reaches full
 
     // --- the loop -----------------------------------------------------------
     inline constexpr float kSvfSatLimit  = 0.5f;  // bounds self-oscillation, analog style

@@ -61,6 +61,36 @@ disagree with what is written here, this wins.
   lamp, and metered IN and OUT trims on the edges
 - Known issues: none open; the listening gates are the user's call
 
+## Changed after the first playthrough (2026-09-06)
+
+Three things Roy found by playing it that no measurement had flagged, because
+every test was checking that the behaviour existed rather than that it was
+wanted.
+
+1. **A high squeal past about a 0.2 s delay that Clear could not remove.** The
+   clock bleed. Once the chip clock falls into the audio band a steady pulse
+   train is not "ticking", it is a pitch: at a 1 s delay the fs/2 square sat at
+   2.75 kHz and -44 dBFS, and it was there with no input at all, because the
+   clock generates it rather than the buffer. The fs/2 square is now off, the
+   level is 15 dB lower, and what remains is gated by the loop's own content so
+   it rides the repeats. Measured: -95.8 dBFS at the clock frequency with an
+   empty loop, 13 dB louder while the loop is ringing. `EngineTest bleed` now
+   tests for the absence of the tone rather than its presence, which is what it
+   should have tested all along.
+2. **Time Mod was unusable past about an eighth of its travel.** It ran to two
+   octaves of clock FM. It now runs to a quarter of an octave, three semitones,
+   so the whole knob sits where the metallic edge lives. That is very close to
+   the 13 % Roy asked for.
+3. **A stereo source was being collapsed.** The plan says "mono sum at input",
+   and the input to the delay still is, because the chip is mono on the
+   hardware and that is the sound. But the dry path had no reason to lose its
+   image and now keeps both channels. `ProcessorTest stereoDry` proves a left
+   only source stays on the left.
+
+The noise floor at the longest Time reads 14 dB lower than it did (-60 dBFS
+rather than -46) because most of what the old measurement was picking up was
+the squeal, not hiss.
+
 ## Headroom, measured
 
 The centre of the image, which is what Out is calibrated against and what a

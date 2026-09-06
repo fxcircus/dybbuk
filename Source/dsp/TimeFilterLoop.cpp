@@ -155,11 +155,15 @@ void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& 
 
         const float node = x + fb;
 
+        // The bleed rides the loop's own level: with nothing in the delay
+        // there is nothing for the clock to bleed into.
+        const float bleedGate = juce::jlimit (0.0f, 1.0f, loopEnv * pt::kBleedGateScale);
+
         float s = node;
         float tapSum = 0.0f;
         for (int k = 0; k < pt::kStages; ++k)
         {
-            s = stages[(size_t) k].processSample (s, f);
+            s = stages[(size_t) k].processSample (s, f, bleedGate);
             tapSum += tapWeight[(size_t) k] * s;
         }
 

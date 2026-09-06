@@ -55,7 +55,8 @@ void DybbukEngine::prepare (double sampleRate, int maxBlockSize)
     monoBuf.assign ((size_t) maxBlock, 0.0f);
     wetBuf.assign ((size_t) maxBlock, 0.0f);
     modBuf.assign ((size_t) maxBlock, 0.0f);
-    trimBuf.assign ((size_t) maxBlock, 0.0f);
+    dryLBuf.assign ((size_t) maxBlock, 0.0f);
+    dryRBuf.assign ((size_t) maxBlock, 0.0f);
 
     const double smoothSec = 0.03;
     inSmooth.reset (sampleRate, smoothSec);
@@ -147,7 +148,8 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
     float* mono = monoBuf.data();
     float* wet = wetBuf.data();
     float* mod = modBuf.data();
-    float* trimmed = trimBuf.data();
+    float* dryL = dryLBuf.data();
+    float* dryR = dryRBuf.data();
 
     const float* left = buffer.getReadPointer (0, start);
     const float* right = numChannels > 1 ? buffer.getReadPointer (1, start) : left;
@@ -173,9 +175,19 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
             // The trim is applied once, ahead of everything, so the dry path
             // and the loop hear the same input and the meter shows what the
             // plugin is actually being fed.
-            const float dry = 0.5f * (left[k] + right[k]) * inSmooth.getNextValue();
-            trimmed[k] = dry;
-            const float inMag = std::abs (dry);
+            //
+            // The two sides are kept apart from here on. Only what feeds the
+            // delay is summed: the chip is mono on the hardware and that is
+            // the sound, but there is no reason for a stereo source to lose
+            // its image just by passing through the plate.
+            const float trim = inSmooth.getNextValue();
+            const float l = left[k] * trim;
+            const float r = right[k] * trim;
+            dryL[k] = l;
+            dryR[k] = r;
+
+            const float dry = 0.5f * (l + r);
+            const float inMag = juce::jmax (std::abs (l), std::abs (r));
             blockInputPeak = inMag > blockInputPeak ? inMag : blockInputPeak;
 
             // While bypassed the loop runs on silence: a delay should not
@@ -236,7 +248,6 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
 
     for (int i = 0; i < len; ++i)
     {
-        const float dry = trimmed[i];
         const float outGain = outSmooth.getNextValue();
         const float wetGain = juce::jlimit (0.0f, 1.5f, wetGainSmooth.getNextValue() + blendMod);
         const float dryGain = dryGainSmooth.getNextValue();
@@ -257,9 +268,11 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
                 spreadWrite = 0;
         }
 
-        const float centre = dry * dryGain + wet[i] * wetGain;
-        const float l = (centre + side * wetGain) * outGain;
-        const float r = (centre - side * wetGain) * outGain;
+        // Dry keeps its own two channels; the wet is the mono chip, spread
+        // across them.
+        const float wetCentre = wet[i] * wetGain;
+        const float l = (dryL[i] * dryGain + wetCentre + side * wetGain) * outGain;
+        const float r = (dryR[i] * dryGain + wetCentre - side * wetGain) * outGain;
 
         buffer.getWritePointer (0, start)[i] = l;
         if (numChannels > 1)

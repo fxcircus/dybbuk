@@ -397,8 +397,11 @@ void noise()
            juce::String (levels[0], 1) + " dBFS (want <= -82)");
     check ("342 ms floor in range", levels[2] >= -78.0 && levels[2] <= -50.0,
            juce::String (levels[2], 1) + " dBFS (want -78 to -50)");
-    check ("longest Time is hissy", levels[4] >= -60.0 && levels[4] <= -30.0,
-           juce::String (levels[4], 1) + " dBFS (want -60 to -30)");
+    // The bracket used to start at -60 because the clock bleed was standing in
+    // this measurement at -44 dBFS. That tone is gone (it was audible with no
+    // input, which is not hiss), so what is left here is the hiss alone.
+    check ("longest Time is hissy", levels[4] >= -66.0 && levels[4] <= -30.0,
+           juce::String (levels[4], 1) + " dBFS (want -66 to -30)");
 
     bool monotonic = true;
     for (int i = 1; i < 5; ++i)
@@ -604,30 +607,42 @@ void runaway()
     }
 }
 
-// The ticking and burbling the Strega exposes: present only once the clock has
-// fallen into the audio band.
+// The ticking and burbling the Strega exposes, and the thing it must not do:
+// stand there as a tone when the delay is empty. Once the clock falls into the
+// audio band a steady pulse train is not ticking, it is a pitch, and a pitch
+// that Clear cannot remove reads as a broken plugin rather than as character.
 void bleed()
 {
-    std::printf ("bleed: clock tick train audible at long Time, absent at short Time\n");
+    std::printf ("bleed: rides the loop's content, silent when the loop is empty\n");
     constexpr double sr = 48000.0;
 
-    auto measure = [] (float t01, double hz)
+    auto measure = [] (float t01, bool withSignal, double hz)
     {
         TimeFilterLoop::Params p;
         p.time01 = t01;
-        p.decay = 0.0f;
+        p.decay = withSignal ? 0.7f : 0.0f;
         p.resonance01 = 0.0f;
-        const auto out = renderLoop (sr, 128, 1.5, kSilence, p, 7u);
-        return dbfs (goertzelAmp (out, (int) (0.5 * sr), (int) sr, hz, sr));
+        const auto out = renderLoop (sr, 128, 3.0,
+                                     withSignal ? sine (450.0, 0.4) : kSilence, p, 7u);
+        return dbfs (goertzelAmp (out, (int) (2.0 * sr), (int) sr, hz, sr));
     };
 
-    const double sub = measure (1.0f, 750.0);
-    const double tick = measure (1.0f, 1500.0);
-    const double quiet = measure (0.3f, 750.0);
-    check ("subharmonic burble at the bottom", sub >= -68.0 && sub <= -28.0,
-           juce::String (sub, 1) + " dBFS at 750 Hz, Time 1");
-    check ("tick at the clock frequency", tick >= -80.0 && tick <= -28.0,
-           juce::String (tick, 1) + " dBFS at 1500 Hz, Time 1");
+    // Time 1: the chip clock is 1500 Hz, so bleed lands at 1500 and its
+    // subharmonic at 750.
+    const double emptySub = measure (1.0f, false, 750.0);
+    const double emptyTick = measure (1.0f, false, 1500.0);
+    const double playingTick = measure (1.0f, true, 1500.0);
+    const double quiet = measure (0.3f, false, 750.0);
+
+    // THE REGRESSION. This is what a playthrough caught: at a 1 s delay the
+    // fs/2 square sat at 2.75 kHz and -44 dBFS with nothing playing, and Clear
+    // could not touch it because the clock makes it, not the buffer.
+    check ("an empty loop makes no tone", emptySub <= -85.0 && emptyTick <= -85.0,
+           juce::String (emptySub, 1) + " dBFS at 750 Hz, " + juce::String (emptyTick, 1)
+               + " dBFS at 1500 Hz, with no input");
+    check ("but the clock is still heard under the repeats", playingTick > emptyTick + 10.0,
+           juce::String (playingTick, 1) + " dBFS at 1500 Hz while the loop is ringing, against "
+               + juce::String (emptyTick, 1) + " dBFS empty");
     check ("silent above the bleed onset", quiet <= -85.0,
            juce::String (quiet, 1) + " dBFS at 750 Hz, Time01 0.3");
 }

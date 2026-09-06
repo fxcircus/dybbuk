@@ -304,8 +304,9 @@ no locks.
 | `REC_TRACK` / `REC_FC_MAX` / `REC_Q` | 0.45 / 8000 / 0.6 | bandwidth collapse with Time |
 | `OUT_MFB_FC` / `_Q` | 4500 / 0.6 | fixed darkness |
 | `BLEED_ONSET_HZ` | 20000 | where ticking starts (275 ms) |
-| `BLEED_MAX_DB` / `_CURVE` | -40 / 1.5 | tick loudness at 3.6 s / how late it arrives |
-| `BLEED_SUB_RATIO` / `_TICK_TAU_SEC` | 0.5 / 40e-6 | burble versus tick, tick sharpness |
+| `BLEED_MAX_DB` / `_CURVE` | -55 / 1.5 | tick loudness at 3.6 s / how late it arrives |
+| `BLEED_SUB_RATIO` / `_TICK_TAU_SEC` | 0 / 40e-6 | the fs/2 square is off: in the audio band it is a pitch, not a burble |
+| `kBleedGateScale` | 4.0 | loop level at which bleed reaches full; an empty loop makes none |
 | `SVF_SAT_LIM` | 0.5 | self oscillation level and softness |
 | `RES_CURVE` / `RES_OVERDRIVE` / `_START` | 1.5 / 0.03 / 0.92 | resonance feel |
 | `ABSORB_SHELF_FC` / `_MAX` | 1200 / 0.7 | tape age darkening per iteration |

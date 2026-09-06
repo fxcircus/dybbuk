@@ -316,6 +316,75 @@ void monoToStereo()
            "largest L minus R is " + juce::String (biggestDifference, 9));
 }
 
+// A stereo source must come out stereo. The delay core is mono, matching the
+// hardware, but there is no reason for the dry signal to lose its image just
+// by passing through the plugin. Caught in a playthrough: everything was being
+// summed.
+void stereoDry()
+{
+    std::printf ("stereo: a stereo source keeps its image through the plate\n");
+
+    DybbukProcessor p;
+    p.prepareToPlay (48000.0, 128);
+    p.apvts.getParameter (params::id::blend)->setValueNotifyingHost (0.0f);   // dry only
+    p.apvts.getParameter (params::id::spread)->setValueNotifyingHost (0.0f);
+
+    juce::AudioBuffer<float> buffer (2, 128);
+    juce::MidiBuffer midi;
+    double phase = 0.0;
+    float peakL = 0.0f, peakR = 0.0f;
+
+    // Signal on the left only.
+    for (int b = 0; b < 120; ++b)
+    {
+        for (int i = 0; i < 128; ++i)
+        {
+            const float v = 0.4f * (float) std::sin (phase);
+            phase += 220.0 / 48000.0 * juce::MathConstants<double>::twoPi;
+            buffer.setSample (0, i, v);
+            buffer.setSample (1, i, 0.0f);
+        }
+        p.processBlock (buffer, midi);
+
+        if (b > 40) // past the smoothers settling
+            for (int i = 0; i < 128; ++i)
+            {
+                peakL = juce::jmax (peakL, std::abs (buffer.getSample (0, i)));
+                peakR = juce::jmax (peakR, std::abs (buffer.getSample (1, i)));
+            }
+    }
+
+    check ("the left channel carries the left input", peakL > 0.2f,
+           "left peak " + juce::String (peakL, 3));
+    check ("and it does not leak into the right", peakR < 0.02f,
+           "right peak " + juce::String (peakR, 4) + " (summing to mono would give "
+               + juce::String (peakL, 3) + ")");
+
+    // Wet only: the delay itself is mono by design, so both sides carry it.
+    p.apvts.getParameter (params::id::blend)->setValueNotifyingHost (1.0f);
+    float wetL = 0.0f, wetR = 0.0f;
+    for (int b = 0; b < 200; ++b)
+    {
+        for (int i = 0; i < 128; ++i)
+        {
+            const float v = 0.4f * (float) std::sin (phase);
+            phase += 220.0 / 48000.0 * juce::MathConstants<double>::twoPi;
+            buffer.setSample (0, i, v);
+            buffer.setSample (1, i, 0.0f);
+        }
+        p.processBlock (buffer, midi);
+        if (b > 150)
+            for (int i = 0; i < 128; ++i)
+            {
+                wetL = juce::jmax (wetL, std::abs (buffer.getSample (0, i)));
+                wetR = juce::jmax (wetR, std::abs (buffer.getSample (1, i)));
+            }
+    }
+    check ("the delay itself stays mono, as the hardware is",
+           wetL > 0.02f && std::abs (wetL - wetR) < 0.02f,
+           "wet peaks " + juce::String (wetL, 3) + " / " + juce::String (wetR, 3));
+}
+
 void bypassAndAudio()
 {
     std::printf ("bypass: crossfades to dry, and the loop keeps its state\n");
@@ -470,6 +539,7 @@ int main()
     factoryPresetsLoad();
     presetsMakeSound();
     monoToStereo();
+    stereoDry();
     bypassAndAudio();
 
     std::printf ("\n%d failures\n", failures);

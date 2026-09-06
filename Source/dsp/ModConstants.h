@@ -83,7 +83,10 @@ namespace modk
 
     inline constexpr float kAgitateCurve  = 1.5f;    // subtle in the lower half, wild at the top
     inline constexpr float kMacroSmoothMs = 30.0f;
-    inline constexpr float kTimeModMaxOct = 2.0f;    // Time Mod at 100 %, independent of the macro
+    // Two octaves of clock FM at full depth was unusable past about an
+    // eighth of the knob. A quarter of an octave, three semitones, puts the
+    // whole travel where the metallic edge lives.
+    inline constexpr float kTimeModMaxOct = 0.25f;   // Time Mod at 100 %, independent of the macro
     inline constexpr float kTimeModClampOct = 2.0f;  // total excursion from everything stacked
     inline constexpr float kLoopEnvCeiling = 100.0f; // sanitises the one modulation feedback input
 

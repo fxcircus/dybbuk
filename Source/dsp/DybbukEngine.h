@@ -82,7 +82,7 @@ private:
     ModMatrix matrix;
     Tones tones;
 
-    std::vector<float> monoBuf, wetBuf, modBuf, trimBuf;
+    std::vector<float> monoBuf, wetBuf, modBuf, dryLBuf, dryRBuf;
 
     // Short delay behind the stereo spread. The side component is the
     // difference between the wet and its delayed self, so the mono sum is
