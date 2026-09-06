@@ -45,6 +45,7 @@ DybbukProcessor::DybbukProcessor()
     pTonesPitch = apvts.getRawParameterValue (params::id::tonespitch);
     pSpread     = apvts.getRawParameterValue (params::id::spread);
     pBypass     = apvts.getRawParameterValue (params::id::bypass);
+    pInput      = apvts.getRawParameterValue (params::id::input);
 
     presetManager.stampExtraState = [this] (juce::ValueTree& s) { stampExtraState (s); };
     presetManager.applyExtraState = [this] { applyExtraState (apvts.state); };
@@ -123,6 +124,7 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         syncClamped.store (false, std::memory_order_relaxed);
     }
 
+    p.inputDb = pInput->load();
     p.strengthDb = pStrength->load();
     p.decay = pDecay->load();
     p.agitate01 = pAgitate->load() * 0.01f;

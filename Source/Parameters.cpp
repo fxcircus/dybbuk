@@ -205,6 +205,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     layout.add (percentWithWord (16, id::spread, "Spread", 0.0f, "Mono"));
 
+    // 17. In. The design puts a trim fader on each edge of the window: this
+    // one sets what reaches the plugin, Strength sets how hard that hits the
+    // loop. Same range and readout as Out, so the pair reads as a pair.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { id::input, 17 }, "In", skewedRange (kOutFloorDb, 6.0f, -12.0f), 0.0f,
+        juce::AudioParameterFloatAttributes()
+            .withLabel ("dB")
+            .withStringFromValueFunction ([] (float v, int)
+            {
+                return v <= kOutFloorDb + 0.05f ? juce::String ("-Inf") : juce::String (v, 1);
+            })));
+
     // LAST, and hint 1000 so anything added later still sorts before it in AU
     // while staying declared last for VST3. 1 means bypassed, which is the
     // polarity the hosts expect.

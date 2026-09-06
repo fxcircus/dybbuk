@@ -23,6 +23,7 @@ class DybbukEngine
 public:
     struct Params
     {
+        float inputDb = 0.0f;
         float strengthDb = 0.0f;
         float time01 = 0.3f;
         float decay = 0.5f;
@@ -56,6 +57,7 @@ public:
 
     // Polled by the editor; never read the engine directly from the UI.
     std::atomic<float> uiOutputLevel { 0.0f };
+    std::atomic<float> uiInputLevel { 0.0f };
     float getLoopEnergy() const noexcept { return loop.uiLoopEnergy.load (std::memory_order_relaxed); }
     float getDelaySeconds() const noexcept { return loop.uiDelaySeconds.load (std::memory_order_relaxed); }
     int getClearsServed() const noexcept { return loop.uiClearsServed.load (std::memory_order_relaxed); }
@@ -80,7 +82,7 @@ private:
     ModMatrix matrix;
     Tones tones;
 
-    std::vector<float> monoBuf, wetBuf, modBuf;
+    std::vector<float> monoBuf, wetBuf, modBuf, trimBuf;
 
     // Short delay behind the stereo spread. The side component is the
     // difference between the wet and its delayed self, so the mono sum is
@@ -89,7 +91,7 @@ private:
     std::vector<float> spreadDelay;
     int spreadWrite = 0, spreadSize = 1;
 
-    juce::SmoothedValue<float> strengthSmooth, dryGainSmooth, wetGainSmooth, outSmooth;
+    juce::SmoothedValue<float> inSmooth, strengthSmooth, dryGainSmooth, wetGainSmooth, outSmooth;
 
     std::atomic<float> uiTimeMod { 0.0f }, uiFilterMod { 0.0f }, uiDecayMod { 0.0f },
         uiInterference { 0.0f };
@@ -102,7 +104,7 @@ private:
 
     double sr = 48000.0;
     int maxBlock = 512;
-    float blockPeak = 0.0f;
+    float blockPeak = 0.0f, blockInputPeak = 0.0f;
     bool firstBlock = true;
     bool snapPending = false;
 };

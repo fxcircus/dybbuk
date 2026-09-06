@@ -15,10 +15,21 @@ disagree with what is written here, this wins.
   changing the core: several of those flaws (block-size dependent smoothing,
   an unsnapped clock smoother, an unwrapped phase accumulator) are the kind
   that only show up as a click or a chirp months later.
-- **The Claude Design UI canvas was never found on this machine.** Plan
-  section 2.7 calls the layout final, but no export exists on disk or in the
-  artifact gallery. `docs/design/04-ui.md` derives concrete coordinates,
-  theme tokens and component specs from the written spec instead.
+- **The Claude Design canvas existed all along and the first UI was thrown
+  away.** An earlier session could not reach it and derived an interface from
+  the written spec in plan section 2.7: filled brass knobs, a readout strip, a
+  horizontal output slider. The real canvas (`Dybbuk UI v3.dc.html`, project
+  `a3466a02-e100-482f-a5dc-0d9ad16fd4c4`) is a 900 x 620 engraved plate with
+  line-art knobs, serif and script type, and trims on both edges. The derived
+  spec is kept at `docs/design/inputs/04-ui-derived-from-text-spec.md` as a
+  record of what was guessed. Reaching the canvas needs `/design-login`, which
+  does not work over Remote Control.
+- **The canvas added an IN trim.** A second level control on the left edge,
+  ahead of Strength: IN sets what reaches the plugin, Strength sets how hard
+  that hits the loop. New parameter `in`, hint 17, ahead of Bypass.
+- **Three typefaces are embedded** (EB Garamond, Frank Ruhl Libre for the
+  Hebrew, Pinyon Script for the patch name), about 1 MB of binary data, so the
+  plate looks the same on a machine that has never seen them.
 - **`kWetMakeup` defaults to 1.0, not the +8 dB the tap normalisation costs.**
   Tap weights sum to 1 so "Decay 1.15" really means 15 per cent over unity;
   giving the 8 dB back on the wet output would also lift the noise floor by
@@ -39,15 +50,15 @@ disagree with what is written here, this wins.
 
 ## Current state
 
-- Parameter count: 17, in Push bank order, all automatable; Agitate, Agit
-  Speed, Agit Mode and Time Mod now drive the engine
+- Parameter count: 18, in Push bank order, all automatable (an IN trim came
+  with the v3 canvas)
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
 - `EngineTest`: 24 scenarios plus `render` and `probe` (89 checks, 0 failures;
   1.2 s without the 30 minute soak, 6.5 s with it)
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
 - Four factory presets ship as code tables and are proven to sound
-- UI: the designed interface, both themes, ten knobs with live modulation
-  arcs, the ember, the readout strip and the metered Out fader
+- UI: the v3 Claude Design canvas, both sheets, engraved line-art knobs, the
+  lamp, and metered IN and OUT trims on the edges
 - Known issues: none open; the listening gates are the user's call
 
 ## Headroom, measured
@@ -126,17 +137,20 @@ and it is one constant.
       spread 0.79 across twelve 5 s windows
 - [ ] Listened to (`EngineTest render` writes dybbuk_generative.wav, 40 s of it)
 
-### Phase 5 — UI
-- [x] Both themes rendered and reviewed (brass default, parchment alternate)
-- [x] Ten knobs on the designed 720 x 576 canvas, sized large / medium-large / medium
-- [x] Decay's runaway zone drawn in red on the ring, and named in the readout
-- [x] Live modulation arcs: the pointer is what you set, the dot is what you hear
-- [x] Time shows detents and note names while synced, and says when a division is capped
-- [x] The ember, animated from loop energy, hotter and redder in runaway
-- [x] Readout strip instead of tooltips, sticky to the last control touched
-- [x] Full-width Out fader with the meter behind it and a peak hold
+### Phase 5 — UI (rebuilt from the v3 canvas)
+- [x] Both sheets rendered and reviewed (dark default, light parchment)
+- [x] Ten engraved knobs on the 900 x 620 plate, at the canvas's sizes
+- [x] Decay's danger zone: red index ticks, hatched between them, whole face red past unity
+- [x] Live modulation arcs inside the face (the canvas computes these and does not draw them)
+- [x] Time grows detents and reads note names while synced, and says when a division is capped
+- [x] The lamp, driven by real loop energy with the canvas's flicker on top
+- [x] IN and OUT trims on the edges, hatched meters climbing solid ink rails, peak holds
 - [x] Shift-drag fine adjust, double-click Decay to Clear
+- [x] Three typefaces embedded; verified the Hebrew wordmark renders
 - [x] Window scales, aspect locked; pluginval Editor and Editor Automation pass
+- [x] Fixed a shutdown crash the fonts introduced: a static Typeface::Ptr
+      released its font after JUCE had torn down, which throws on a dead mutex
+      and would have taken a host down on unload
 
 ### Phase 4 — Playability, character and presets
 - [x] Optional Tones injection: triangle drone plus a sub-harmonic, off by default

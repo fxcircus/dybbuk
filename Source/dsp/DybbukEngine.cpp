@@ -55,8 +55,10 @@ void DybbukEngine::prepare (double sampleRate, int maxBlockSize)
     monoBuf.assign ((size_t) maxBlock, 0.0f);
     wetBuf.assign ((size_t) maxBlock, 0.0f);
     modBuf.assign ((size_t) maxBlock, 0.0f);
+    trimBuf.assign ((size_t) maxBlock, 0.0f);
 
     const double smoothSec = 0.03;
+    inSmooth.reset (sampleRate, smoothSec);
     strengthSmooth.reset (sampleRate, smoothSec);
     dryGainSmooth.reset (sampleRate, smoothSec);
     wetGainSmooth.reset (sampleRate, smoothSec);
@@ -100,6 +102,7 @@ void DybbukEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     if (n == 0)
         return;
 
+    inSmooth.setTargetValue (gainFromDb (p.inputDb));
     strengthSmooth.setTargetValue (gainFromDb (p.strengthDb));
     // True equal power, so a centred Blend does not lose 3 dB and a runaway
     // plus dry cannot add up past full scale.
@@ -115,6 +118,7 @@ void DybbukEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
 
     if (firstBlock || snapPending)
     {
+        inSmooth.setCurrentAndTargetValue (inSmooth.getTargetValue());
         strengthSmooth.setCurrentAndTargetValue (strengthSmooth.getTargetValue());
         wetGainSmooth.setCurrentAndTargetValue (wetGainSmooth.getTargetValue());
         dryGainSmooth.setCurrentAndTargetValue (dryGainSmooth.getTargetValue());
@@ -125,10 +129,12 @@ void DybbukEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     }
 
     blockPeak = 0.0f;
+    blockInputPeak = 0.0f;
     for (int start = 0; start < n; start += maxBlock)
         processChunk (buffer, start, juce::jmin (maxBlock, n - start), p);
 
     uiOutputLevel.store (blockPeak, std::memory_order_relaxed);
+    uiInputLevel.store (blockInputPeak, std::memory_order_relaxed);
     uiTimeMod.store (matrix.timeColumnDepth(), std::memory_order_relaxed);
     uiFilterMod.store (matrix.offsets().filterOct, std::memory_order_relaxed);
     uiDecayMod.store (matrix.offsets().decay, std::memory_order_relaxed);
@@ -141,6 +147,7 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
     float* mono = monoBuf.data();
     float* wet = wetBuf.data();
     float* mod = modBuf.data();
+    float* trimmed = trimBuf.data();
 
     const float* left = buffer.getReadPointer (0, start);
     const float* right = numChannels > 1 ? buffer.getReadPointer (1, start) : left;
@@ -163,7 +170,13 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
         for (int i = 0; i < sub; ++i)
         {
             const int k = pos + i;
-            const float dry = 0.5f * (left[k] + right[k]);
+            // The trim is applied once, ahead of everything, so the dry path
+            // and the loop hear the same input and the meter shows what the
+            // plugin is actually being fed.
+            const float dry = 0.5f * (left[k] + right[k]) * inSmooth.getNextValue();
+            trimmed[k] = dry;
+            const float inMag = std::abs (dry);
+            blockInputPeak = inMag > blockInputPeak ? inMag : blockInputPeak;
 
             // While bypassed the loop runs on silence: a delay should not
             // collect what you played while it was out of circuit.
@@ -223,7 +236,7 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
 
     for (int i = 0; i < len; ++i)
     {
-        const float dry = 0.5f * (left[i] + right[i]);
+        const float dry = trimmed[i];
         const float outGain = outSmooth.getNextValue();
         const float wetGain = juce::jlimit (0.0f, 1.5f, wetGainSmooth.getNextValue() + blendMod);
         const float dryGain = dryGainSmooth.getNextValue();

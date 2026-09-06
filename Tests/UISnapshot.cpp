@@ -76,8 +76,6 @@ int main()
     setParam (processor, params::id::agitate, 55.0f);
     pushAudio (processor, 300, true);
     pushAudio (processor, 40, false);
-    if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
-        d->showInReadout (params::id::decay);
     snap ("editor_snapshot_active.png");
 
     // 3. Runaway: Decay past unity, the red zone lit and the ember hot.
@@ -85,8 +83,6 @@ int main()
     setParam (processor, params::id::filter, 3000.0f);
     pushAudio (processor, 500, true);
     pushAudio (processor, 200, false);
-    if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
-        d->showInReadout (params::id::decay);
     snap ("editor_snapshot_runaway.png");
 
     // 4. Synced Time: detents on the ring, a note value on the readout.
@@ -94,18 +90,14 @@ int main()
     setParam (processor, params::id::timesync, 1.0f);
     setParam (processor, params::id::time, 0.5f);
     pushAudio (processor, 60, true);
-    if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
-        d->showInReadout (params::id::time);
     snap ("editor_snapshot_synced.png");
     setParam (processor, params::id::timesync, 0.0f);
 
     // 5. The alternate theme, rebuilt through the real path.
-    processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::Kind::parchment, nullptr);
+    processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::Kind::light, nullptr);
     rebuild (processor, editor);
     pushAudio (processor, 120, true);
-    if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
-        d->showInReadout (params::id::filter);
-    snap ("editor_snapshot_parchment.png");
+    snap ("editor_snapshot_light.png");
 
     // 6. Every factory preset, which also reviews every readout in the tables.
     processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::kDefaultTheme, nullptr);

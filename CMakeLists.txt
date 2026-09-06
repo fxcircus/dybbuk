@@ -14,6 +14,24 @@ FetchContent_Declare(JUCE
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(JUCE)
 
+# --- Fonts ------------------------------------------------------------------
+# The design's typography is half its character: EB Garamond for everything,
+# Frank Ruhl Libre for the Hebrew wordmark, Pinyon Script for the preset name.
+# Embedded rather than looked up by name, so the plugin looks the same on a
+# machine that has never seen these faces. All three are SIL Open Font License.
+juce_add_binary_data(DybbukFonts
+    HEADER_NAME DybbukFonts.h
+    NAMESPACE fonts
+    SOURCES
+        Resources/fonts/EBGaramond-Regular.ttf
+        Resources/fonts/EBGaramond-SemiBold.ttf
+        Resources/fonts/FrankRuhlLibre-Bold.ttf
+        Resources/fonts/PinyonScript-Regular.ttf)
+
+# Binary data is linked into a shared library on some platforms; position
+# independent code keeps that valid.
+set_target_properties(DybbukFonts PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
 # --- The plugin -------------------------------------------------------------
 # PLUGIN_CODE must be unique per plugin and start with an uppercase letter.
 # Standalone is here deliberately: it is the fast test rig (no DAW rescan).
@@ -49,13 +67,11 @@ set(PLUGIN_SOURCES
     Source/state/PresetManager.cpp
     Source/state/FactoryPresets.cpp
     Source/ui/Theme.cpp
-    Source/ui/BrassKnob.cpp
-    Source/ui/PillToggle.cpp
-    Source/ui/Ember.cpp
-    Source/ui/ReadoutStrip.cpp
-    Source/ui/OutSlider.cpp
-    Source/ui/ClearButton.cpp
-    Source/ui/PresetBar.cpp
+    Source/ui/EngravedKnob.cpp
+    Source/ui/VerticalFader.cpp
+    Source/ui/Lamp.cpp
+    Source/ui/PlateControls.cpp
+    Source/ui/PresetHeader.cpp
     ${ENGINE_SOURCES})
 
 target_sources(Dybbuk PRIVATE ${PLUGIN_SOURCES})
@@ -67,6 +83,7 @@ target_compile_definitions(Dybbuk PUBLIC
 
 target_link_libraries(Dybbuk
     PRIVATE
+        DybbukFonts
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
@@ -88,6 +105,7 @@ target_compile_definitions(UISnapshot PRIVATE
     "JucePlugin_VersionString=\"0.1.0\"")
 target_link_libraries(UISnapshot
     PRIVATE
+        DybbukFonts
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
@@ -109,6 +127,7 @@ target_compile_definitions(ProcessorTest PRIVATE
     "JucePlugin_VersionString=\"0.1.0\"")
 target_link_libraries(ProcessorTest
     PRIVATE
+        DybbukFonts
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC

@@ -24,6 +24,7 @@ public:
     // Engine -> UI. Poll these from the editor's timer; never reach into the
     // engine from the message thread.
     float getOutputLevel() const { return engine.uiOutputLevel.load (std::memory_order_relaxed); }
+    float getInputLevel() const { return engine.uiInputLevel.load (std::memory_order_relaxed); }
     float getLoopEnergy() const { return engine.getLoopEnergy(); }
     float getDelaySeconds() const { return engine.getDelaySeconds(); }
     int getClearsServed() const { return engine.getClearsServed(); }
@@ -95,6 +96,7 @@ private:
     std::atomic<float>* pTonesPitch;
     std::atomic<float>* pSpread;
     std::atomic<float>* pBypass;
+    std::atomic<float>* pInput;
 
     // Hosts may report nothing at all (the standalone player reports an
     // engaged position with every field unset), so sync falls back to the
