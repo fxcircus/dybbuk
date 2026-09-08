@@ -128,11 +128,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                 return pt::time01ForDelaySeconds ((float) sec);
             })));
 
-    // 2. Decay. Unity sits at 87 % of travel; the top of the range is the
-    // runaway zone and says so.
+    // 2. Decay. Unity still sits at 87 % of travel, exactly where it did when
+    // the range topped out at 1.15, because the range is two linear segments
+    // joined there rather than one: everything below unity is bit-identical to
+    // what it was, including the default, and the whole of the extra ceiling
+    // is spent on the runaway zone above it. A plain linear 0..1.45 would have
+    // quietly compressed the most-used part of the knob to buy a bigger red
+    // zone. The sub-unity slope is written as 1/kDecayUnityNorm rather than as
+    // a literal, so the pair cannot drift apart.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { id::decay, 2 }, "Decay",
-        juce::NormalisableRange<float> (0.0f, 1.15f), 0.45f,
+        juce::NormalisableRange<float> (
+            0.0f, pt::kDecayMax,
+            [] (float lo, float hi, float t)
+            {
+                juce::ignoreUnused (lo);
+                return t <= pt::kDecayUnityNorm
+                           ? t / pt::kDecayUnityNorm
+                           : 1.0f + (hi - 1.0f) * (t - pt::kDecayUnityNorm) / (1.0f - pt::kDecayUnityNorm);
+            },
+            [] (float lo, float hi, float v)
+            {
+                juce::ignoreUnused (lo);
+                return v <= 1.0f
+                           ? v * pt::kDecayUnityNorm
+                           : pt::kDecayUnityNorm
+                                 + (1.0f - pt::kDecayUnityNorm) * (v - 1.0f) / (hi - 1.0f);
+            },
+            [] (float lo, float hi, float v) { return juce::jlimit (lo, hi, v); }),
+        0.45f,
         juce::AudioParameterFloatAttributes()
             .withLabel ("")
             .withStringFromValueFunction ([] (float v, int)

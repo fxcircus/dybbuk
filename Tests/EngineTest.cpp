@@ -574,6 +574,42 @@ void runaway()
     run (0.3f, 2000.0f, false, true, "nominal");
     run (0.95f, 20.0f, true, false, "worst case");
 
+    // "Mud or a sine" is a spectral claim, and until now the only number this
+    // scenario produced was a level. Centroid says where the runaway sits; the
+    // partial count says whether it is one mode or many.
+    for (float filterHz : { 500.0f, 2000.0f, 8000.0f })
+    {
+        TimeFilterLoop::Params p;
+        p.time01 = 0.3f;
+        p.decay = pt::kDecayMax;
+        p.filterHz = filterHz;
+        p.resonance01 = 0.3f;
+        const auto out = renderLoop (sr, 128, 8.0,
+                                     [] (double t) { return t < 0.1 ? (float) (0.3 * std::sin (juce::MathConstants<double>::twoPi * 450.0 * t)) : 0.0f; },
+                                     p, 7u);
+
+        const int a = (int) (6.0 * sr), n = (int) (2.0 * sr);
+        double num = 0.0, den = 0.0, strongest = 0.0;
+        std::vector<double> bins;
+        for (double f = 25.0; f < 6000.0; f *= 1.02) // 1/35th octave, cheap and dense enough
+        {
+            const double amp = goertzelAmp (out, a, n, f, sr);
+            bins.push_back (amp);
+            num += f * amp;
+            den += amp;
+            strongest = juce::jmax (strongest, amp);
+        }
+        int loud = 0;
+        for (double amp : bins)
+            if (amp > strongest * 0.1) // within 20 dB of the strongest
+                ++loud;
+
+        note ("spectrum of the runaway",
+              "Filter " + juce::String (filterHz, 0) + " Hz: centroid "
+                  + juce::String (den > 0.0 ? num / den : 0.0, 0) + " Hz, "
+                  + juce::String (loud) + " bins within 20 dB of the peak");
+    }
+
     // Decay 1.0 is unity round the feedback path, but the chips and the
     // filters lose about 0.23 dB per iteration, so unity still decays: the
     // true infinity point sits near 1.03. What has to hold is that 1.0 decays
@@ -1483,6 +1519,200 @@ void soak()
 }
 
 // Diagnostic, not a gate: where does the loop cross unity and start to sing?
+// Where the self-oscillation settles as a function of Decay. The runaway zone
+// is the top of the Decay knob and the whole point of the red hatching, so the
+// size of that zone has to be chosen from a measured equilibrium curve rather
+// than from a dB budget: the saturator's tanh is compressive, so past some
+// excess gain more Decay buys knob travel and no sound.
+//
+// Read the crest column as well as the level. A crest of 1.41 is a sine, which
+// is what a loop with one soft nonlinearity and ten lowpass poles per iteration
+// settles into when it has almost no excess to work with. Lower is squarer.
+void sustain()
+{
+    std::printf ("sustain: self-oscillation equilibrium against Decay, 40 s of silence\n");
+    constexpr double sr = 48000.0;
+
+    // The sweep is expressed against the live ceiling, because TimeFilterLoop
+    // clamps its target to kDecayMax: asking for 1.80 while the constant says
+    // 1.15 measures the clamp, not the loop, and every row past the ceiling
+    // comes back identical. Reading the range off the constant means this
+    // scenario re-points itself whenever the ceiling moves.
+    const float top = pt::kDecayMax;
+    const float sweep[] = { 1.0f, 1.0f + 0.25f * (top - 1.0f), 1.0f + 0.5f * (top - 1.0f),
+                            1.0f + 0.75f * (top - 1.0f), top };
+    note ("ceiling", "kDecayMax is " + juce::String (top, 2) + ", so the runaway zone is "
+                         + juce::String (20.0 * std::log10 (top), 2) + " dB of excess gain");
+
+    double lastRms = -200.0;
+    for (float decay : sweep)
+    {
+        DybbukEngine::Params p;
+        p.time01 = 0.30f;
+        p.decay = decay;
+        p.filterHz = 2000.0f;
+        p.resonance01 = 0.30f;
+        p.absorb01 = 0.0f;
+        p.blend01 = 1.0f;
+
+        // A short burst to start it, then nothing: what is left at 35 s is the
+        // loop feeding itself.
+        const auto out = renderEngine (sr, 128, 40.0,
+                                       [] (double t) { return t < 0.1 ? (float) (0.3 * std::sin (juce::MathConstants<double>::twoPi * 450.0 * t)) : 0.0f; },
+                                       p, 7u);
+
+        const int a = (int) (35.0 * sr), n = (int) (4.0 * sr);
+        const double pk = peakOf (out, a, n), r = rmsOf (out, a, n);
+        const double crest = pk / juce::jmax (r, 1.0e-9);
+        note ("equilibrium",
+              "Decay " + juce::String (decay, 2) + ": peak " + juce::String (pk, 4) + ", RMS "
+                  + juce::String (dbfs (r), 2) + " dBFS, crest " + juce::String (crest, 2)
+                  + (lastRms > -190.0 ? ", +" + juce::String (dbfs (r) - lastRms, 2) + " dB on the last"
+                                      : juce::String()));
+        check ("bounded and finite", pk < 1.0 && allFinite (out),
+               "Decay " + juce::String (decay, 2) + ": peak " + juce::String (pk, 4));
+        lastRms = dbfs (r);
+    }
+}
+
+// The loop filter's resonance, measured the way it is actually used. The state
+// limit inside TptSvf is an ABSOLUTE clamp on the bandpass integrator, so the
+// resonant gain depends on how hot the signal is: the same knob is worth tens
+// of dB on a whisper and nothing at all at the level the loop runs at. That is
+// a compressor hiding inside a filter, and (a) is the print that shows it.
+//
+// (b) is the free ring with Decay at zero, which is the filter as a voice in
+// its own right. It is also the number that decides how far the negative
+// damping can go, so it is measured before kResOverdrive is ever touched.
+void resonance()
+{
+    std::printf ("resonance: gain at cutoff against level, and the filter's own free ring\n");
+    constexpr double sr = 48000.0;
+    constexpr double fc = 1000.0;
+
+    for (float res : { 0.0f, 0.5f, 0.85f, 0.95f, 1.0f })
+    {
+        juce::String row;
+        for (double amp : { 0.001, 0.01, 0.1, 0.3, 0.5 })
+        {
+            TptSvf svf;
+            svf.setStateLimit (pt::kSvfSatLimit);
+            svf.setG ((float) std::tan (juce::MathConstants<double>::pi * fc / sr));
+
+            const float over = juce::jlimit (0.0f, 1.0f,
+                                             (res - pt::kResOverdriveStart) / (1.0f - pt::kResOverdriveStart));
+            svf.setK (2.0f * std::pow (1.0f - res, pt::kResCurve)
+                      - pt::kResOverdrive * (over * over * (3.0f - 2.0f * over)));
+
+            const int n = (int) (2.0 * sr);
+            std::vector<float> out ((size_t) n, 0.0f);
+            for (int i = 0; i < n; ++i)
+                out[(size_t) i] = svf.lowpass ((float) (amp * std::sin (juce::MathConstants<double>::twoPi * fc * i / sr)));
+
+            const double g = goertzelAmp (out, n / 2, n / 2, fc, sr) / amp;
+            row += juce::String (dbfs (g), 2) + "  ";
+        }
+        note ("gain at fc, A = .001/.01/.1/.3/.5", "Res " + juce::String ((int) (res * 100.0f)) + " %: " + row);
+    }
+
+    // Free ring: excite once, then let the filter alone for 4 s. Anything that
+    // survives is the filter oscillating on its own.
+    for (float res : { 0.90f, 0.95f, 1.0f })
+    {
+        juce::String row;
+        double worst = 0.0;
+        for (double f : { 200.0, 1000.0, 4000.0, 8000.0 })
+        {
+            TptSvf svf;
+            svf.setStateLimit (pt::kSvfSatLimit);
+            svf.setG ((float) std::tan (juce::MathConstants<double>::pi * f / sr));
+
+            const float over = juce::jlimit (0.0f, 1.0f,
+                                             (res - pt::kResOverdriveStart) / (1.0f - pt::kResOverdriveStart));
+            svf.setK (2.0f * std::pow (1.0f - res, pt::kResCurve)
+                      - pt::kResOverdrive * (over * over * (3.0f - 2.0f * over)));
+
+            LoopSaturator sat;
+            sat.prepare (sr);
+            sat.setDrive (pt::kSatDrive);
+
+            const int n = (int) (4.0 * sr);
+            std::vector<float> out ((size_t) n, 0.0f);
+            for (int i = 0; i < n; ++i)
+                out[(size_t) i] = sat.process (svf.lowpass (i < 64 ? 0.5f : 0.0f));
+
+            const double pk = peakOf (out, n - (int) (0.5 * sr), (int) (0.5 * sr));
+            worst = juce::jmax (worst, pk);
+            row += juce::String (pk, 4) + "  ";
+        }
+        note ("free ring at 200/1k/4k/8k Hz", "Res " + juce::String ((int) (res * 100.0f)) + " %: " + row);
+        check ("the filter cannot ring to full scale on its own", worst < 1.0,
+               "Res " + juce::String ((int) (res * 100.0f)) + " %: worst " + juce::String (worst, 4));
+    }
+}
+
+// Strength is one knob for gain and drive, so what matters is whether the top
+// of it still changes anything. If the input peak freezes, the knob has become
+// a hard clipper and its remaining travel only changes duty cycle.
+void strength()
+{
+    std::printf ("strength: how far up the drive knob the texture keeps changing\n");
+    constexpr double sr = 48000.0, f0 = 300.0;
+
+    // Driven through the real engine, not through a copy of softClip: a local
+    // mirror of a private function is a trap that passes forever while the
+    // thing it mirrors rots. Decay 0 and Blend full, so what comes out is one
+    // pass of the drive stage and the chip with no feedback on top.
+    //
+    // The source is -30 dBFS, which is a guitar DI, not the -10 dBFS a
+    // synth patch would give: this knob's 40 dB range exists for quiet
+    // sources, so measuring it with a hot one would call it saturated at a
+    // third of its travel and prove nothing.
+    double first = 0.0, last = 0.0;
+    int step = 0;
+    for (float db : { 0.0f, 10.0f, 20.0f, 30.0f, 40.0f })
+    {
+        DybbukEngine::Params p;
+        p.strengthDb = db;
+        p.time01 = 0.0f;
+        p.decay = 0.0f;
+        p.filterHz = 18000.0f;
+        p.resonance01 = 0.0f;
+        p.absorb01 = 0.0f;
+        p.blend01 = 1.0f;
+
+        const auto out = renderEngine (sr, 128, 0.6, sine (f0, 0.0316), p, 7u);
+        const int a = (int) (0.3 * sr), n = (int) (0.25 * sr);
+
+        const double h1 = goertzelAmp (out, a, n, f0, sr);
+        double harm = 0.0;
+        for (int h = 2; h <= 9; ++h)
+        {
+            const double amp = goertzelAmp (out, a, n, f0 * h, sr);
+            harm += amp * amp;
+        }
+        const double thd = 100.0 * std::sqrt (harm) / juce::jmax (h1, 1.0e-9);
+        note ("through the drive stage",
+              "Strength +" + juce::String (db, 0) + " dB: wet peak "
+                  + juce::String (peakOf (out, a, n), 4) + ", fundamental "
+                  + juce::String (dbfs (h1), 1) + " dBFS, THD " + juce::String (thd, 1) + " %");
+
+        if (step == 2) // +20 dB, the old hard clipper's freezing point
+            first = thd;
+        last = thd;
+        ++step;
+    }
+
+    // The bug this exists for: softClip used pt::fastTanh, whose argument is
+    // clamped to +-3 where it returns EXACTLY 1.0, so the drive stage was a
+    // hard limiter above |x| = 1.6 and the top 25 dB of the knob only changed
+    // the duty cycle of an already-square wave. std::tanh keeps generating
+    // harmonics, so the distortion must still be climbing over the top half.
+    check ("the top half of the knob still changes the texture", last > first * 1.25,
+           "THD " + juce::String (first, 1) + " % at +20 dB rising to "
+               + juce::String (last, 1) + " % at +40 dB");
+}
+
 void probe()
 {
     std::printf ("probe: level after 30 s with no input, across Decay / Absorb / Filter\n");
@@ -1515,6 +1745,34 @@ void probe()
                   + " Filter " + juce::String (c.filterHz, 0) + " Time " + juce::String (c.time01, 2)
                   + " Res " + juce::String (c.res, 1) + ": "
                   + juce::String (dbfs (rmsOf (out, (int) (25.0 * sr), (int) (4.0 * sr))), 1) + " dBFS");
+    }
+
+    // Absorb against the runaway zone, which is the question docs/PROGRESS.md
+    // leaves open. Absorb takes a fixed number of dB per iteration out of the
+    // feedback, so what matters is that number against the loop's whole budget
+    // above unity: if it is larger, a fraction of the Absorb knob vetoes the
+    // top of the Decay knob entirely and the red hatching means nothing.
+    //
+    // The closed-form loop gain undershoots here because it omits the in-loop
+    // Absorb shelf, so this is the authority for kAbsorbFbMaxDb, not algebra.
+    std::printf ("\n  -- Absorb against the top of Decay (every row should self-oscillate) --\n");
+    for (float absorb : { 0.0f, 0.2f, 0.5f, 1.0f })
+    {
+        DybbukEngine::Params p;
+        p.time01 = 0.30f;
+        p.decay = pt::kDecayMax;
+        p.filterHz = 2000.0f;
+        p.resonance01 = 0.3f;
+        p.absorb01 = absorb;
+        p.blend01 = 1.0f;
+        const auto out = renderEngine (sr, 128, 30.0,
+                                       [] (double t) { return t < 0.1 ? (float) (0.3 * std::sin (juce::MathConstants<double>::twoPi * 450.0 * t)) : 0.0f; },
+                                       p, 7u);
+        const double r = dbfs (rmsOf (out, (int) (25.0 * sr), (int) (4.0 * sr)));
+        check ("runaway survives this much Absorb", r > -30.0,
+               "Decay " + juce::String (pt::kDecayMax, 2) + " Absorb "
+                   + juce::String (juce::roundToInt (absorb * 100.0f)) + " %: "
+                   + juce::String (r, 1) + " dBFS");
     }
 }
 
@@ -1646,6 +1904,7 @@ const Scenario kScenarios[] = {
     { "drift", drift },         { "generative", generative },
     { "tones", tones },         { "spread", spread },
     { "cpu", cpu },             { "soak", soak },       { "probe", probe },
+    { "sustain", sustain },     { "resonance", resonance }, { "strength", strength },
 };
 
 } // namespace

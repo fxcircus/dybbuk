@@ -6,8 +6,17 @@ namespace
 {
     // Strength is one knob for gain and drive, so it has to stay clean at
     // nominal levels and only bite when pushed: linear below the knee, soft
-    // above it, asymptotic to 1.
-    constexpr float kStrengthKnee = 0.7f;
+    // above it, genuinely asymptotic to 1.
+    //
+    // It used to say "asymptotic" and use pt::fastTanh, whose argument is
+    // clamped to +-3 where the Pade form returns EXACTLY 1.0 -- so this was a
+    // hard limiter pinned at 1.0 with zero slope above |x| = 1.6, and the top
+    // 25 dB of a 40 dB knob only changed the duty cycle of an already-square
+    // wave (`EngineTest strength` measured the peak frozen at 1.00000 from
+    // +20 dB up). std::tanh here only: fastTanh stays everywhere else, because
+    // the chip's THD calibration is pinned to its 8/27 cubic. The lower knee
+    // widens the region where Strength changes texture rather than level.
+    constexpr float kStrengthKnee = 0.45f;
     constexpr float kInvStrengthSpan = 1.0f / (1.0f - kStrengthKnee);
 
     inline float softClip (float x) noexcept
@@ -17,7 +26,7 @@ namespace
             return x;
         return (x < 0.0f ? -1.0f : 1.0f)
                * (kStrengthKnee + (1.0f - kStrengthKnee)
-                                      * pt::fastTanh ((ax - kStrengthKnee) * kInvStrengthSpan));
+                                      * std::tanh ((ax - kStrengthKnee) * kInvStrengthSpan));
     }
 
     inline float gainFromDb (float db) noexcept
@@ -206,8 +215,13 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
             // normalled to the Time modulation input, which is where the
             // metallic ring-mod sidebands come from: a periodic modulator
             // gives discrete sidebands where a chaotic one gives noise.
+            // The bypass guard is not decoration: `driven` is forced to zero
+            // above so the loop runs on silence while out of circuit, but the
+            // drone was being added unconditionally, so a bypassed plugin was
+            // still being fed a full oscillator and un-bypassing dumped a hot
+            // circulating drone the player never played.
             tones.advance();
-            if (p.tonesLevel01 > 0.0f)
+            if (! p.bypass && p.tonesLevel01 > 0.0f)
                 mono[k] = driven + p.tonesLevel01 * modk::kTonesFullLevel
                                        * (tones.main() + modk::kTonesSubMix * tones.sub());
 

@@ -94,5 +94,8 @@ namespace modk
     inline constexpr float kTonesFullLevel = 0.35f;  // drone level into the loop at Tones 100 %
     inline constexpr float kTonesSubMix    = 0.45f;  // how much sub sits under the drone
     inline constexpr float kSpreadMaxMs    = 14.0f;  // Haas offset behind the side component
-    inline constexpr float kSpreadMaxWidth = 0.9f;   // side gain at Spread 100 %
+    // The side is the one output path the loop saturator does not bound, and
+    // the loop is hotter in RMS than it was, so this comes in to meet it: the
+    // 30-minute soak recorded a 1.35 stereo peak against a 0.98 mono peak.
+    inline constexpr float kSpreadMaxWidth = 0.6f;   // side gain at Spread 100 %
 } // namespace modk

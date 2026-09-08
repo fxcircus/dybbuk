@@ -4,6 +4,17 @@ Park ideas here instead of derailing the current phase. Ranked by musical
 payoff against implementation cost. Things are marked DONE with a date rather
 than deleted: knowing what was considered and rejected is useful later.
 
+## The wildness pass
+
+`docs/WILDNESS-PLAN.md` holds stages 2 to 4 of the pass that answers Roy's
+"you can't push it very far" note, plus the four decisions that belong to him.
+Stage 1 shipped on 2026-09-07 and is written up in `docs/PROGRESS.md`. Several
+items that used to live in this file are now folded into that plan: the Crust
+trim, host-synced Agitation, a modulation matrix the player can reach, and the
+Push 3 touch gesture. Per-chip clock detune was investigated and **refuted** —
+the stages are in series, so generations 2 and 3 really are darker and dirtier,
+and the runaway is already multi-mode.
+
 ## Finish line (before new features)
 
 - **The listening gates.** Everything measurable passes; what is left needs

@@ -8,7 +8,12 @@ namespace
     // Bump only when an existing id changes meaning, range or units, or when a
     // root property is renamed. Adding or removing a parameter is not a bump:
     // an absent VALUE falls back to the default, a stale one is ignored.
-    constexpr int currentStateVersion = 1;
+    // Bumped to 2: Decay's range changed shape (two linear segments joined at
+    // unity rather than one linear 0..1.15), so a stored normalised value from
+    // version 1 would mean a different gain. Nothing has shipped, so there is
+    // no migration to write -- but the version has to move or a future
+    // migration has no hook to hang on.
+    constexpr int currentStateVersion = 2;
 
     // Runs on every incoming tree before it replaces the live one, session or
     // preset, so an older saved layout can be brought forward.

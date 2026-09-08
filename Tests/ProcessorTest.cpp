@@ -498,6 +498,43 @@ void readouts()
         }
         check ("no raw floats in the readout", ! longNumber, ranged->paramID + " " + offender);
     }
+
+    // Decay's range is two linear segments joined at unity, so that everything
+    // below 1.0 sits exactly where it did when the ceiling was 1.15 and the
+    // whole of the extra travel is the runaway zone. Two things have to hold
+    // or the plate lies about where the red hatching starts: unity must land
+    // at kDecayUnityNorm of the travel, and the sub-unity half must still be
+    // linear. The editor reads the first of these off the range rather than
+    // computing it, so this assertion is what keeps them tied together.
+    {
+        auto& decayRange = p.apvts.getParameter (params::id::decay)->getNormalisableRange();
+        const float unityNorm = decayRange.convertTo0to1 (1.0f);
+        check ("unity Decay sits where it always did",
+               std::abs (unityNorm - pt::kDecayUnityNorm) < 1.0e-5f,
+               "unity is at " + juce::String (unityNorm, 5) + " of the travel (want "
+                   + juce::String (pt::kDecayUnityNorm, 5) + ")");
+
+        bool subUnityMoved = false;
+        juce::String worst;
+        for (float v : { 0.0f, 0.25f, 0.45f, 0.7f, 0.95f, 1.0f })
+        {
+            // What the old linear 0..1.15 range would have given.
+            const float wasNorm = v / 1.15f;
+            const float nowNorm = decayRange.convertTo0to1 (v);
+            if (std::abs (wasNorm - nowNorm) > 1.0e-5f)
+            {
+                subUnityMoved = true;
+                worst = juce::String (v, 2) + " moved from " + juce::String (wasNorm, 5) + " to "
+                        + juce::String (nowNorm, 5);
+            }
+        }
+        check ("no sub-unity Decay value moved", ! subUnityMoved,
+               subUnityMoved ? worst : juce::String ("every position below 1.0 is unchanged"));
+
+        check ("the top of the travel is the new ceiling",
+               std::abs (decayRange.convertFrom0to1 (1.0f) - pt::kDecayMax) < 1.0e-5f,
+               juce::String (decayRange.convertFrom0to1 (1.0f), 3));
+    }
 }
 
 void ordering()

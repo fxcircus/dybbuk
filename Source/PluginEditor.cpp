@@ -166,7 +166,11 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     });
 
     // Decay names its own red zone rather than leaving the colour to explain it.
-    decay.setDangerFrom (1.0f / pt::kDecayMax);
+    // The threshold is READ OFF THE RANGE rather than computed, because the
+    // range is no longer linear: 1/kDecayMax is 0.690 while unity actually
+    // sits at 0.870, so the hatching would start a fifth of a turn early and
+    // the plate would promise a runaway that is not there yet.
+    decay.setDangerFrom (param (params::id::decay).getNormalisableRange().convertTo0to1 (1.0f));
     decay.setValueTextProvider ([this]
     {
         const float v = proc.apvts.getRawParameterValue (params::id::decay)->load();

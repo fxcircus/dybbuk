@@ -85,22 +85,39 @@ block size it was prepared for.
 These are listening calls. Each is a compile-time constant or a number, so
 answering them is a rebuild, not a rewrite.
 
-1. **Feedback topology.** Tap sum (the plan's literal reading, shipped) versus
-   a pure series loop where the delay is the whole chain. Tap sum combs
-   deeply, so off-peak material dies fast even at Decay 1.0. `kFeedbackFromTapSum`.
+1. **Feedback topology. ANSWERED, but not as asked.** The `kFeedbackFromTapSum`
+   A/B cannot be performed: `TimeFilterLoop.cpp` picks the node once and sends
+   the same node to the wet output, so flipping the flag deletes the three-step
+   repeat from the output as well and `threestep` fails. The comment is
+   corrected and the flag is not flipped. What the question was reaching for was
+   a shallower comb, and the tap rebalance to { 1, 0.7, 0.5 } delivers part of
+   it; how much further to go is the open ear question in PROGRESS.
 2. **FM law.** Exponential in octaves (shipped) versus linear in clock rate.
    The hardware's VCO is current controlled and the Strega's CV conditioning
-   is unmeasured. `kFmLawLinear`.
+   is unmeasured. `kFmLawLinear`. STILL OPEN.
 3. **Bit and noise calibration.** 11 bits down to 8, hiss from -86 to -48 dBFS.
    The only anchors are the plan's "-90 dBFS at short times" and "clearly
-   audible hiss".
+   audible hiss". STILL OPEN, and deliberately untouched: leaving it still is
+   what would let a future Crust control prove it is orthogonal to Time.
 4. **Write guard poles.** One, by default. Whether an overclocked chip folds
    8 kHz down to 200 Hz is exactly the long-Time character question.
-   `kGuardPoles` takes 0, 1 or 2.
-5. **Wet makeup.** Tap normalisation costs the first echo 8 dB. `kWetMakeup`
-   would give it back at the cost of lifting the noise floor by the same 8 dB.
+   `kGuardPoles` takes 0, 1 or 2. STILL OPEN.
+5. **Wet makeup. ANSWERED.** `kWetMakeup` stays 1.0. The tap rebalance buys the
+   level back by changing the mix rather than the gain, so it costs nothing at
+   the noise floor: `EngineTest noise` reads -92.8 dBFS at 27.5 ms, unchanged.
 6. **Preset tuning.** Echo-Verb currently decays to nothing by 4 s, which may
-   be shorter than "a dark dwelling reverb" wants.
+   be shorter than "a dark dwelling reverb" wants. STILL OPEN, and it should be
+   judged against a settled loop rather than re-voiced twice.
+
+## 4a. Deliberate departures from the hardware
+
+Recorded here rather than in the fidelity sections, because each one is a
+choice to exceed the Strega rather than a claim about it.
+
+- **The resonance state limit.** `kSvfSatLimit` 2.0 rather than 0.5. A real
+  filter's resonance does compress with level; this one compressed so hard that
+  the knob was worth 5.8 dB where the loop actually runs, which is not analog
+  character, it is a control that stops working when you use it.
 
 ## 5. What was rejected, and why
 

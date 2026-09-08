@@ -53,13 +53,14 @@ disagree with what is written here, this wins.
 - Parameter count: 18, in Push bank order, all automatable (an IN trim came
   with the v3 canvas)
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 24 scenarios plus `render` and `probe` (89 checks, 0 failures;
-  1.2 s without the 30 minute soak, 6.5 s with it)
+- `EngineTest`: 27 scenarios plus `render` (102 checks, 0 failures; 2.5 s
+  without the 30 minute soak, 8.3 s with it)
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
 - Four factory presets ship as code tables and are proven to sound
 - UI: the v3 Claude Design canvas, both sheets, engraved line-art knobs, the
   lamp, and metered IN and OUT trims on the edges
-- Known issues: none open; the listening gates are the user's call
+- Known issues: one open ear question on the tap rebalance, below; the
+  listening gates are the user's call
 
 ## Changed after the first playthrough (2026-09-06)
 
@@ -91,26 +92,131 @@ The noise floor at the longest Time reads 14 dB lower than it did (-60 dBFS
 rather than -46) because most of what the old measurement was picking up was
 the squeal, not hiss.
 
+## Stage 1 of the wildness pass (2026-09-07)
+
+Roy's read after living with it: "everything works technically but this plugin
+is meant to be much more experimental than it currently is ... you can't really
+push it very far and get musical results."
+
+That was two complaints, and the second one was the structural one. Every
+extremity control in the build was **subtractive**: Absorb attenuated, long Time
+damped, Resonance turned out to be a level-dependent compressor, the runaway
+settled into a sine, and Strength hard-clipped and stopped. Nothing anywhere in
+the signal path got louder, brighter or more unstable as you pushed it, so the
+plugin's only answer to being pushed was to get quieter and darker.
+
+This stage moves no defaults and adds no parameters. It takes the ceilings off.
+
+1. **Resonance was a compressor.** `kSvfSatLimit` is an absolute clamp on the
+   filter's bandpass integrator, so the resonant gain depended on how hot the
+   signal was. Measured at 0.5: +37.9 dB at an amplitude of 0.001 and **-1.5 dB
+   at 0.5**, which is roughly where the loop runs — so the whole knob was worth
+   5.8 dB there, and turning Resonance up during a runaway *reduced* the loop
+   gain. At 2.0 the same measurement reads +6.6 dB and the knob is worth 12.75
+   dB. The bound moves off the integrator and onto the loop saturator, which is
+   where `TimeFilterLoop`'s own comment always said it was.
+2. **Resonance was also a switch.** `k` first went negative at res 0.961, so
+   with the parameter stepped in integer percent the filter was an active
+   oscillator at 97, 98, 99 and 100 and nothing below. Curve 1.5 -> 2.0, start
+   0.92 -> 0.78, overdrive 0.03 -> 0.08: the oscillation region is now about
+   thirteen steps wide and the filter free-rings to 0.75 at 8 kHz with Decay at
+   zero. It is a voice you can play into and sit just underneath.
+3. **The runaway zone was 1.21 dB of excess gain**, which is why it always
+   settled as a sine (measured crest 1.41 at every setting). `kDecayMax` 1.15 ->
+   1.45 with `kSatDrive` 1.0 -> 1.2 in the same commit, because the saturator's
+   asymptote falling from 1.05 to 0.875 is what pays for the bigger budget. The
+   equilibrium now runs peak 0.71, RMS -4.9 dBFS, **crest 1.25** — 3 dB louder
+   and audibly squarer. `EngineTest sustain` prints the curve, and it is what
+   chose 1.45: the step gain has flattened to 0.70 dB by the top.
+4. **Decay's range is now two linear segments joined at unity**, so every
+   position below 1.0 is bit-identical to what it was, including the default,
+   and the entire extra ceiling is spent on the red zone. `ProcessorTest`
+   asserts both halves of that. The editor reads the hatching threshold off the
+   range instead of computing `1 / kDecayMax`, which with a non-linear range
+   would have started the red a fifth of a turn early.
+5. **Absorb was four attenuators and nothing additive.** `kAbsorbOutMaxDb`
+   18 -> 6 and `kAbsorbFbMaxDb` 4 -> 2, with `kAbsorbShelfMax` 0.7 -> 0.9 so the
+   character moves into the per-iteration shelf where it compounds over repeats
+   instead of taking 18 dB off the wet in one go against an Out fader that
+   stops at +6.
+6. **Strength was a hard clipper wearing a comment that said "asymptotic".**
+   `pt::fastTanh` clamps its argument to +-3 and returns exactly 1.0 there, so
+   `softClip` was pinned flat above |x| = 1.6 and the top 25 dB of a 40 dB knob
+   only changed the duty cycle of an already-square wave. `std::tanh` in that
+   one place, knee 0.7 -> 0.45. THD on a -30 dBFS source now reads 0.1 / 0.2 /
+   0.6 / 2.6 / 18.7 % across the knob. `fastTanh` is untouched everywhere else,
+   because the chip's THD calibration is pinned to its 8/27 cubic.
+7. **A live bypass bug.** `driven` was forced to zero while bypassed so the loop
+   would run on silence, but the Tones drone was added unconditionally two lines
+   later — so a bypassed plugin was still being fed a full oscillator, and
+   un-bypassing dumped a circulating drone the player never played.
+8. **`kFeedbackFromTapSum`'s comment described an A/B the code cannot perform.**
+   Line 174 picks one node and line 207 sends the same node to the wet, so
+   flipping it would delete the three-step repeat from the *output* too. Comment
+   corrected; the flag is not flipped. The tap rebalance takes what it was
+   reaching for.
+
+Heard as an A/B against renders from the previous commit, the shape is right:
+the patches that were being damped got much louder and the polite ones did not
+move. Wow and Flutter **+12.9 dB** in the tail, Bat Cave +6.7, runaway +6.4,
+generative +2.9 — and the clean short delay +0.0 dB.
+
+Three new scenarios exist because these were all choices that needed a number:
+`sustain` (the equilibrium curve against Decay), `resonance` (gain at cutoff
+against level, and the filter's own free ring) and `strength` (whether the top
+of the drive knob still changes the texture). `probe` gained the Absorb-against-
+Decay rows and `runaway` gained a spectral print, because "mud or a sine" is a
+spectral claim and the only number it produced before was a level.
+
 ## Headroom, measured
 
-The centre of the image, which is what Out is calibrated against and what a
-mono listener hears, stays inside full scale at the worst settings the soak can
-find: 0.98 peak with Decay sweeping through the runaway zone and Strength at
-+20 dB. Spread's side component sits on top of that, as any mid-side widener
-does, and takes the stereo peak to 1.35 at Spread 60 %. That is expected rather
-than a defect, but it means Spread costs headroom and Out is where it comes
-back.
+Both figures improved while the loop got hotter, which was the point of moving
+`kSatDrive` and `kDecayMax` in the same commit: the roof comes down as the floor
+goes up. Over the 30 minute soak with every parameter sweeping, Decay through
+the runaway zone and Strength at +20 dB, the mono peak is **0.88** (was 0.98)
+and the stereo peak with Spread at 60 % is **1.10** (was 1.35, and
+`kSpreadMaxWidth` came in to meet the hotter loop). Mean level is -13.7 to
+-14.1 dBFS, about 2.4 dB louder than before.
 
-## Open finding: Absorb versus the runaway zone
+The side component is still the one output path the loop saturator does not
+bound, because it is a difference taken after the loop. The mono sum is
+untouched by construction: L + R still sums back to exactly the wet at any
+width.
 
-The default Absorb of 20 % makes self-oscillation impossible at any Decay.
-Absorb removes up to 4 dB per iteration from the feedback and the loop has only
-1.2 dB of margin at Decay 1.15, so a fifth of the knob is enough to damp it
-completely: -9.1 dBFS at Absorb 0 against -48.4 dBFS at Absorb 0.2 (run
-`EngineTest probe`). That is the manual's "diminished into the earth" working
-as described, but it means the red zone at the top of Decay does nothing in the
-default patch. Whether `kAbsorbFbMaxDb` should come down is an ear question,
-and it is one constant.
+## Closed: Absorb versus the runaway zone
+
+**Answered, and it was not one constant.** The finding was right that Absorb
+vetoed the runaway zone, and wrong that lowering `kAbsorbFbMaxDb` alone would
+fix it: even at 1.0 dB the required Decay for unity at full Absorb sits above
+1.15, so the veto survives. The budget was the problem, not the tax.
+
+`kDecayMax` 1.15 -> 1.45 (a 3.23 dB zone rather than 1.21 dB) and
+`kAbsorbFbMaxDb` 4.0 -> 2.0 together, so Absorb costs a fifth of the budget
+where it used to cost four fifths. Measured with the new `probe` rows, 30 s of
+silence at Decay 1.45, Time 0.30, Filter 2 kHz:
+
+| Absorb | before | now |
+|---|---|---|
+| 0 % | -9.1 dBFS | -4.9 dBFS |
+| 20 % (the default) | -48.3 dBFS | -8.0 dBFS |
+| 50 % | — | -13.0 dBFS |
+| 100 % | — | -19.9 dBFS |
+
+The red zone is now reachable at every Absorb setting including 100 %, which is
+what the hatching on the plate has been promising since Phase 5.
+
+## Open finding: how far the tap rebalance should go
+
+`kTapWeightRaw` moved from { 1, 0.85, 0.7 } to { 1, 0.7, 0.5 }, which lifts the
+first arrival from -8.13 dB to -6.85 dB at no noise-floor cost (it changes the
+mix, not the gain, which is why this and not `kWetMakeup`). The design called
+for { 1, 0.5, 0.35 } and +2.79 dB, and that was measured and rejected: it costs
+the plan's tell 1. `EngineTest repitch` ramps Time under a 450 Hz tone and
+tracks the summed wet's pitch, and the boundary is sharp — 325 Hz at
+{ 1, 0.7, 0.5 }, 400 Hz at { 1, 0.6, 0.4 }. The shortest tap is the one that
+repitches least, so once it dominates the mix the tape smear is what you stop
+hearing. Whether 1.5 dB of wet level is worth a shallower smear is an ear
+question.
 
 ## Measured (48 kHz unless stated)
 
@@ -121,12 +227,17 @@ and it is one constant.
 | THD at 342 ms | 0.995 % | 1 % |
 | THD at 1 s | 1.82 % | 3 % plus (low end of the bracket) |
 | Noise floor at 27.5 ms | -92.7 dBFS | about -90 dBFS |
-| Noise floor at 3.67 s | -46.5 dBFS | clearly audible hiss |
+| Noise floor at 3.67 s | -60.1 dBFS | clearly audible hiss |
 | Bandwidth at short Time | -0.3 dB at 1 kHz, -25 dB at 8 kHz | flat to about 1 kHz then rolls off |
 | Bandwidth at 1 s | -7.9 dB from 1 k to 2 k | collapses with Time |
-| Clock bleed at 3.67 s | -44.5 dBFS at 750 Hz | audible ticking and burbling |
-| Runaway at Decay 1.15 | peak 0.567, RMS -7.9 dBFS, steady | bounded, never digital clipping |
-| CPU, full engine | 0.18 % of one core | under a few per cent |
+| Clock bleed, empty loop | -86.6 dBFS at 750 Hz | inaudible with nothing in the delay |
+| Clock bleed, loop ringing | -81.2 dBFS at 1500 Hz against -95.4 empty | rides the repeats |
+| Runaway at Decay 1.45 | peak 0.711, RMS -4.9 dBFS, crest 1.25 | bounded, never digital clipping |
+| Runaway at Decay 1.15 | peak 0.550, RMS -8.4 dBFS, crest 1.45 | for comparison: the old ceiling |
+| Resonance at the loop's working level | 12.75 dB across the knob | was 5.80 dB, and lossy at the top |
+| Filter's own free ring, Res 100 % | peak 0.75 at 8 kHz, Decay 0 | a voice you can play, still bounded |
+| Strength THD, -30 dBFS source | 0.1 / 0.2 / 0.6 / 2.6 / 18.7 % at 0/10/20/30/40 dB | keeps biting to the top |
+| CPU, full engine | 0.24 % of one core | under a few per cent |
 | Sample rates 44.1 to 192 kHz | delay within 0.03 %, floor within 0.1 dB | unchanged |
 | Block sizes 1 to 4096 | bit-identical output | unchanged |
 
