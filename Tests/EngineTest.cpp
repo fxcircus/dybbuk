@@ -1456,6 +1456,9 @@ void soak()
     double sumEarly = 0.0, sumLate = 0.0, dcSum = 0.0;
     int countEarly = 0, countLate = 0, countDc = 0;
     float peak = 0.0f, monoPeak = 0.0f;
+    // How OFTEN it goes over, not just how far: the question a limiter would
+    // answer is whether there is anything to catch.
+    juce::int64 samplesSeen = 0, samplesOver = 0;
     bool finite = true;
     int nonFiniteBlock = -1;
 
@@ -1520,6 +1523,9 @@ void soak()
             {
                 peak = juce::jmax (peak, std::abs (y));
                 monoPeak = juce::jmax (monoPeak, std::abs (mono));
+                ++samplesSeen;
+                if (std::abs (y) > 1.0f)
+                    ++samplesOver;
                 dcSum += (double) y;
                 ++countDc;
                 // Five minute windows, so the comparison averages over many
@@ -1549,6 +1555,10 @@ void soak()
     check ("the mono sum stays inside full scale", monoPeak < 1.0f,
            "mono peak " + juce::String (monoPeak, 4) + ", stereo peak with Spread at 60 % "
                + juce::String (peak, 4));
+    note ("samples over full scale",
+          juce::String (samplesOver) + " of " + juce::String (samplesSeen) + " ("
+              + juce::String (100.0 * (double) samplesOver / (double) juce::jmax ((juce::int64) 1, samplesSeen), 6)
+              + " %), all of them on the stereo sides");
     check ("level does not creep", std::abs (lateDb - earlyDb) < 3.0,
            juce::String (earlyDb, 1) + " dBFS over minutes 1 to 6, " + juce::String (lateDb, 1)
                + " over the last five");

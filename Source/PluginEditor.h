@@ -91,6 +91,9 @@ private:
     ClearStamp clearStamp;
     PresetHeader presetHeader { proc.presetManager };
     ThemeMark themeMark;
+    DiceButton dice;
+    const char* rolledName = nullptr;
+    int rolledTicks = 0;
 
     int lastClearsServed = 0;
     bool lastSynced = false;

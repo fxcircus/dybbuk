@@ -33,6 +33,10 @@ public:
     float getFilterModOct() const { return engine.getFilterModOct(); }
     float getDecayModLinear() const { return engine.getDecayModLinear(); }
     float getInterferenceEnergy() const { return engine.getInterferenceEnergy(); }
+
+    // The dice. Message thread only, like every other parameter edit.
+    void randomiseParameters();
+    const char* lastRandomCharacter() const noexcept;
     bool isSyncClamped() const { return syncClamped.load (std::memory_order_relaxed); }
     // Enough for the editor to resolve a synced Time itself, so its readout is
     // right the moment the window opens rather than after the first block.
@@ -102,6 +106,8 @@ private:
     std::atomic<float>* pCrust;
     std::atomic<float>* pTonesFold;
     std::atomic<float>* pColour;
+
+    juce::Random randomiserRng;
 
     // Hosts may report nothing at all (the standalone player reports an
     // engaged position with every field unset), so sync falls back to the

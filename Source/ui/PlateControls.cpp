@@ -297,6 +297,73 @@ void EngravedTrim::paint (juce::Graphics& g)
     g.fillPath (carriage);
 }
 
+// --- DiceButton --------------------------------------------------------------
+
+DiceButton::DiceButton()
+{
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+void DiceButton::mouseDown (const juce::MouseEvent&)
+{
+    // Roll to a face that is not the one showing, so a click always looks like
+    // a click even if the patch it lands on is close to the last.
+    int next = face;
+    while (next == face)
+        next = 1 + rng.nextInt (6);
+    face = next;
+    repaint();
+
+    if (onClick)
+        onClick();
+}
+
+void DiceButton::paint (juce::Graphics& g)
+{
+    const auto& p = theme::palette();
+    const auto bounds = getLocalBounds().toFloat().reduced (1.0f);
+    const float side = juce::jmin (bounds.getWidth(), bounds.getHeight());
+    const auto body = juce::Rectangle<float> (side, side).withCentre (bounds.getCentre());
+    const auto ink = hovering ? p.bright : p.ink;
+
+    // Line art, like every other mark on the plate: an engraved outline, not a
+    // filled button.
+    g.setColour (ink);
+    g.drawRoundedRectangle (body, 3.5f, 1.2f);
+
+    // Pip positions on a 3x3 grid inside the face.
+    const float step = body.getWidth() * 0.28f;
+    const float cx = body.getCentreX(), cy = body.getCentreY();
+    const float r = juce::jmax (1.1f, body.getWidth() * 0.075f);
+
+    auto pip = [&g, r] (float x, float y)
+    {
+        g.fillEllipse (x - r, y - r, 2.0f * r, 2.0f * r);
+    };
+
+    const bool corners = face >= 2;
+    const bool middleRow = face >= 6;
+    const bool centre = (face % 2) == 1;
+
+    if (corners)
+    {
+        pip (cx - step, cy - step);
+        pip (cx + step, cy + step);
+    }
+    if (face >= 4)
+    {
+        pip (cx + step, cy - step);
+        pip (cx - step, cy + step);
+    }
+    if (middleRow)
+    {
+        pip (cx - step, cy);
+        pip (cx + step, cy);
+    }
+    if (centre)
+        pip (cx, cy);
+}
+
 // --- ThemeMark ---------------------------------------------------------------
 
 void ThemeMark::paint (juce::Graphics& g)

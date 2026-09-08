@@ -8,6 +8,9 @@
 //   build/ProcessorTest_artefacts/RelWithDebInfo/ProcessorTest
 #include "../Source/PluginProcessor.h"
 #include "../Source/state/FactoryPresets.h"
+#include "../Source/state/Randomiser.h"
+
+#include <juce_audio_formats/juce_audio_formats.h>
 #include "../Source/ui/Theme.h"
 
 #include <cstdio>
@@ -537,6 +540,212 @@ void readouts()
     }
 }
 
+// The dice. Roy's brief for the whole pass was "keep it musical", and a random
+// button is where that is hardest to keep: a uniform roll over eighteen
+// parameters produces something unusable almost every time.
+//
+// So this is not a range check. It rolls every character many times, RENDERS
+// each patch, and requires that the result is audible and bounded -- which is
+// the actual claim the button makes. A roll that produces silence is as much a
+// failure as one that produces a scream.
+void diceIsMusical()
+{
+    std::printf ("dice: every character makes sound, stays bounded, and touches nothing it must not\n");
+    constexpr double sr = 48000.0;
+    constexpr int block = 128;
+
+    for (int character = 0; character < Randomiser::numCharacters(); ++character)
+    {
+        int silent = 0, tooLoud = 0, nonFinite = 0, rolls = 12;
+        double quietest = 1.0e9, loudest = -1.0e9;
+        juce::String name;
+
+        for (int roll = 0; roll < rolls; ++roll)
+        {
+            DybbukProcessor p;
+            p.prepareToPlay (sr, block);
+
+            juce::Random rng ((juce::int64) (character * 1000 + roll + 1));
+            Randomiser::randomiseCharacter (p.apvts, rng, character);
+            name = Randomiser::lastCharacterName();
+
+            juce::AudioBuffer<float> buffer (2, block);
+            juce::MidiBuffer midi;
+            double phase = 0.0;
+            float peak = 0.0f;
+            double sum = 0.0;
+            int counted = 0;
+
+            const int blocks = (int) (6.0 * sr / block);
+            for (int b = 0; b < blocks; ++b)
+            {
+                const double t = b * block / sr;
+                for (int i = 0; i < block; ++i)
+                {
+                    // Four seconds of playing, then two of silence, so both the
+                    // wet and the tail are measured.
+                    const float v = t < 4.0 ? 0.3f * (float) std::sin (phase) : 0.0f;
+                    phase += 220.0 / sr * juce::MathConstants<double>::twoPi;
+                    buffer.setSample (0, i, v);
+                    buffer.setSample (1, i, v);
+                }
+                p.processBlock (buffer, midi);
+
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < block; ++i)
+                    {
+                        const float y = buffer.getSample (ch, i);
+                        if (! std::isfinite (y))
+                            ++nonFinite;
+                        peak = juce::jmax (peak, std::abs (y));
+                        if (t > 1.0)
+                        {
+                            sum += (double) y * y;
+                            ++counted;
+                        }
+                    }
+            }
+
+            const double rms = 20.0 * std::log10 (juce::jmax (std::sqrt (sum / juce::jmax (1, counted)), 1.0e-12));
+            quietest = juce::jmin (quietest, rms);
+            loudest = juce::jmax (loudest, rms);
+            if (rms < -50.0)
+                ++silent;
+            if (peak > 1.0f)
+                ++tooLoud;
+        }
+
+        check ("every roll makes sound", silent == 0,
+               name + ": " + juce::String (silent) + " of " + juce::String (rolls)
+                   + " rolls were inaudible (quietest " + juce::String (quietest, 1) + " dBFS)");
+        check ("every roll stays inside full scale", tooLoud == 0,
+               name + ": " + juce::String (tooLoud) + " of " + juce::String (rolls) + " over");
+        check ("every roll is finite", nonFinite == 0, name);
+        check ("and they are not all the same level", loudest - quietest > 1.0,
+               name + ": " + juce::String (quietest, 1) + " to " + juce::String (loudest, 1) + " dBFS");
+    }
+
+    // What the dice must never touch. Bypass is performance state, and In and
+    // Out are the two controls that can hurt someone wearing headphones.
+    DybbukProcessor p;
+    auto* bypass = p.apvts.getParameter (params::id::bypass);
+    auto* in = p.apvts.getParameter (params::id::input);
+    auto* out = p.apvts.getParameter (params::id::out);
+    auto* sync = p.apvts.getParameter (params::id::timesync);
+
+    bypass->setValueNotifyingHost (1.0f);
+    in->setValueNotifyingHost (0.2f);
+    out->setValueNotifyingHost (0.8f);
+    sync->setValueNotifyingHost (1.0f);
+
+    const float bypassWas = bypass->getValue(), inWas = in->getValue();
+    const float outWas = out->getValue(), syncWas = sync->getValue();
+
+    for (int i = 0; i < 40; ++i)
+        p.randomiseParameters();
+
+    // Exactly equal, not nearly: "the dice did not touch this" is a claim about
+    // the bits, and juce::exactlyEqual is how you say so without the compiler
+    // assuming you meant a tolerance.
+    check ("the dice never takes the plugin out of circuit",
+           juce::exactlyEqual (bypass->getValue(), bypassWas),
+           "Bypass " + juce::String (bypassWas) + " -> " + juce::String (bypass->getValue()));
+    check ("and never touches the level controls",
+           juce::exactlyEqual (in->getValue(), inWas)
+               && juce::exactlyEqual (out->getValue(), outWas),
+           "In " + juce::String (inWas, 3) + " -> " + juce::String (in->getValue(), 3) + ", Out "
+               + juce::String (outWas, 3) + " -> " + juce::String (out->getValue(), 3));
+    check ("and leaves Time Sync alone", juce::exactlyEqual (sync->getValue(), syncWas),
+           "Sync " + juce::String (syncWas));
+
+    // And it has to actually roll something different each time, or it is a
+    // preset button with a dice on it.
+    DybbukProcessor q;
+    q.randomiseParameters();
+    juce::MemoryBlock first;
+    q.getStateInformation (first);
+    int identical = 0;
+    for (int i = 0; i < 20; ++i)
+    {
+        q.randomiseParameters();
+        juce::MemoryBlock next;
+        q.getStateInformation (next);
+        if (next == first)
+            ++identical;
+    }
+    check ("consecutive rolls differ", identical == 0,
+           juce::String (identical) + " of 20 rolls repeated the first");
+}
+
+// Not a pass/fail: renders one roll of each character, so the dice can be
+// listened to rather than only measured. `ProcessorTest render`.
+void renderDice()
+{
+    constexpr double sr = 48000.0;
+    constexpr int block = 128;
+    std::printf ("render: one roll of each dice character, to the working directory\n");
+
+    auto pluck = [] (double t, double f0)
+    {
+        const double env = std::exp (-3.5 * t);
+        double v = 0.0;
+        for (int h = 1; h <= 6; ++h)
+            v += std::sin (juce::MathConstants<double>::twoPi * f0 * h * t + 0.3 * h) / (h * h);
+        return 0.45 * env * v;
+    };
+
+    for (int c = 0; c < Randomiser::numCharacters(); ++c)
+    {
+        DybbukProcessor p;
+        p.prepareToPlay (sr, block);
+        juce::Random rng ((juce::int64) (c * 7919 + 11));
+        Randomiser::randomiseCharacter (p.apvts, rng, c);
+        const juce::String name (Randomiser::lastCharacterName());
+
+        const int total = (int) (14.0 * sr);
+        juce::AudioBuffer<float> file (2, total), buffer (2, block);
+        juce::MidiBuffer midi;
+        const double notes[] = { 110.0, 146.83, 196.0, 164.81 };
+
+        int pos = 0;
+        while (pos < total)
+        {
+            const int len = juce::jmin (block, total - pos);
+            for (int i = 0; i < len; ++i)
+            {
+                const double t = (double) (pos + i) / sr;
+                float v = 0.0f;
+                if (t < 7.0) // then four seconds of tail with nothing played
+                {
+                    const int n = (int) (t / 1.5);
+                    v = (float) pluck (t - n * 1.5, notes[juce::jlimit (0, 3, n)]);
+                }
+                buffer.setSample (0, i, v);
+                buffer.setSample (1, i, v);
+            }
+            p.processBlock (buffer, midi);
+            for (int ch = 0; ch < 2; ++ch)
+                file.copyFrom (ch, pos, buffer, ch, 0, len);
+            pos += len;
+        }
+
+        const auto out = juce::File::getCurrentWorkingDirectory()
+                             .getChildFile ("dice_" + name.toLowerCase() + ".wav");
+        out.deleteFile();
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::OutputStream> stream = out.createOutputStream();
+        if (stream != nullptr)
+        {
+            const auto options = juce::AudioFormatWriterOptions().withSampleRate (sr)
+                                     .withNumChannels (2).withBitsPerSample (24);
+            if (auto writer = wav.createWriterFor (stream, options))
+                writer->writeFromAudioSampleBuffer (file, 0, total);
+        }
+        std::printf ("  wrote %s (peak %.3f)\n", out.getFileName().toRawUTF8(),
+                     file.getMagnitude (0, total));
+    }
+}
+
 void ordering()
 {
     std::printf ("parameter order: Push bank 1 is the eight that matter\n");
@@ -565,8 +774,15 @@ void ordering()
 
 } // namespace
 
-int main()
+int main (int argc, char* argv[])
 {
+    if (argc > 1 && juce::String (argv[1]) == "render")
+    {
+        juce::ScopedJuceInitialiser_GUI init;
+        renderDice();
+        return 0;
+    }
+
     juce::ScopedJuceInitialiser_GUI juceInit;
 
     ordering();
@@ -575,6 +791,7 @@ int main()
     presetRoundTrip();
     factoryPresetsLoad();
     presetsMakeSound();
+    diceIsMusical();
     monoToStereo();
     stereoDry();
     bypassAndAudio();

@@ -2,6 +2,7 @@
 
 #include "PluginEditor.h"
 #include "dsp/TimeMap.h"
+#include "state/Randomiser.h"
 
 namespace
 {
@@ -71,6 +72,16 @@ void DybbukProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 }
 
 void DybbukProcessor::releaseResources() {}
+
+void DybbukProcessor::randomiseParameters()
+{
+    Randomiser::randomise (apvts, randomiserRng);
+}
+
+const char* DybbukProcessor::lastRandomCharacter() const noexcept
+{
+    return Randomiser::lastCharacterName();
+}
 
 bool DybbukProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {

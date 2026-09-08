@@ -59,8 +59,8 @@ disagree with what is written here, this wins.
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
 - Five factory presets ship as code tables and are proven to sound
 - UI: the v3 Claude Design canvas, both sheets, engraved line-art knobs, the
-  lamp (now flickering with the chaos), fourteen knobs, two engraved trims, and
-  metered IN and OUT trims on the edges
+  lamp (now flickering with the chaos), fourteen knobs, two engraved trims, a
+  dice, and metered IN and OUT trims on the edges
 - Known issues: one open ear question on the tap rebalance, below; the
   listening gates are the user's call
 
@@ -93,6 +93,71 @@ wanted.
 The noise floor at the longest Time reads 14 dB lower than it did (-60 dBFS
 rather than -46) because most of what the old measurement was picking up was
 the squeal, not hiss.
+
+## The dice, and the limiter question (2026-09-07)
+
+### Should there be a limiter? No, and here is the measurement
+
+The mono path is bounded by construction: everything the loop can do goes
+through the saturator's tanh, which asymptotes below full scale. The one path
+that escapes it is the stereo side, because that is a difference taken AFTER
+the loop.
+
+Over a 30 minute soak with every parameter sweeping, **10 samples out of
+86,400,000 exceeded full scale**, and the worst was 1.0157 -- 0.14 dB over,
+0.000012 per cent of the time. A limiter would be a second, less musical
+nonlinearity sitting in front of the one that IS the sound, doing nothing for
+hours at a stretch.
+
+What was worth having is the claim "this cannot output above full scale" being
+true. `outputCeiling` is the same soft clip family already in the file with a
+knee at 0.95, so nothing a player hears can reach it: the soak now measures
+**0 samples over, stereo peak 0.9987**. It is a guard, not a limiter, and the
+comment says so.
+
+One caveat, recorded rather than hidden: it is applied per channel after the
+side is added, so Spread's exact L + R = wet identity holds only below the knee.
+Above it the channels clip independently. That is the right trade -- a mono sum
+that is bit-exact and over full scale is worse than one that is neither.
+
+### The dice
+
+A pipped die beside the theme mark, which rolls to a new face on every click.
+
+Randomising eighteen parameters independently over their full ranges produces
+garbage almost every time, because the interesting settings here are
+CORRELATED: a long Time wants a darker Filter, a hot Decay wants some Absorb
+under it, Time Mod is only musical when the Tones pitch it rides is somewhere
+sensible, and a Blend of 8 per cent means you cannot hear any of it.
+
+So the die is rolled twice. The first roll picks a **character** -- Space, Tape,
+Metal, Possessed or Ruin -- and the second fills in each parameter inside that
+character's own range. Rates and cutoffs are picked log-uniformly, because a
+linear roll over a range that crosses decades lands at the top nearly every
+time, and Tones Pitch snaps to a semitone because it is both a drone and the FM
+grid.
+
+Decay tops out at 1.25 against a ceiling of 1.45: a roll can land in the runaway
+zone but never parks at the far end of it. That part of the knob is for the
+player to find.
+
+**Three things it never touches.** Bypass, because that is performance state and
+a roll of the dice must not take the plugin in or out of circuit. In and Out,
+because a level control is the one thing that can hurt someone wearing
+headphones. Time Sync, because whether you are working in note divisions is a
+workflow choice rather than a sound.
+
+`ProcessorTest diceIsMusical` is the gate, and it is deliberately not a range
+check: it rolls every character twelve times, **renders each patch**, and
+requires all sixty to be audible, bounded and finite. A roll that produces
+silence counts as a failure in exactly the same way as one that clips. Measured
+across the five characters, rolls land between -22.4 and -9.2 dBFS.
+
+Each parameter is set as its own complete gesture, so a host's undo and its
+automation recording both see an ordinary edit, and the preset goes dirty
+through the listener that was already there.
+
+`ProcessorTest render` writes one roll of each character to WAV.
 
 ## Stage 3 of the wildness pass (2026-09-07)
 

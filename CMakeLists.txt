@@ -65,6 +65,7 @@ set(PLUGIN_SOURCES
     Source/PluginEditor.cpp
     Source/Parameters.cpp
     Source/state/PresetManager.cpp
+    Source/state/Randomiser.cpp
     Source/state/FactoryPresets.cpp
     Source/ui/Theme.cpp
     Source/ui/EngravedKnob.cpp
@@ -129,6 +130,7 @@ target_link_libraries(ProcessorTest
     PRIVATE
         DybbukFonts
         juce::juce_audio_utils
+        juce::juce_audio_formats
         juce::juce_dsp
     PUBLIC
         juce::juce_recommended_config_flags

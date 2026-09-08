@@ -119,6 +119,29 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngravedTrim)
 };
 
+// The dice, beside the theme mark. A pipped face that rolls to a new number on
+// every click, so the control shows that it did something even when the sound
+// it produced is one you do not like.
+class DiceButton : public juce::Component
+{
+public:
+    DiceButton();
+
+    std::function<void()> onClick;
+
+    void paint (juce::Graphics& g) override;
+    void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
+    void mouseExit (const juce::MouseEvent&) override { hovering = false; repaint(); }
+    void mouseDown (const juce::MouseEvent&) override;
+
+private:
+    int face = 5;
+    bool hovering = false;
+    juce::Random rng;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DiceButton)
+};
+
 // Sun while dark, moon while light: it shows the sheet you would switch to.
 class ThemeMark : public juce::Component
 {

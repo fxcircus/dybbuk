@@ -98,6 +98,17 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
                     juce::Rectangle<float> (150.0f, 12.0f, 60.0f, 28.0f),
                     juce::Justification::centredLeft, false);
 
+        // What the dice last rolled, fading out beside it. It sits in the gap
+        // between the preset name and the dice, which is otherwise empty.
+        if (rolledTicks > 0 && rolledName != nullptr)
+        {
+            const float fade = juce::jmin (1.0f, (float) rolledTicks / 30.0f);
+            theme::drawTracked (g, juce::String (rolledName).toUpperCase(),
+                                { 600.0f, 15.0f, 148.0f, 16.0f },
+                                juce::Justification::centredRight, theme::Face::semibold, 9.0f,
+                                0.18f, pal.ink.withAlpha (0.75f * fade));
+        }
+
         // The rule under the header, stopping short of the plate edges.
         g.setColour (pal.ink.withAlpha (0.28f));
         g.fillRect (46.0f, (float) kRuleY, (float) canvasW - 92.0f, 1.0f);
@@ -134,6 +145,20 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     plate.addAndMakeVisible (themeMark);
     themeMark.setBounds (canvasW - 30 - 70, kHeaderH / 2 - 11, 70, 22);
     themeMark.onClick = [this] { toggleTheme(); };
+
+    // The dice sits just left of the theme mark, whose box starts at x 800.
+    plate.addAndMakeVisible (dice);
+    dice.setBounds (758, kHeaderH / 2 - 12, 24, 24);
+    dice.onClick = [this]
+    {
+        proc.randomiseParameters();
+        // Say what was rolled. A dice that changes eighteen numbers at once is
+        // otherwise unreadable, and the character's name is the one piece of
+        // information that makes the patch make sense.
+        rolledName = proc.lastRandomCharacter();
+        rolledTicks = 90; // about three seconds at the editor's tick rate
+        repaint();
+    };
 
     // --- faders on both edges -------------------------------------------------
     inFader = std::make_unique<VerticalFader> (param (params::id::input), "IN");
@@ -393,6 +418,10 @@ void DybbukEditor::timerCallback()
                        agitateKnob != nullptr ? speedKnob->normalisedValue() : 0.35f);
     // The engine has published this since Phase 3 and nothing has ever read it.
     lamp.setChaos (proc.getInterferenceEnergy());
+
+    // The rolled character's name fades out over about three seconds.
+    if (rolledTicks > 0 && --rolledTicks >= 0)
+        plate.repaint (600, 12, 160, 22);
     lamp.tick();
 
     inFader->setLevel (proc.getInputLevel());
