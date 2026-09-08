@@ -204,6 +204,28 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     addKnob (absorbKnob, params::id::absorb, "ABSORB", EngravedKnob::midSpec(),
              { kMidX[4], kMidY }, "0", "100");
 
+    // The band between the hero boxes (which end at y 278) and the lamp (whose
+    // top is y 324) is empty across the full width. Two trims at y 284..318 sit
+    // 6 px clear of both, flanking the lamp: FOLD to its left, COLOUR to its
+    // right. Verified against the real geometry, not estimated.
+    foldTrim = std::make_unique<EngravedTrim> (param (params::id::tonesfold), "FOLD");
+    plate.addAndMakeVisible (*foldTrim);
+    foldTrim->setBounds (76, 284, 304, 34);
+    foldTrim->setValueTextProvider ([this]
+    {
+        const float v = proc.apvts.getRawParameterValue (params::id::tonesfold)->load();
+        return v < 0.5f ? juce::String ("PURE") : juce::String (juce::roundToInt (v)) + " %";
+    });
+
+    colourTrim = std::make_unique<EngravedTrim> (param (params::id::colour), "COLOUR");
+    plate.addAndMakeVisible (*colourTrim);
+    colourTrim->setBounds (520, 284, 304, 34);
+    colourTrim->setValueTextProvider ([this]
+    {
+        const float v = proc.apvts.getRawParameterValue (params::id::colour)->load();
+        return v < 0.5f ? juce::String ("DARK") : juce::String (juce::roundToInt (v)) + " %";
+    });
+
     plate.addAndMakeVisible (lamp);
     lamp.setBounds (kMidX[2] - 52, kMidY - 56, 104, 104);
 

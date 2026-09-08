@@ -100,6 +100,8 @@ private:
     std::atomic<float>* pInput;
     std::atomic<float>* pChaos;
     std::atomic<float>* pCrust;
+    std::atomic<float>* pTonesFold;
+    std::atomic<float>* pColour;
 
     // Hosts may report nothing at all (the standalone player reports an
     // engaged position with every field unset), so sync falls back to the

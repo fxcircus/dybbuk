@@ -50,16 +50,17 @@ disagree with what is written here, this wins.
 
 ## Current state
 
-- Parameter count: 20, in Push bank order, all automatable (an IN trim came
-  with the v3 canvas; Chaos and Crust came with the wildness pass)
+- Parameter count: 22, in Push bank order, all automatable (an IN trim came
+  with the v3 canvas; Chaos, Crust, Tones Fold and Colour came with the
+  wildness pass)
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 31 scenarios plus `render` (116 checks, 0 failures; 2.8 s
-  without the 30 minute soak, 9.0 s with it)
+- `EngineTest`: 34 scenarios plus `render` (125 checks, 0 failures; 5.4 s
+  without the 30 minute soak, 11.6 s with it)
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
-- Four factory presets ship as code tables and are proven to sound
+- Five factory presets ship as code tables and are proven to sound
 - UI: the v3 Claude Design canvas, both sheets, engraved line-art knobs, the
-  lamp (now flickering with the chaos), fourteen knobs, and metered IN and OUT
-  trims on the edges
+  lamp (now flickering with the chaos), fourteen knobs, two engraved trims, and
+  metered IN and OUT trims on the edges
 - Known issues: one open ear question on the tap rebalance, below; the
   listening gates are the user's call
 
@@ -92,6 +93,78 @@ wanted.
 The noise floor at the longest Time reads 14 dB lower than it did (-60 dBFS
 rather than -46) because most of what the old measurement was picking up was
 the squeal, not hiss.
+
+## Stage 3 of the wildness pass (2026-09-07)
+
+Stages 1 and 2 made the loop pushable and gave the modulation a reach. This one
+closes the hardware's own generative loop, and gives the plugin the only two
+sources of brightness it has ever had.
+
+**The chaos reaches the generator.** On the Strega, CV2 -- the Time/Filter
+circuit's own DC feedback -- modulates Activation and Tonic: the level and the
+PITCH of the oscillator that feeds the delay. That is a loop through the sound
+generator, and it is why the hardware plays itself. Here Interference reached
+only the clock, so it could repitch what was already stored but could never
+cause a new event at a new pitch. `dstTonesPitch` and `dstTonesLevel` are
+destinations now, and `EngineTest chaosloop` measures what that buys: with
+nothing played into it at any point, **36 distinct pitch plateaux over 83
+seconds**, where a loop that can only smear what it already holds produces one.
+
+**The drone became a voice.** `kTonesFullLevel` 0.35 -> 0.9, and the injection
+now goes through the same input clipper the played signal does and is scaled by
+the same Strength -- so Strength can drive the drone into the chip's write
+nonlinearity, which is where a drone gets its harmonics. The follower is
+deliberately still fed the pre-drone signal: with the drone in it, Follower to
+Strength would close a real latch and Gate mode would fire on a continuous tone.
+
+**Tones Fold.** Nothing in the plugin could add high frequency -- five stages of
+lowpass remove it and one tanh puts a little back, so every control's net
+direction was darker and pushing anything converged on mud. A wavefolder on the
+drone measures a spectral centroid of 114 Hz at Fold 0 rising to 835 Hz at full,
+with the worst non-harmonic bin 57.7 dB under the fundamental at the top of the
+pitch range. Written as a blend FROM the triangle rather than as a sine of the
+folded ramp, so Fold 0 is bit-identical: a plain `sin(pi/2 * t)` has about 15 dB
+less third harmonic than the triangle it would have replaced, which would have
+made "default 0" a quiet character change.
+
+**Colour.** `TptSvf` computed the bandpass output on every sample and threw it
+away. Mixing it in lets the loop lock onto the cutoff instead of collapsing onto
+the lowest surviving mode, which is why every runaway used to arrive as the same
+dark hum whatever Filter was set to. Measured: the runaway's spectral centroid
+moves from 270 Hz to 2300 Hz across the control, and it is bit-identical at 0.
+It is also the only highpass anywhere in the plugin -- the loop had none except
+the saturator's 10 Hz DC blocker.
+
+**Two engraved trims** in the empty band between the hero row (boxes end at
+y 278) and the lamp (top y 324): FOLD at x 76..380 and COLOUR at x 520..824,
+both at y 284..318 and 6 px clear of each. They are trims rather than knobs
+because the two knob rows are full and because these are controls you aim once
+and play against, not ones you ride.
+
+**The presets were re-voiced once**, against a settled loop, and a fifth was
+added. Bat Cave sat at Decay 0.92 calling itself "just under runaway" while
+being 2.15 dB below unity against a ceiling it could not have reached anyway; it
+is at 1.18 and it sustains (-16.3 dBFS at 1 s against -17.3 at 4 s, where it
+used to lose 7 dB over the same interval). **Possession** is the new one: no
+input dependency at all, and it grows rather than decays (-22.0 dBFS at 1 s
+against -18.6 at 4 s).
+
+Bat Cave's `tonespitch 55` with no `toneslevel` was left exactly as it was.
+Three separate agents called it "the pitch of a switched-off oscillator" and
+proposed adding a drone; that is wrong. `Tones::sub` runs regardless of the
+drone's level and IS the Time Mod modulator, so 55 Hz sets that preset's FM grid
+to 27.5 Hz, which is the metallic edge its name asks for.
+
+### What was measured and NOT acted on
+
+`chaosloop` originally asserted that the level moves, and it does not: the 200 ms
+spread is 0.8 dB and stays 0.8 dB whether the Interference-to-Blend depth is
+0.25, 0.6 or 1.0. A self-oscillating loop's amplitude is regulated by the
+saturator -- that is what stops it running away -- so everything downstream of it
+can only move the level a little. Making that number bigger would have meant
+letting one route dominate the output gain, which reads as a fault rather than a
+gesture. The check now measures the spectral centroid, which does move (424 to
+621 Hz across the run), and the finding is recorded here rather than tuned away.
 
 ## Stage 2 of the wildness pass (2026-09-07)
 

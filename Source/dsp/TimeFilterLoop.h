@@ -26,6 +26,7 @@ public:
         // (CLAUDE.md: defaults belong to the user).
         float time01 = 0.3f;
         float crust01 = 0.0f; // how destroyed the chip is, independent of Time
+        float colour01 = 0.0f; // 0 lowpass, 1 bandpass
         float decay = 0.5f;
         float filterHz = 18000.0f;
         float resonance01 = 0.2f;
@@ -73,7 +74,7 @@ private:
     OnePole absorbShelf;
     LoopSaturator sat;
 
-    juce::SmoothedValue<float> decaySmooth, resSmooth, absorbSmooth, crustSmooth;
+    juce::SmoothedValue<float> decaySmooth, resSmooth, absorbSmooth, crustSmooth, colourSmooth;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> cutoffSmooth;
 
     std::array<float, 3> tapWeight { { 1.0f, 0.0f, 0.0f } };

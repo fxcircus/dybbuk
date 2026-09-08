@@ -2,7 +2,7 @@
 
 #include "ModConstants.h"
 
-// Five sources by seven destinations. The three hero routes the plan asks for
+// Four sources by nine destinations. The three hero routes the plan asks for
 // are wired -- Agitation to Filter (the hardware normal), Interference to Time,
 // Follower to Decay -- plus the ones that turn the sources into an instrument
 // rather than a filter LFO.
@@ -22,7 +22,18 @@ class ModMatrix
 {
 public:
     enum Src { srcAgitation = 0, srcFollower, srcInterference, srcDrift, numSrc };
-    enum Dst { dstTime = 0, dstFilter, dstResonance, dstDecay, dstAbsorb, dstBlend, dstStrength, numDst };
+    // Tones Pitch and Tones Level are destinations, which is what closes the
+    // hardware's own generative loop. On the Strega, CV2 -- the Time/Filter
+    // circuit's own DC feedback -- modulates Activation and Tonic: the level
+    // and the PITCH of the oscillator that feeds the delay. That is a loop
+    // through the sound GENERATOR, and it is why the instrument plays itself.
+    //
+    // Without it the chaos could only repitch what was already stored, so with
+    // no input the loop smeared a decaying sine harder and harder and never
+    // caused a new event at a new pitch. It is the deepest reason this read as
+    // an effect rather than an instrument.
+    enum Dst { dstTime = 0, dstFilter, dstResonance, dstDecay, dstAbsorb, dstBlend, dstStrength,
+               dstTonesPitch, dstTonesLevel, numDst };
 
     // What the engine adds to the knob values, in each destination's own units.
     struct Offsets
@@ -33,6 +44,8 @@ public:
         float absorb = 0.0f;
         float blend = 0.0f;
         float strengthDb = 0.0f;
+        float tonesPitchOct = 0.0f; // octaves on the drone's pitch
+        float tonesLevel = 0.0f;    // added to the Tones knob, then clamped
         // Precomputed from strengthDb once per control tick, because a
         // std::pow per sample to raise 10 to the power of zero is a waste, and
         // because the engine ramps this across the block rather than stepping

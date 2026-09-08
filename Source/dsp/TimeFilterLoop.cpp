@@ -21,6 +21,7 @@ void TimeFilterLoop::prepare (double sampleRate, int maxBlockSize)
     absorbSmooth.reset (sampleRate, smoothSec);
     cutoffSmooth.reset (sampleRate, smoothSec);
     crustSmooth.reset (sampleRate, (double) pt::kCrustSmoothSec);
+    colourSmooth.reset (sampleRate, (double) pt::kCrustSmoothSec);
     cutoffSmooth.setCurrentAndTargetValue (18000.0f);
 
     // Normalised so the tap sum has unity gain: that is what makes "Decay
@@ -118,6 +119,7 @@ void TimeFilterLoop::refreshLoopCoeffs() noexcept
                               decaySmooth.skip (pt::kCtrlInterval) + modDecay);
 
     clock.setCrust01 (crustSmooth.skip (pt::kCtrlInterval));
+    loopFilter.setMode (colourSmooth.skip (pt::kCtrlInterval));
 }
 
 void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& p, const float* modOct)
@@ -146,6 +148,7 @@ void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& 
     resSmooth.setTargetValue (juce::jlimit (0.0f, 1.0f, p.resonance01));
     absorbSmooth.setTargetValue (juce::jlimit (0.0f, 1.0f, p.absorb01));
     crustSmooth.setTargetValue (juce::jlimit (0.0f, 1.0f, p.crust01));
+    colourSmooth.setTargetValue (juce::jlimit (0.0f, 1.0f, p.colour01));
 
     if (firstBlock || snapRequested.exchange (false, std::memory_order_acquire))
     {
@@ -157,6 +160,7 @@ void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& 
         resSmooth.setCurrentAndTargetValue (resSmooth.getTargetValue());
         absorbSmooth.setCurrentAndTargetValue (absorbSmooth.getTargetValue());
         crustSmooth.setCurrentAndTargetValue (crustSmooth.getTargetValue());
+        colourSmooth.setCurrentAndTargetValue (colourSmooth.getTargetValue());
         controlCountdown = 0;
         refreshLoopCoeffs();
         firstBlock = false;

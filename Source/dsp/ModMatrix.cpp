@@ -11,12 +11,14 @@ namespace
     // Full-scale excursion per destination, in that destination's own units.
     const float kScale[ModMatrix::numDst] = {
         modk::kScaleTime, modk::kScaleFilter, modk::kScaleResonance, modk::kScaleDecay,
-        modk::kScaleAbsorb, modk::kScaleBlend, modk::kScaleStrength
+        modk::kScaleAbsorb, modk::kScaleBlend, modk::kScaleStrength,
+        modk::kScaleTonesPitch, modk::kScaleTonesLevel
     };
 
     // How fast each destination is allowed to move. Time is absent: it is the
     // one audio-rate destination and is never smoothed here.
-    const float kSmoothHz[ModMatrix::numDst] = { 0.0f, 120.0f, 30.0f, 40.0f, 20.0f, 20.0f, 20.0f };
+    const float kSmoothHz[ModMatrix::numDst] = { 0.0f, 120.0f, 30.0f, 40.0f, 20.0f, 20.0f, 20.0f,
+                                                 20.0f, 20.0f };
 }
 
 void ModMatrix::prepare (double sampleRate)
@@ -53,6 +55,23 @@ void ModMatrix::prepare (double sampleRate)
     depth[srcInterference][dstFilter]    = modk::kHeroIntfFilter;
     depth[srcInterference][dstResonance] = modk::kHeroIntfResonance;
     depth[srcInterference][dstAbsorb]    = modk::kHeroIntfAbsorb;
+    // Dropouts and lurches: the repeats cutting out and coming back. The clamp
+    // that protects this already exists in the engine (the wet gain is limited
+    // to 0..1.5 with headroom reserved for exactly this route), and it is the
+    // 0 floor rather than the 1.5 ceiling that makes the downward half read as
+    // a dropout instead of a phase inversion. Without it a self-playing texture
+    // holds one level: the saturator pins it, and the loop's pitch wanders
+    // while its loudness does not, which sounds like a machine rather than a
+    // performance.
+    depth[srcInterference][dstBlend]     = modk::kHeroIntfBlend;
+
+    // The generative loop, closed: loop energy drives the chaos, the chaos
+    // moves the drone's pitch and level, the drone writes new material into the
+    // delay, and that changes the energy. Bounded at every stage -- the offsets
+    // are clamped here, again where they are applied, and the drone goes
+    // through the same input clipper the played signal does.
+    depth[srcInterference][dstTonesPitch] = modk::kHeroIntfTonesPitch;
+    depth[srcInterference][dstTonesLevel] = modk::kHeroIntfTonesLevel;
 
     reset();
 }
@@ -117,6 +136,8 @@ void ModMatrix::tick (float agitationMean, float follower01, float interferenceW
     out.absorb = smoothed[dstAbsorb];
     out.blend = smoothed[dstBlend];
     out.strengthDb = smoothed[dstStrength];
+    out.tonesPitchOct = smoothed[dstTonesPitch];
+    out.tonesLevel = smoothed[dstTonesLevel];
     // Once per tick, not once per sample: the engine ramps this across the
     // block. std::pow to raise 10 to the power of zero, 48000 times a second,
     // for a route that was dead, was the old shape of this line.

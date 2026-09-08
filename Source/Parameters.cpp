@@ -268,6 +268,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // short bit-crushed slapback was unreachable at any setting.
     layout.add (percentWithWord (19, id::crust, "Crust", 0.0f, "Clean"));
 
+    // 20. Tones Fold. The drone was a bare triangle forever, and nothing in the
+    // plugin could add high frequency, so "wilder" always arrived darker.
+    layout.add (percentWithWord (20, id::tonesfold, "Tones Fold", 0.0f, "Pure"));
+
+    // 21. Colour. How much bandpass is mixed into the loop's lowpass. At 0 it
+    // is exactly the filter it has always been; above it the loop can lock onto
+    // the cutoff instead of collapsing to the lowest surviving mode, which is
+    // the only route to a bright runaway and the only highpass in the plugin.
+    layout.add (percentWithWord (21, id::colour, "Colour", 0.0f, "Dark"));
+
     // LAST, and hint 1000 so anything added later still sorts before it in AU
     // while staying declared last for VST3. 1 means bypassed, which is the
     // polarity the hosts expect.

@@ -42,6 +42,8 @@ public:
 
         float tonesLevel01 = 0.0f;
         float tonesPitchHz = 110.0f;
+        float tonesFold01 = 0.0f;
+        float colour01 = 0.0f;
         float spread01 = 0.0f;
 
         bool bypass = false;

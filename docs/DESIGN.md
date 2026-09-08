@@ -137,6 +137,16 @@ choice to exceed the Strega rather than a claim about it.
 - **Modulation above the Decay knob's ceiling** (`kDecayModHeadroom`). No
   hardware equivalent: it exists so a played transient can surge the loop past
   where the knob stops and let it settle back.
+- **The loop filter's bandpass admixture** (Colour). The hardware's filter is
+  lowpass only. Without it a loop with ten lowpass poles per iteration always
+  collapses onto the lowest surviving mode, so the Filter knob chooses which
+  sub-kilohertz mode wins rather than sweeping the howl, and there is no
+  highpass anywhere in the plugin.
+- **Interference to Tones Pitch and Tones Level.** This one is more faithful
+  rather than less: it is the hardware's CV2 into Activation and Tonic, which
+  dybbuk-plan.md section 1.3 describes and the v1 build simply did not wire.
+  It is listed here because it is a new closed feedback path and belongs in any
+  list of things to soak.
 
 ## 5. What was rejected, and why
 

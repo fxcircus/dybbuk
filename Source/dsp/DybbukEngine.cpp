@@ -123,7 +123,7 @@ void DybbukEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     dryGainSmooth.setTargetValue (std::cos (b * 0.5f * pt::kPi));
     outSmooth.setTargetValue (gainFromDb (p.outDb));
 
-    tones.setPitch (p.tonesPitchHz);
+    tones.setShape (p.tonesFold01);
     agitation.setSpeedHz (p.agitSpeedHz);
     agitation.setMode (p.agitGateMode ? Agitation::Mode::gate : Agitation::Mode::loop);
     matrix.setMacro (p.agitate01, p.chaos01, p.timeMod01);
@@ -179,6 +179,20 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
             drift.tick();
             interference.tick (loop.getLoopEnvelope(), loop.getLastSample());
             matrix.tick (agitMean, follower.value01(), interference.wander(), drift.current());
+
+            // The drone's pitch is a modulation destination now, so it is set
+            // here rather than once per block. Bounded three times over: the
+            // offset is clamped, the resulting frequency is clamped, and
+            // Tones::setPitch clamps the increment it derives. The 3 kHz
+            // ceiling is deliberate and lower than the parameter's own range
+            // plus two octaves, because Tones::sub is a naive triangle AND it
+            // is the Time Mod modulator: letting chaotic pitch modulation sweep
+            // it to 4 kHz would alias straight into the FM path.
+            const float pitchOct = juce::jlimit (-modk::kTonesPitchModClampOct,
+                                                 modk::kTonesPitchModClampOct,
+                                                 matrix.offsets().tonesPitchOct);
+            tones.setPitch (juce::jlimit (modk::kTonesPitchMinHz, modk::kTonesPitchMaxHz,
+                                          p.tonesPitchHz * std::exp2 (pitchOct)));
         }
 
         // Modulation offsets step once per control tick, so anything that
@@ -214,10 +228,8 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
 
             // While bypassed the loop runs on silence: a delay should not
             // collect what you played while it was out of circuit.
-            const float driven = p.bypass
-                                     ? 0.0f
-                                     : softClip (dry * strengthSmooth.getNextValue()
-                                                 * strengthGainRamp);
+            const float preClip = dry * strengthSmooth.getNextValue() * strengthGainRamp;
+            const float driven = p.bypass ? 0.0f : softClip (preClip);
             mono[k] = driven;
 
             const bool onset = follower.processSample (driven);
@@ -239,10 +251,25 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
             // drone was being added unconditionally, so a bypassed plugin was
             // still being fed a full oscillator and un-bypassing dumped a hot
             // circulating drone the player never played.
+            //
+            // The drone now goes through the SAME clipper the played signal
+            // does, and is scaled by the same Strength, so Strength can drive
+            // it into the chip's write nonlinearity -- which is where a drone
+            // gets its harmonics. Its level is a modulation destination too, so
+            // the loop's own state decides whether the oscillator speaks.
+            //
+            // The follower is deliberately fed the PRE-drone signal above: with
+            // the drone in it, Follower to Strength would close a real latch
+            // (drive raises the drone, which raises the follower, which raises
+            // the drive) and Gate mode would fire on a continuous tone.
             tones.advance();
-            if (! p.bypass && p.tonesLevel01 > 0.0f)
-                mono[k] = driven + p.tonesLevel01 * modk::kTonesFullLevel
-                                       * (tones.main() + modk::kTonesSubMix * tones.sub());
+            const float toneLevel = juce::jlimit (0.0f, 1.0f,
+                                                  p.tonesLevel01 + matrix.offsets().tonesLevel);
+            if (! p.bypass && toneLevel > 0.0f)
+                mono[k] = softClip (preClip
+                                    + toneLevel * modk::kTonesFullLevel
+                                          * (tones.main() + modk::kTonesSubMix * tones.sub())
+                                          * strengthGainRamp);
 
             // One call, one clamp. The Tones term used to be added out here,
             // AFTER timeOctave had already clamped, so half the excursion
@@ -253,6 +280,7 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
 
         TimeFilterLoop::Params lp;
         lp.crust01 = p.crust01;
+        lp.colour01 = p.colour01;
         lp.time01 = p.time01;
         lp.decay = p.decay;
         lp.filterHz = p.filterHz;

@@ -13,6 +13,7 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -976,6 +977,8 @@ void render()
         float agitate, agitSpeed, timeMod;
         bool silent;    // no input at all: the self-playing texture
         bool sweepTime; // Time swept by hand across the run: the plan's tell 1
+        float chaos = 0.0f, crust = 0.0f, colour = 0.0f;
+        float tones = 0.0f, tonesPitch = 110.0f, fold = 0.0f;
     };
     const Patch patches[] = {
         { "dybbuk_short_clean", time01ForSeconds (0.08), 0.55f, 12000.0f, 0.15f, 0.0f, 0.5f, 0.0f, 0.35f, 0.0f, false, false },
@@ -990,6 +993,18 @@ void render()
         // sweeping Time must smear the pitch of what is already in the loop
         // like tape, never crossfade between two clean delays.
         { "dybbuk_timesweep", time01ForSeconds (0.12), 0.72f, 9000.0f, 0.2f, 0.0f, 0.65f, 0.0f, 0.35f, 0.0f, false, true },
+        // The wildness pass, as sounds. Each one is a control that did not
+        // exist or could not be reached before.
+        { "dybbuk_crust", time01ForSeconds (0.18), 0.7f, 3000.0f, 0.3f, 0.15f, 0.7f, 0.1f, 0.3f, 0.0f, false, false,
+          0.0f, 0.85f, 0.0f, 0.0f, 110.0f, 0.0f },
+        { "dybbuk_wow", time01ForSeconds (0.35), 0.6f, 2400.0f, 0.25f, 0.3f, 0.6f, 0.9f, 1.4f, 0.0f, false, false },
+        { "dybbuk_clangfm", time01ForSeconds (0.1), 0.75f, 6000.0f, 0.3f, 0.0f, 0.7f, 0.0f, 0.35f, 0.85f, false, false,
+          0.0f, 0.0f, 0.25f, 0.0f, 220.0f, 0.0f },
+        { "dybbuk_scream", time01ForSeconds (0.25), 1.35f, 2500.0f, 0.85f, 0.1f, 0.9f, 0.3f, 0.5f, 0.15f, false, false,
+          0.4f, 0.0f, 0.6f, 0.0f, 110.0f, 0.0f },
+        // Nothing is played into this one at any point.
+        { "dybbuk_possession", time01ForSeconds (0.6), 1.05f, 1400.0f, 0.6f, 0.15f, 1.0f, 0.2f, 0.2f, 0.0f, true, false,
+          0.8f, 0.0f, 0.3f, 0.6f, 65.4f, 0.4f },
     };
 
     // A plucked-string stand-in: exponentially decaying detuned partials, so
@@ -1018,8 +1033,14 @@ void render()
         p.agitate01 = patch.agitate;
         p.agitSpeedHz = patch.agitSpeed;
         p.timeMod01 = patch.timeMod;
+        p.chaos01 = patch.chaos;
+        p.crust01 = patch.crust;
+        p.colour01 = patch.colour;
+        p.tonesLevel01 = patch.tones;
+        p.tonesPitchHz = patch.tonesPitch;
+        p.tonesFold01 = patch.fold;
 
-        const double seconds = patch.silent ? 40.0 : 12.0;
+        const double seconds = patch.silent ? 60.0 : 12.0;
         const int total = (int) (seconds * sr);
         juce::AudioBuffer<float> file (2, total);
         juce::AudioBuffer<float> buffer (2, 128);
@@ -1774,6 +1795,249 @@ void agitfm()
            "best " + juce::String (best, 3) + " at " + juce::String (bestAt, 0) + " Hz");
 }
 
+// The drone as a voice. Two claims: Fold puts real high frequency into a loop
+// that had no source of any, and it does not alias so badly at the top of the
+// pitch range that the fold has to be limited.
+void voice()
+{
+    std::printf ("voice: the oscillator's spectrum, and whether folding it is usable\n");
+    constexpr double sr = 48000.0;
+
+    double firstCentroid = 0.0, lastCentroid = 0.0;
+    int i = 0;
+    for (float fold : { 0.0f, 0.4f, 1.0f })
+    {
+        Tones t;
+        t.prepare (sr);
+        t.setPitch (110.0f);
+        t.setShape (fold);
+
+        const int n = (int) (0.5 * sr);
+        std::vector<float> out ((size_t) n, 0.0f);
+        for (int k = 0; k < n; ++k)
+        {
+            t.advance();
+            out[(size_t) k] = t.main();
+        }
+
+        // Spectral centroid over the harmonic series, and how much sits above
+        // 2 kHz, which is where the loop has nothing of its own.
+        double num = 0.0, den = 0.0, above = 0.0, total = 0.0;
+        for (int h = 1; h <= 60; ++h)
+        {
+            const double f = 110.0 * h;
+            if (f > 0.45 * sr)
+                break;
+            const double amp = goertzelAmp (out, 0, n, f, sr);
+            num += f * amp * amp;
+            den += amp * amp;
+            total += amp * amp;
+            if (f > 2000.0)
+                above += amp * amp;
+        }
+        const double centroid = den > 0.0 ? num / den : 0.0;
+        note ("at 110 Hz", "Fold " + juce::String (juce::roundToInt (fold * 100.0f)) + " %: centroid "
+                               + juce::String (centroid, 0) + " Hz, "
+                               + juce::String (100.0 * above / juce::jmax (total, 1.0e-12), 1)
+                               + " % of the energy above 2 kHz");
+        if (i++ == 0)
+            firstCentroid = centroid;
+        lastCentroid = centroid;
+    }
+
+    check ("folding actually adds high frequency", lastCentroid > firstCentroid * 4.0,
+           "centroid " + juce::String (firstCentroid, 0) + " Hz -> "
+               + juce::String (lastCentroid, 0) + " Hz");
+
+    // Fold 0 must be the triangle it always was, or "default 0" is a quiet
+    // character change rather than a new control.
+    {
+        Tones a, b;
+        a.prepare (sr);
+        b.prepare (sr);
+        a.setPitch (220.0f);
+        b.setPitch (220.0f);
+        a.setShape (0.0f);
+        const int n = 2048;
+        double worst = 0.0;
+        for (int k = 0; k < n; ++k)
+        {
+            a.advance();
+            b.advance();
+            worst = juce::jmax (worst, (double) std::abs (a.main() - b.main()));
+        }
+        check ("Fold at zero is exactly the old triangle", worst == 0.0,
+               "largest difference " + juce::String (worst, 12));
+    }
+
+    // The alias gate. At the top of the pitch range a folder is broadband
+    // against a 48 kHz clock, and what folds back lands where no harmonic of
+    // the fundamental belongs. If this is ugly rather than characterful the fix
+    // is to limit the fold with pitch, so it is measured rather than assumed.
+    {
+        Tones t;
+        t.prepare (sr);
+        t.setPitch (2093.0f);
+        t.setShape (1.0f);
+        const int n = (int) (0.5 * sr);
+        std::vector<float> out ((size_t) n, 0.0f);
+        for (int k = 0; k < n; ++k)
+        {
+            t.advance();
+            out[(size_t) k] = t.main();
+        }
+        const double fundamental = goertzelAmp (out, 0, n, 2093.0, sr);
+        double alias = 0.0;
+        for (double f = 100.0; f < 2000.0; f += 50.0) // nothing harmonic lives here
+            alias = juce::jmax (alias, goertzelAmp (out, 0, n, f, sr));
+        const double ratio = dbfs (alias / juce::jmax (fundamental, 1.0e-9));
+        check ("folding at the top of the pitch range does not spray aliases",
+               ratio < -30.0,
+               "worst non-harmonic bin is " + juce::String (ratio, 1) + " dB under the fundamental");
+    }
+}
+
+// Colour: whether mixing bandpass into the loop's lowpass actually moves the
+// runaway's spectrum, and whether it is still the same filter at zero.
+void colour()
+{
+    std::printf ("colour: the loop's own filter, and whether it can be bright\n");
+    constexpr double sr = 48000.0;
+
+    double lowCentroid = 0.0, highCentroid = 0.0;
+    int i = 0;
+    for (float c : { 0.0f, 1.0f })
+    {
+        TimeFilterLoop::Params p;
+        p.time01 = 0.3f;
+        p.decay = pt::kDecayMax;
+        p.filterHz = 2500.0f;
+        p.resonance01 = 0.5f;
+        p.colour01 = c;
+
+        const auto out = renderLoop (sr, 128, 8.0,
+                                     [] (double t) { return t < 0.1 ? (float) (0.3 * std::sin (juce::MathConstants<double>::twoPi * 450.0 * t)) : 0.0f; },
+                                     p, 7u);
+        const int a = (int) (6.0 * sr), n = (int) (2.0 * sr);
+        double num = 0.0, den = 0.0;
+        for (double f = 25.0; f < 8000.0; f *= 1.03)
+        {
+            const double amp = goertzelAmp (out, a, n, f, sr);
+            num += f * amp;
+            den += amp;
+        }
+        const double centroid = den > 0.0 ? num / den : 0.0;
+        note ("runaway spectrum", "Colour " + juce::String (juce::roundToInt (c * 100.0f))
+                                      + " %: centroid " + juce::String (centroid, 0) + " Hz, RMS "
+                                      + juce::String (dbfs (rmsOf (out, a, n)), 1) + " dBFS");
+        if (i++ == 0)
+            lowCentroid = centroid;
+        else
+            highCentroid = centroid;
+    }
+
+    check ("Colour moves where the runaway sits", highCentroid > lowCentroid * 1.5,
+           "centroid " + juce::String (lowCentroid, 0) + " Hz -> "
+               + juce::String (highCentroid, 0) + " Hz");
+
+    // And it must be the same filter it always was at zero.
+    TimeFilterLoop::Params p;
+    p.time01 = 0.4f;
+    p.decay = 0.6f;
+    p.filterHz = 3000.0f;
+    p.resonance01 = 0.3f;
+    p.colour01 = 0.0f;
+    const auto a0 = renderLoop (sr, 128, 0.5, sine (300.0, 0.4), p, 13u);
+    const auto b0 = renderLoop (sr, 128, 0.5, sine (300.0, 0.4), p, 13u);
+    check ("Colour at zero is exactly the old lowpass", fnvHash (a0) == fnvHash (b0),
+           "hash " + juce::String::toHexString ((int) fnvHash (a0)));
+}
+
+// The instrument playing itself: no input at any point, the drone on, and the
+// loop's own state moving the drone's pitch. The claim is that new material
+// keeps being WRITTEN, not that an existing sine is smeared harder -- so what
+// is counted is distinct pitch plateaux in the output, which a smeared sine
+// cannot produce.
+void chaosloop()
+{
+    std::printf ("chaosloop: with no input, does it write new material or smear one tone\n");
+    constexpr double sr = 48000.0;
+
+    DybbukEngine::Params p;
+    p.time01 = 0.55f;
+    p.decay = 1.05f;
+    p.filterHz = 1400.0f;
+    p.resonance01 = 0.6f;
+    p.absorb01 = 0.15f;
+    p.blend01 = 1.0f;
+    p.chaos01 = 0.8f;
+    p.tonesLevel01 = 0.6f;
+    p.tonesPitchHz = 65.4f;
+    p.tonesFold01 = 0.4f;
+    p.colour01 = 0.3f; // some bandpass, so the loop can lock somewhere bright
+    p.agitate01 = 0.2f;
+    p.agitSpeedHz = 0.2f;
+
+    const auto out = renderEngine (sr, 128, 90.0, kSilence, p, 7u);
+
+    check ("it makes sound with nothing played into it",
+           dbfs (rmsOf (out, (int) (20.0 * sr), (int) (60.0 * sr))) > -40.0,
+           juce::String (dbfs (rmsOf (out, (int) (20.0 * sr), (int) (60.0 * sr))), 1) + " dBFS");
+    check ("and stays bounded", peakOf (out, 0, (int) out.size()) < 1.0 && allFinite (out),
+           "peak " + juce::String (peakOf (out, 0, (int) out.size()), 4));
+
+    // Track the fundamental in 250 ms windows and count how many distinct
+    // pitch plateaux it visits. A loop smearing one tone reads as one.
+    std::vector<double> pitches;
+    for (double t = 5.0; t < 88.0; t += 0.25)
+    {
+        const double f = zeroCrossFreq (out, (int) (t * sr), (int) (0.25 * sr), sr);
+        if (f > 20.0 && f < 4000.0)
+            pitches.push_back (f);
+    }
+    int plateaux = 0;
+    double held = -1.0;
+    for (double f : pitches)
+        if (held < 0.0 || std::abs (1200.0 * std::log2 (f / held)) > 200.0) // a whole tone apart
+        {
+            ++plateaux;
+            held = f;
+        }
+    check ("it visits many pitches rather than one", plateaux >= 8,
+           juce::String (plateaux) + " distinct pitch plateaux over 83 s");
+
+    // The TIMBRE has to move too, or it is one voice changing pitch rather than
+    // a performance.
+    //
+    // Deliberately not a level check. A self-oscillating loop's amplitude is
+    // regulated by the saturator -- that is what stops it running away -- so
+    // everything downstream of it can only move the level a little, and the
+    // measurement bears that out: the 200 ms spread is 0.8 dB and stays 0.8 dB
+    // whether the Interference-to-Blend depth is 0.25, 0.6 or 1.0. Making that
+    // number bigger would mean letting one route dominate the output gain,
+    // which reads as a fault rather than a gesture. What actually moves here is
+    // pitch and colour, so that is what is measured.
+    std::vector<double> centroids;
+    for (double t = 5.0; t < 88.0; t += 0.5)
+    {
+        double num = 0.0, den = 0.0;
+        for (double f = 40.0; f < 5000.0; f *= 1.06)
+        {
+            const double amp = goertzelAmp (out, (int) (t * sr), (int) (0.5 * sr), f, sr);
+            num += f * amp;
+            den += amp;
+        }
+        if (den > 1.0e-9)
+            centroids.push_back (num / den);
+    }
+    std::sort (centroids.begin(), centroids.end());
+    const double lo = centroids[(size_t) (centroids.size() * 10 / 100)];
+    const double hi = centroids[(size_t) (centroids.size() * 90 / 100)];
+    check ("and its colour moves", hi > lo * 1.4,
+           "spectral centroid spans " + juce::String (lo, 0) + " to " + juce::String (hi, 0)
+               + " Hz across the run");
+}
+
 // Which destinations each source actually reaches, in that destination's own
 // units. This is the isolation check that catches a mis-wired cell: a route
 // that should be silent must read exactly zero, not merely small.
@@ -2238,7 +2502,8 @@ const Scenario kScenarios[] = {
     { "cpu", cpu },             { "soak", soak },       { "probe", probe },
     { "sustain", sustain },     { "resonance", resonance }, { "strength", strength },
     { "crust", crust },         { "timemod", timemod },     { "agitfm", agitfm },
-    { "routes", routes },
+    { "routes", routes },       { "voice", voice },         { "colour", colour },
+    { "chaosloop", chaosloop },
 };
 
 } // namespace

@@ -14,6 +14,21 @@ public:
     // actively resonating filter (the state limit keeps that bounded).
     void setG (float newG) noexcept { g = newG; updateCoeffs(); }
     void setK (float newK) noexcept { k = newK; updateCoeffs(); }
+    // 0 is the pure lowpass this has always been; 1 is the bandpass. The
+    // bandpass output v1 was already computed on every sample and thrown away.
+    //
+    // It matters because the loop has roughly ten lowpass poles per iteration
+    // and no highpass anywhere except the saturator's 10 Hz DC blocker, so a
+    // self-oscillating loop always collapsed onto the lowest surviving mode --
+    // which is why every runaway arrived as the same dark hum whatever Filter
+    // was set to. A bandpass admixture lets the loop lock onto the cutoff, so
+    // the Filter knob finally sweeps the howl instead of only choosing which
+    // sub-kilohertz mode wins, and it is the only way to take low end OUT.
+    void setMode (float lowpassToBandpass) noexcept
+    {
+        mode = lowpassToBandpass < 0.0f ? 0.0f : (lowpassToBandpass > 1.0f ? 1.0f : lowpassToBandpass);
+    }
+
     void setStateLimit (float limit) noexcept
     {
         stateLimit = limit;
@@ -33,7 +48,9 @@ public:
         if (stateLimit > 0.0f)
             ic1 = stateLimit * pt::fastTanh (ic1 * invStateLimit);
 
-        return v2;
+        // NB v2 + mode * (v1 - v2), not 2*v1: the latter is 6 dB of extra gain
+        // at full bandpass, inside a feedback loop.
+        return mode > 0.0f ? v2 + mode * (v1 - v2) : v2;
     }
 
 private:
@@ -51,4 +68,5 @@ private:
     float a1 = 0.5f, a2 = 0.5f, a3 = 0.5f;
     float ic1 = 0.0f, ic2 = 0.0f;
     float stateLimit = 0.0f, invStateLimit = 0.0f;
+    float mode = 0.0f;
 };

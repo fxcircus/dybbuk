@@ -33,6 +33,8 @@ namespace id
     inline constexpr auto input      = "in";
     inline constexpr auto chaos      = "chaos";
     inline constexpr auto crust      = "crust";
+    inline constexpr auto tonesfold  = "tonesfold";
+    inline constexpr auto colour     = "colour";
     inline constexpr auto bypass     = "bypass";
 } // namespace id
 

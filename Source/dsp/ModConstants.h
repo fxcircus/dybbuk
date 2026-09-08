@@ -90,6 +90,8 @@ namespace modk
     inline constexpr float kScaleAbsorb    = 0.5f;
     inline constexpr float kScaleBlend     = 0.5f;
     inline constexpr float kScaleStrength  = 20.0f;  // dB
+    inline constexpr float kScaleTonesPitch = 2.0f;  // octaves on the drone
+    inline constexpr float kScaleTonesLevel = 1.0f;
 
     // The wired routes. Agitation to Filter is the hardware's normalled
     // connection; the rest exist because the matrix shipped with three of its
@@ -110,6 +112,18 @@ namespace modk
     inline constexpr float kHeroIntfFilter      = 0.35f; // +-1.4 oct: the static finally reaches tone
     inline constexpr float kHeroIntfResonance   = 0.35f; // tips a high Resonance over intermittently
     inline constexpr float kHeroIntfAbsorb      = 0.30f; // the loop breathing in and out of the earth
+    inline constexpr float kHeroIntfBlend       = 0.25f; // +-0.125 of wet gain: dropouts and lurches
+    inline constexpr float kHeroIntfTonesPitch  = 0.60f; // +-1.2 oct: the loop moves the drone's pitch
+    inline constexpr float kHeroIntfTonesLevel  = 0.50f; // and whether it speaks at all
+
+    // Bounds on the drone once the chaos is driving it. The pitch clamp is
+    // deliberately 3 kHz rather than the parameter's own 2093 Hz ceiling plus
+    // two octaves: Tones::sub is a naive triangle AND it is the Time Mod
+    // modulator, so letting chaotic pitch modulation sweep it to 4 kHz on a
+    // 48 kHz clock would alias straight into the FM path.
+    inline constexpr float kTonesPitchModClampOct = 2.0f;
+    inline constexpr float kTonesPitchMinHz = 8.0f;
+    inline constexpr float kTonesPitchMaxHz = 3000.0f;
 
     // The Lorenz wander is a tanh and never reaches +-1; this is its measured
     // peak, used so the UI's Time arc draws an honest band rather than one that
@@ -144,7 +158,12 @@ namespace modk
     inline constexpr float kLoopEnvCeiling = 100.0f; // sanitises the one modulation feedback input
 
     // --- Tones and Spread (the optional character, both off by default) ------
-    inline constexpr float kTonesFullLevel = 0.35f;  // drone level into the loop at Tones 100 %
+    // Drone level into the loop at Tones 100 %. At 0.35 the drone measured
+    // -28.3 dBFS with Tones at 60 %, Blend full and Out at 0: an undertone, not
+    // a voice. On the Strega the oscillator IS the instrument and the delay is
+    // what happens to it, and the only thing here that could make sound with no
+    // input at all was a self-oscillating sine.
+    inline constexpr float kTonesFullLevel = 0.9f;
     inline constexpr float kTonesSubMix    = 0.45f;  // how much sub sits under the drone
     inline constexpr float kSpreadMaxMs    = 14.0f;  // Haas offset behind the side component
     // The side is the one output path the loop saturator does not bound, and

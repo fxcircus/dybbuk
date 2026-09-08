@@ -80,6 +80,9 @@ private:
     // The bottom strip's two free windows, added with the wildness pass:
     // Chaos and Crust beside the IN trim, Tones and Pitch beside OUT.
     std::unique_ptr<EngravedKnob> chaosKnob, crustKnob, tonesKnob, pitchKnob;
+    // Aim-and-forget controls, in the free band between the hero row and the
+    // lamp: the two knob rows are full and these are not knobs you ride.
+    std::unique_ptr<EngravedTrim> foldTrim, colourTrim;
     std::unique_ptr<VerticalFader> inFader, outFader;
     std::unique_ptr<DiamondToggle> bypassToggle, syncToggle;
     std::unique_ptr<RailSwitch> modeSwitch;
