@@ -364,11 +364,18 @@ spectral claim and the only number it produced before was a level.
 
 Both figures improved while the loop got hotter, which was the point of moving
 `kSatDrive` and `kDecayMax` in the same commit: the roof comes down as the floor
-goes up. Over the 30 minute soak with every parameter sweeping, Decay through
-the runaway zone and Strength at +20 dB, the mono peak is **0.88** (was 0.98)
-and the stereo peak with Spread at 60 % is **1.10** (was 1.35, and
-`kSpreadMaxWidth` came in to meet the hotter loop). Mean level is -13.7 to
--14.1 dBFS, about 2.4 dB louder than before.
+goes up.
+
+Over the 30 minute soak with EVERY parameter sweeping -- including Chaos, Crust,
+Colour, Tones Fold and Tones Pitch, and therefore including the closed feedback
+path from loop energy through the chaos to the drone's pitch and back -- the
+mono peak is **0.84** (was 0.98 before the pass) and the stereo peak with Spread
+at 60 % is **1.05** (was 1.35). No creep over thirty minutes, no DC.
+
+The new parameters had to be added to that sweep, not just measured once: a
+headroom figure that covers a plugin which no longer exists is worse than no
+figure, and the drone feedback path in particular needs thirty minutes rather
+than three.
 
 The side component is still the one output path the loop saturator does not
 bound, because it is a difference taken after the loop. The mono sum is

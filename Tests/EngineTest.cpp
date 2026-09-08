@@ -1482,6 +1482,18 @@ void soak()
         // show up as a level change and look like the loop creeping.
         p.tonesLevel01 = 0.3f;
         p.spread01 = 0.6f;
+
+        // The wildness pass's parameters sweep here too. Without them this
+        // scenario's headroom figure -- which is the number the whole gain
+        // staging is signed off against -- would cover a plugin that no longer
+        // exists. Chaos in particular closes a feedback path (loop energy ->
+        // chaos -> the drone's pitch and level -> the loop), and that path has
+        // to be watched for thirty minutes, not three.
+        p.chaos01 = 0.5f + 0.5f * (float) std::sin (t * 0.007);
+        p.crust01 = 0.5f + 0.5f * (float) std::sin (t * 0.043);
+        p.colour01 = 0.5f + 0.5f * (float) std::sin (t * 0.0053);
+        p.tonesFold01 = 0.5f + 0.5f * (float) std::sin (t * 0.0071);
+        p.tonesPitchHz = 55.0f * std::pow (16.0f, 0.5f + 0.5f * (float) std::sin (t * 0.0091));
         p.bypass = std::fmod (t, 300.0) > 290.0; // in and out of circuit every five minutes
 
         for (int i = 0; i < block; ++i)

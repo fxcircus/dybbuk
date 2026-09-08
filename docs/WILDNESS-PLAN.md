@@ -10,14 +10,33 @@ round adversarially verified every claim (several were refuted and are recorded
 as such), then four independent designs were written from different
 philosophies, scored head to head by three judge lenses, and synthesised.
 
-**Stage 1 is done** and is written up in `docs/PROGRESS.md`. Stages 2 to 4 are
-below as specified, with the four calls that belong to Roy listed at the end.
-Anything here can still be argued with — the measurements are the part to
-trust, not the prescriptions.
+**Stages 1, 2 and 3 are done** and are written up in `docs/PROGRESS.md`. What
+remains from this plan is **stage 4**, the Touch gesture, below. Roy answered
+the four decisions with "whatever you decide, but keep it musical — each control
+needs to do something audible and inspiring to a musician", so every new control
+gained a scenario whose job is to prove it is worth turning.
 
-Where a stage-1 number below disagrees with PROGRESS, PROGRESS wins: two of the
-plan's prescriptions were measured and changed during implementation (the tap
-weights, and kDecayMax's justification).
+**Where this file disagrees with PROGRESS, PROGRESS wins.** Several of the
+plan's prescriptions were measured during implementation and changed:
+
+- the tap weights stop at { 1, 0.7, 0.5 } rather than { 1, 0.5, 0.35 }, because
+  the further value costs the plan's own tell 1 (`EngineTest repitch`)
+- `kDecayMax` 1.45 was confirmed by `sustain` rather than by the dB budget the
+  plan argued from, and the first version of that scenario was measuring the
+  clamp rather than the loop
+- Interference to Blend was measured at three depths and left at the smallest,
+  because a self-oscillating loop's level is regulated by the saturator and no
+  depth moved it
+- the Crust THD measurement had to move to a 100 Hz fundamental, because at full
+  Crust the reconstruction filter removes the harmonics of a 400 Hz tone and the
+  distortion reads LOWER the more destroyed the chip is
+- `agitfm` first landed on a comb null, which turned out to be worth documenting:
+  one clock drives the write and the read, so modulation cancels when the delay
+  is a whole number of modulator periods
+
+Stage 4 has NOT been started, deliberately. Three stages of change have landed
+without ears on them, and the project's own rule is that a phase gate is not
+passed until it has been listened to.
 
 ########## STAGE 2: The chaos gets its own hand, and the clock gets room
 GOAL: Split the one macro into per-source gains so the chaotic source has a control of its own, wire the cells that already have live consumers, give Agitation a per-sample route to the clock so a rate knob finally bends pitch, unhook the chip's destruction from the Time knob, and put four faces on the plate. Two new parameters, four new knobs.
