@@ -1002,6 +1002,10 @@ void render()
           0.0f, 0.0f, 0.25f, 0.0f, 220.0f, 0.0f },
         { "dybbuk_scream", time01ForSeconds (0.25), 1.35f, 2500.0f, 0.85f, 0.1f, 0.9f, 0.3f, 0.5f, 0.15f, false, false,
           0.4f, 0.0f, 0.6f, 0.0f, 110.0f, 0.0f },
+        // Chaos at a depth a player would actually use, for judging how much of
+        // it should be crackle rather than wander.
+        { "dybbuk_chaos", time01ForSeconds (0.4), 0.75f, 2200.0f, 0.35f, 0.2f, 0.75f, 0.15f, 0.3f, 0.0f, false, false,
+          0.4f, 0.0f, 0.15f, 0.0f, 110.0f, 0.0f },
         // Nothing is played into this one at any point.
         { "dybbuk_possession", time01ForSeconds (0.6), 1.05f, 1400.0f, 0.6f, 0.15f, 1.0f, 0.2f, 0.2f, 0.0f, true, false,
           0.8f, 0.0f, 0.3f, 0.6f, 65.4f, 0.4f },
@@ -1256,6 +1260,49 @@ void interference()
            "RMS " + juce::String (warm, 4) + " when warm");
     check ("wilder when the loop is hot", hot > warm,
            "RMS " + juce::String (hot, 4) + " when hot versus " + juce::String (warm, 4) + " warm");
+
+    // What the source is MADE of, which is the question when someone says it
+    // sounds noisy. The wander is the slow chaotic bend; the crackle is a
+    // sparse tick train on top whose density grows with the square of the
+    // energy. Only the crackle is fast enough to read as noise, and only the
+    // Time destination receives it -- the control-rate destinations take
+    // wander() alone -- so any grit the chaos adds arrives as jitter on the
+    // delay clock.
+    for (float loopEnv : { 0.05f, 0.2f, 0.5f })
+    {
+        Interference intf;
+        intf.prepare (sr);
+        intf.seed (11u);
+
+        double wanderSq = 0.0, totalSq = 0.0, crackleSq = 0.0;
+        int count = 0;
+        const int ticks = (int) (sr / modk::kControlBlock * 8.0);
+        for (int t = 0; t < ticks; ++t)
+        {
+            intf.tick (loopEnv, 0.0f);
+            for (int i = 0; i < modk::kControlBlock; ++i)
+            {
+                const float total = intf.nextSample();
+                const float w = intf.wander();
+                if (t > ticks / 2)
+                {
+                    wanderSq += (double) w * w;
+                    totalSq += (double) total * total;
+                    const double c = (double) total - (double) w;
+                    crackleSq += c * c;
+                    ++count;
+                }
+            }
+        }
+        const double n = juce::jmax (1, count);
+        note ("what the chaos is made of",
+              "loopEnv " + juce::String (loopEnv, 2) + ": wander RMS "
+                  + juce::String (std::sqrt (wanderSq / n), 4) + ", crackle RMS "
+                  + juce::String (std::sqrt (crackleSq / n), 4) + ", crackle is "
+                  + juce::String (100.0 * std::sqrt (crackleSq / n)
+                                      / juce::jmax (1.0e-9, std::sqrt (totalSq / n)), 1)
+                  + " % of the total");
+    }
 }
 
 // Tell 4, at the engine level: the always-on drift means two runs of the same

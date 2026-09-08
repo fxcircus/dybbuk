@@ -341,9 +341,14 @@ mode of the first playthrough written into the harness.
   through one stage and `probe` returned the same self-oscillation level at
   Filter 4 k, 8 k and 18 k. The top fifth of the knob was provably inaudible and
   the old default sat inside it, which is why AGITATE read as cosmetic.
-- **Agitate 0 -> 25 %, Chaos ships at 20 %.** A fresh instance now modulates
-  itself. Chaos is gated by loop energy, so it stays quiet until you play into
-  it.
+- **Agitate 0 -> 25 %, Chaos ships at 2 %.** A fresh instance now modulates
+  itself. Chaos first shipped at 20 % and Roy's read on hearing it was "adds
+  too much noise", which the arithmetic backs up: at 20 % the chaos bends the
+  chip clock by 151 cents at the peak and 62 cents RMS, which is a semitone and
+  a half of continuous random pitch. At 2 % it is 15 cents peak and 6 RMS, the
+  same order as the always-on Drift trim -- present, and not something you would
+  name unless you were looking for it. See the open finding on the crackle
+  below for the other half of why it read as noise rather than as movement.
 - **Agitation to Filter is bipolar-centred**, a deliberate departure from the
   hardware's unipolar 0-6 V normal, recorded in DESIGN.md section 4a. The source
   is a unipolar ramp whose mean is exactly 0.5, so half the route was permanent
@@ -468,6 +473,35 @@ silence at Decay 1.45, Time 0.30, Filter 2 kHz:
 
 The red zone is now reachable at every Absorb setting including 100 %, which is
 what the hatching on the plate has been promising since Phase 5.
+
+## Open finding: how much of the chaos should be crackle
+
+Roy, on the first Chaos default: "adds too much noise". Half of that was the
+depth and is fixed (20 % -> 2 %). The other half is what the source is MADE of,
+and it is an ear call.
+
+`Interference` sums two things: a slow chaotic wander from the Lorenz system,
+and a sparse tick train whose density grows with the square of the loop's
+energy. `EngineTest interference` now prints the split:
+
+| loop envelope | wander RMS | crackle RMS | crackle share |
+|---|---|---|---|
+| 0.05 | 0.2331 | 0.0981 | 38.7 % |
+| 0.20 | 0.2615 | 0.1366 | 46.4 % |
+| 0.50 | 0.2795 | 0.1576 | 49.3 % |
+
+So at a hot loop, half of what the Chaos knob delivers is a tick train rather
+than chaotic movement -- and it is the fast half, which is what reads as noise.
+Only the Time destination receives it (`nextSample`); the control-rate
+destinations take `wander()` alone, which has no crackle in it. So the grit
+arrives specifically as jitter on the delay clock.
+
+Not changed, because it is a character decision rather than a defect:
+dybbuk-plan.md section 1.3 describes Interference as sounding like "shortwave
+crackle/static", so the ticks are the plan's own intent, and lowering
+`kCrackleAmp` changes the sound at every Chaos setting rather than only the
+default. Three renders at Chaos 40 % with `kCrackleAmp` at 0.6, 0.3 and 0.0 are
+staged for a listen. It is one constant either way.
 
 ## Open finding: how far the tap rebalance should go
 

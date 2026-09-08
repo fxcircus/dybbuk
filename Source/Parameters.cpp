@@ -261,7 +261,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // there was no setting at which you could have the haunted, self-driven
     // behaviour without also imposing a periodic triangle on the cutoff. It is
     // gated by the loop's own energy, so it stays quiet until you play into it.
-    layout.add (percentWithWord (18, id::chaos, "Chaos", 20.0f, "Still"));
+    //
+    // Ships at 2 %, not the 20 % it first shipped at: 20 read as noise rather
+    // than as movement. At 2 % the clock wanders by about 15 cents at the peak,
+    // which is the same order as the always-on Drift trim -- present, and not
+    // something you would name if you were not looking for it.
+    layout.add (percentWithWord (18, id::chaos, "Chaos", 2.0f, "Still"));
 
     // 19. Crust. How destroyed the chip is, independent of how long the delay
     // is. Every degradation axis used to be a function of Time alone, so a
