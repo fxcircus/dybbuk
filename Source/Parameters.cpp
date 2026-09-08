@@ -167,8 +167,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // 3. Filter: integers all the way down, because its floor is 20 Hz. The
     // two-decimals-below-100 rule exists for LFO rates, not for cutoffs.
+    //
+    // The top is 12 kHz, not 18 kHz, and the default is 2 kHz, not 8 kHz. Each
+    // of the three chip stages carries a fixed 4.5 kHz output filter, so
+    // `EngineTest bandwidth` measures 8 kHz at -25.6 dB through ONE stage and
+    // `probe` returns the same self-oscillation level at Filter 4 k, 8 k and
+    // 18 k: the top fifth of the old knob was provably inaudible, and the old
+    // default sat inside it. At 2 kHz on a 20..12000 range the knob sits at
+    // 72 % of travel with live range on both sides, which is what makes the
+    // filter modulation routes audible on a fresh instance instead of leaving
+    // them pinned against a ceiling in dead air.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { id::filter, 3 }, "Filter", logRange (20.0f, 18000.0f), 8000.0f,
+        juce::ParameterID { id::filter, 3 }, "Filter", logRange (20.0f, 12000.0f), 2000.0f,
         juce::AudioParameterFloatAttributes()
             .withLabel ("Hz")
             .withStringFromValueFunction ([] (float v, int) { return juce::String (juce::roundToInt (v)); })));
@@ -176,7 +186,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.add (floatParam (4, id::resonance, "Resonance", { 0.0f, 100.0f, 1.0f }, 15.0f, "%"));
     layout.add (floatParam (5, id::absorb, "Absorb", { 0.0f, 100.0f, 1.0f }, 20.0f, "%"));
     layout.add (floatParam (6, id::blend, "Blend", { 0.0f, 100.0f, 1.0f }, 50.0f, "%"));
-    layout.add (floatParam (7, id::agitate, "Agitate", { 0.0f, 100.0f, 1.0f }, 0.0f, "%"));
+    // 7. Agitate, the macro over the periodic modulation. It defaulted to 0,
+    // and since every route is multiplied by it the entire modulation content
+    // of a fresh instance was Drift's 7 cents of Time trim -- so the plugin's
+    // first impression was a static delay. 25 % gives macro 0.125 under the
+    // 1.5-power curve: a slow filter breath, present but not showy.
+    layout.add (floatParam (7, id::agitate, "Agitate", { 0.0f, 100.0f, 1.0f }, 25.0f, "%"));
 
     // 8. Agit Speed. Below 1 Hz a period is the musical quantity: a twelve
     // second swell is a thought, 0.08 Hz is arithmetic.
@@ -240,6 +255,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
             {
                 return v <= kOutFloorDb + 0.05f ? juce::String ("-Inf") : juce::String (v, 1);
             })));
+
+    // 18. Chaos. Interference -- the loop's own state, fed back as a chaotic
+    // control signal -- used to ride the Agitate macro with everything else, so
+    // there was no setting at which you could have the haunted, self-driven
+    // behaviour without also imposing a periodic triangle on the cutoff. It is
+    // gated by the loop's own energy, so it stays quiet until you play into it.
+    layout.add (percentWithWord (18, id::chaos, "Chaos", 20.0f, "Still"));
+
+    // 19. Crust. How destroyed the chip is, independent of how long the delay
+    // is. Every degradation axis used to be a function of Time alone, so a
+    // short bit-crushed slapback was unreachable at any setting.
+    layout.add (percentWithWord (19, id::crust, "Crust", 0.0f, "Clean"));
 
     // LAST, and hint 1000 so anything added later still sorts before it in AU
     // while staying declared last for VST3. 1 means bypassed, which is the

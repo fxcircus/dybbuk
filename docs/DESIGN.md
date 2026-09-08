@@ -118,6 +118,25 @@ choice to exceed the Strega rather than a claim about it.
   filter's resonance does compress with level; this one compressed so hard that
   the knob was worth 5.8 dB where the loop actually runs, which is not analog
   character, it is a control that stops working when you use it.
+- **Agitation to Filter is bipolar**, centred on the knob, where the hardware's
+  Agitation CV is a unipolar 0 to 6 V that can only open the filter. The
+  hardware's filter is not sitting behind three cascaded fixed 4.5 kHz MFBs and
+  an 8 kHz reconstruction cap; this one is, and the harness prints the proof
+  that the upward half is inaudible here. Centring also removes a DC offset
+  equal to half the route's depth, since the source's mean is exactly 0.5.
+- **Agitation to Time.** A patch, not a normal: the hardware's Time modulation
+  input is normalled to the oscillator's sub-harmonics, and this is the function
+  generator instead. Without it there is no periodic Time modulator below
+  16.35 Hz anywhere in the plugin, so tape wow and vibrato are unreachable.
+- **Crust.** The hardware has one destruction axis and it is the Time knob.
+  This separates them, so a short delay can be destroyed and a long one kept
+  clean.
+- **The fast Interference register.** The hardware's CV2 is a slow-ish control
+  voltage; `kIntfSpeedMax` 45 takes the chaos up to about 32 Hz so it has a
+  flutter register as well as a drunken bend.
+- **Modulation above the Decay knob's ceiling** (`kDecayModHeadroom`). No
+  hardware equivalent: it exists so a played transient can surge the loop past
+  where the knob stops and let it settle back.
 
 ## 5. What was rejected, and why
 

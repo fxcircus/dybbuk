@@ -25,9 +25,13 @@ void Lamp::tick()
     // Amplitude and the odd guttering drop come from the canvas; what is being
     // measured is the engine's own loop energy rather than a guess from the
     // knob positions.
-    const float amp = (runaway ? 0.09f : 0.038f) * (0.45f + 0.55f * agitation) * (0.5f + speed);
+    // Chaos adds to both the depth of the flicker and the rate of the
+    // guttering drops, so a loop that is driving itself LOOKS like it is:
+    // the ember gets restless before the sound does anything you could name.
+    const float amp = (runaway ? 0.09f : 0.038f)
+                      * (0.45f + 0.55f * agitation + 0.9f * chaos) * (0.5f + speed);
     flicker = flicker * kFlickerDecay + (rng.nextFloat() - 0.5f) * amp;
-    if (rng.nextFloat() < (runaway ? 0.02f : 0.006f))
+    if (rng.nextFloat() < (runaway ? 0.02f : 0.006f) + 0.03f * chaos)
         flicker -= 0.35f;
 
     const float wanted = bypassed ? 0.03f : target;

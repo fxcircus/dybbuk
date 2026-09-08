@@ -32,6 +32,7 @@ public:
     float getTimeModDepthOct() const { return engine.getTimeModDepthOct(); }
     float getFilterModOct() const { return engine.getFilterModOct(); }
     float getDecayModLinear() const { return engine.getDecayModLinear(); }
+    float getInterferenceEnergy() const { return engine.getInterferenceEnergy(); }
     bool isSyncClamped() const { return syncClamped.load (std::memory_order_relaxed); }
     // Enough for the editor to resolve a synced Time itself, so its readout is
     // right the moment the window opens rather than after the first block.
@@ -97,6 +98,8 @@ private:
     std::atomic<float>* pSpread;
     std::atomic<float>* pBypass;
     std::atomic<float>* pInput;
+    std::atomic<float>* pChaos;
+    std::atomic<float>* pCrust;
 
     // Hosts may report nothing at all (the standalone player reports an
     // engaged position with every field unset), so sync falls back to the

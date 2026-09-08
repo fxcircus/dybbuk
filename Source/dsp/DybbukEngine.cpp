@@ -77,6 +77,7 @@ void DybbukEngine::prepare (double sampleRate, int maxBlockSize)
     samplesUntilTick = modk::kControlBlock;
     agitSum = 0.0f;
     agitMean = 0.0f;
+    strengthGainRamp = 1.0f;
     firstBlock = true;
 }
 
@@ -94,6 +95,7 @@ void DybbukEngine::reset() noexcept
     samplesUntilTick = modk::kControlBlock;
     agitSum = 0.0f;
     agitMean = 0.0f;
+    strengthGainRamp = 1.0f;
     firstBlock = true;
 }
 
@@ -124,7 +126,7 @@ void DybbukEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     tones.setPitch (p.tonesPitchHz);
     agitation.setSpeedHz (p.agitSpeedHz);
     agitation.setMode (p.agitGateMode ? Agitation::Mode::gate : Agitation::Mode::loop);
-    matrix.setMacro (p.agitate01, p.timeMod01);
+    matrix.setMacro (p.agitate01, p.chaos01, p.timeMod01);
 
     if (firstBlock || snapPending)
     {
@@ -134,6 +136,7 @@ void DybbukEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
         dryGainSmooth.setCurrentAndTargetValue (dryGainSmooth.getTargetValue());
         outSmooth.setCurrentAndTargetValue (outSmooth.getTargetValue());
         matrix.snapMacro();
+        strengthGainRamp = matrix.offsets().strengthGain;
         firstBlock = false;
         snapPending = false;
     }
@@ -178,9 +181,19 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
             matrix.tick (agitMean, follower.value01(), interference.wander(), drift.current());
         }
 
+        // Modulation offsets step once per control tick, so anything that
+        // multiplies the signal is RAMPED across the tick rather than applied
+        // as a staircase: a stepped input gain is a click, which is what
+        // CLAUDE.md's SmoothedValue rule exists to prevent. Interference's
+        // wanderInc already uses this idiom.
+        const float strengthGainTarget = matrix.offsets().strengthGain;
+        const float strengthGainStep = sub > 0 ? (strengthGainTarget - strengthGainRamp) / (float) sub
+                                               : 0.0f;
+
         for (int i = 0; i < sub; ++i)
         {
             const int k = pos + i;
+            strengthGainRamp += strengthGainStep;
             // The trim is applied once, ahead of everything, so the dry path
             // and the loop hear the same input and the meter shows what the
             // plugin is actually being fed.
@@ -204,11 +217,17 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
             const float driven = p.bypass
                                      ? 0.0f
                                      : softClip (dry * strengthSmooth.getNextValue()
-                                                 * gainFromDb (matrix.offsets().strengthDb));
+                                                 * strengthGainRamp);
             mono[k] = driven;
 
             const bool onset = follower.processSample (driven);
-            agitSum += agitation.processSample (onset);
+            // Kept, not just accumulated. The mean is what the control-rate
+            // destinations want, but Time is the one audio-rate destination in
+            // the engine and the generator's whole point above about 30 Hz is
+            // that it can reach it: this is the only path by which the top of
+            // the Speed knob is audible at all.
+            const float agit = agitation.processSample (onset);
+            agitSum += agit;
 
             // The internal oscillator leaks into the delay, as it does on the
             // hardware through the Activation Constant. Its sub-harmonic is
@@ -225,11 +244,15 @@ void DybbukEngine::processChunk (juce::AudioBuffer<float>& buffer, int start, in
                 mono[k] = driven + p.tonesLevel01 * modk::kTonesFullLevel
                                        * (tones.main() + modk::kTonesSubMix * tones.sub());
 
-            mod[k] = matrix.timeOctave (interference.nextSample(), drift.nextSample())
-                     + p.timeMod01 * modk::kTimeModMaxOct * tones.sub();
+            // One call, one clamp. The Tones term used to be added out here,
+            // AFTER timeOctave had already clamped, so half the excursion
+            // escaped the bound the constant claimed to enforce.
+            mod[k] = matrix.timeOctave (interference.nextSample(), drift.nextSample(),
+                                        2.0f * agit - 1.0f, tones.sub());
         }
 
         TimeFilterLoop::Params lp;
+        lp.crust01 = p.crust01;
         lp.time01 = p.time01;
         lp.decay = p.decay;
         lp.filterHz = p.filterHz;

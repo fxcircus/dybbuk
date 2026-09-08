@@ -34,9 +34,11 @@ public:
         float outDb = 0.0f;
 
         float agitate01 = 0.0f;
+        float chaos01 = 0.0f;
         float agitSpeedHz = 0.35f;
         bool agitGateMode = false;
         float timeMod01 = 0.0f;
+        float crust01 = 0.0f;
 
         float tonesLevel01 = 0.0f;
         float tonesPitchHz = 110.0f;
@@ -96,11 +98,12 @@ private:
     std::atomic<float> uiTimeMod { 0.0f }, uiFilterMod { 0.0f }, uiDecayMod { 0.0f },
         uiInterference { 0.0f };
 
-    // Persistent across host blocks: the control tick must stay 32 samples
-    // apart whatever size the host hands us.
+    // Persistent across host blocks: the control tick must stay kControlBlock
+    // samples apart whatever size the host hands us.
     int samplesUntilTick = modk::kControlBlock;
     float agitSum = 0.0f;
     float agitMean = 0.0f;
+    float strengthGainRamp = 1.0f; // ramped across each control tick, never stepped
 
     double sr = 48000.0;
     int maxBlock = 512;

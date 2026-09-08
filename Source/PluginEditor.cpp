@@ -5,9 +5,16 @@
 namespace
 {
     // How many octaves each knob's own range spans, for placing the modulation
-    // arc in that knob's coordinates.
-    constexpr float kTimeKnobOctaves = 7.06f;   // 200 kHz down to 1.5 kHz
-    constexpr float kFilterKnobOctaves = 9.81f; // 20 Hz up to 18 kHz
+    // arc in that knob's coordinates. Time's is fixed by the chip's clock range;
+    // Filter's is READ OFF the parameter, because a hand-written 9.81 for a
+    // 20 Hz..18 kHz range silently became wrong the moment the range moved and
+    // the only symptom would have been an arc that drew slightly short.
+    constexpr float kTimeKnobOctaves = 7.06f; // 200 kHz down to 1.5 kHz
+
+    float filterKnobOctaves (const juce::NormalisableRange<float>& r) noexcept
+    {
+        return std::log2 (juce::jmax (r.end, 1.0f) / juce::jmax (r.start, 1.0f));
+    }
 
     // Layout, read off the canvas. The plate is a fixed sheet; nothing here is
     // responsive, which is what keeps a hand-drawn window honest at every size.
@@ -143,7 +150,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     auto& decay = addKnob (decayKnob, params::id::decay, "DECAY", EngravedKnob::heroSpec(),
                            { kHeroX[1], kHeroY }, "0", juce::String::fromUTF8 ("\xe2\x88\x9e").toRawUTF8());
     addKnob (filterKnob, params::id::filter, "FILTER", EngravedKnob::heroSpec(),
-             { kHeroX[2], kHeroY }, "20", "18K");
+             { kHeroX[2], kHeroY }, "20", "12K");
     addKnob (blendKnob, params::id::blend, "BLEND", EngravedKnob::heroSpec(),
              { kHeroX[3], kHeroY }, "DRY", "WET");
 
@@ -214,6 +221,29 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     plate.addAndMakeVisible (*modeSwitch);
     modeSwitch->setBounds (canvasW / 2 - 48, kBottomY - 15, 96, 34);
 
+    // The bottom strip's two free windows. A documented deviation from the v3
+    // Claude Design canvas, which this session cannot open -- recorded in
+    // PROGRESS beside the four existing ones.
+    //
+    // Geometry, measured rather than guessed: the IN fader ends at x 68 and
+    // AGITATE's box starts at 276, leaving 208 px; SPEED's box ends at 624 and
+    // the OUT fader starts at 832, leaving another 208. A midSpec box is 92 px
+    // wide and 126 tall, so two fit in each window with 8 px clear on every
+    // edge, and at kBottomY they span y 489..615 inside the 620 px plate.
+    //
+    // Two of these four are not new features at all: Tones Level and Tones
+    // Pitch have been working DSP with no control anywhere since Phase 4, and
+    // Tones Pitch silently sets the sideband spacing of the TIME MOD knob that
+    // is already on the plate.
+    addKnob (chaosKnob, params::id::chaos, "CHAOS", EngravedKnob::midSpec(),
+             { 122, kBottomY }, "0", "100");
+    addKnob (crustKnob, params::id::crust, "CRUST", EngravedKnob::midSpec(),
+             { 222, kBottomY }, "CLEAN", "RUINED");
+    addKnob (tonesKnob, params::id::toneslevel, "TONES", EngravedKnob::midSpec(),
+             { 678, kBottomY }, "OFF", "100");
+    addKnob (pitchKnob, params::id::tonespitch, "PITCH", EngravedKnob::midSpec(),
+             { 778, kBottomY }, "C1", "C7");
+
     // The plate spells out every unit, because a bare number under a knob is
     // only readable if you already know what the knob is. These follow the
     // canvas, which differs from the host strings in one place: Filter reads
@@ -231,6 +261,34 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
                              : juce::String (juce::roundToInt (hz)) + " Hz";
     });
     blendKnob->setValueTextProvider (percent (params::id::blend));
+
+    // Chaos, Crust and Tones say a word at the bottom of their travel rather
+    // than "0 %", because "Still", "Clean" and "Off" are what they mean.
+    auto percentOrWord = [this] (const char* id, const char* word)
+    {
+        return [this, id, word]
+        {
+            const float v = proc.apvts.getRawParameterValue (id)->load();
+            return v < 0.5f ? juce::String (word)
+                            : juce::String (juce::roundToInt (v)) + " %";
+        };
+    };
+    chaosKnob->setValueTextProvider (percentOrWord (params::id::chaos, "STILL"));
+    crustKnob->setValueTextProvider (percentOrWord (params::id::crust, "CLEAN"));
+    tonesKnob->setValueTextProvider (percentOrWord (params::id::toneslevel, "OFF"));
+
+    // Pitch reads as a note, because it is a drone and it is also the rate of
+    // the Time Mod sidebands: a number in Hz would say neither.
+    pitchKnob->setValueTextProvider ([this]
+    {
+        const float hz = proc.apvts.getRawParameterValue (params::id::tonespitch)->load();
+        const double midi = 69.0 + 12.0 * std::log2 ((double) hz / 440.0);
+        const int note = juce::roundToInt (midi);
+        const int cents = juce::roundToInt ((midi - note) * 100.0);
+        const auto name = juce::MidiMessage::getMidiNoteName (note, true, true, 4);
+        return std::abs (cents) > 5 ? name + (cents > 0 ? " +" : " ") + juce::String (cents)
+                                    : name;
+    });
     timeModKnob->setValueTextProvider (percent (params::id::timemod));
     resonanceKnob->setValueTextProvider (percent (params::id::resonance));
     absorbKnob->setValueTextProvider (percent (params::id::absorb));
@@ -311,6 +369,8 @@ void DybbukEditor::timerCallback()
     lamp.setBypassed (bypassed);
     lamp.setAgitation (proc.apvts.getRawParameterValue (params::id::agitate)->load() * 0.01f,
                        agitateKnob != nullptr ? speedKnob->normalisedValue() : 0.35f);
+    // The engine has published this since Phase 3 and nothing has ever read it.
+    lamp.setChaos (proc.getInterferenceEnergy());
     lamp.tick();
 
     inFader->setLevel (proc.getInputLevel());
@@ -335,7 +395,9 @@ void DybbukEditor::timerCallback()
 
     const float filterOct = proc.getFilterModOct();
     filterKnob->setModulation (std::abs (filterOct) > 0.001f,
-                               filterKnob->normalisedValue() + filterOct / kFilterKnobOctaves);
+                               filterKnob->normalisedValue()
+                                   + filterOct / filterKnobOctaves (
+                                         filterKnob->parameter().getNormalisableRange()));
 
     const float decayMod = proc.getDecayModLinear();
     decayKnob->setModulation (std::abs (decayMod) > 0.001f,

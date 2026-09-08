@@ -20,6 +20,7 @@ void TimeFilterLoop::prepare (double sampleRate, int maxBlockSize)
     resSmooth.reset (sampleRate, smoothSec);
     absorbSmooth.reset (sampleRate, smoothSec);
     cutoffSmooth.reset (sampleRate, smoothSec);
+    crustSmooth.reset (sampleRate, (double) pt::kCrustSmoothSec);
     cutoffSmooth.setCurrentAndTargetValue (18000.0f);
 
     // Normalised so the tap sum has unity gain: that is what makes "Decay
@@ -73,9 +74,23 @@ void TimeFilterLoop::refreshLoopCoeffs() noexcept
     // modulation is in octaves so a sweep sounds the same wherever the knob
     // sits, which is the trap the sibling plugin's tone sweep already fell in.
     const float knobHz = cutoffSmooth.skip (pt::kCtrlInterval);
-    const float modulatedHz = std::abs (modFilterOct) > 1.0e-9f
-                                  ? knobHz * std::exp2 (modFilterOct)
-                                  : knobHz;
+
+    // Upward modulation is COMPRESSED against the ceiling rather than clipped
+    // at it. A hard clamp squared off the top of every sweep -- at the old
+    // default of 8 kHz that was 52 per cent of each agitation cycle sitting
+    // flat against a wall, so what got through was a flat-topped square rather
+    // than the contour the generator was producing. It was also 0.45 * sr, so
+    // the same patch swept a full octave further at 96 kHz than at 48.
+    float m = modFilterOct;
+    if (m > 0.0f)
+    {
+        const float up = std::log2 (juce::jmin (0.45f * (float) sr, pt::kFilterModCeilHz)
+                                    / juce::jmax (knobHz, 1.0f));
+        m = up > 0.05f ? up * pt::fastTanh (m / up) : 0.0f;
+    }
+    // Downward keeps its hard floor, which is correct: there is no wall at
+    // 20 Hz, the knob simply stops.
+    const float modulatedHz = std::abs (m) > 1.0e-9f ? knobHz * std::exp2 (m) : knobHz;
     const float fc = juce::jlimit (20.0f, 0.45f * (float) sr, modulatedHz);
     loopFilter.setG (std::tan (pt::kPi * fc / (float) sr));
 
@@ -94,7 +109,15 @@ void TimeFilterLoop::refreshLoopCoeffs() noexcept
     absorbOutGain = std::pow (10.0f, -pt::kAbsorbOutMaxDb * a * 0.05f);
     absorbFbGain = std::pow (10.0f, -pt::kAbsorbFbMaxDb * pt::kAbsorbFeedbackShare * a * 0.05f);
 
-    decayGain = juce::jlimit (0.0f, pt::kDecayMax, decaySmooth.skip (pt::kCtrlInterval) + modDecay);
+    // The KNOB is bounded by kDecayMax; the knob PLUS modulation is allowed
+    // past it. Clamping the sum to the same ceiling meant that at the top of
+    // Decay the follower contributed exactly nothing, so the one gesture that
+    // could make the loop surge and recover was clipped away precisely where it
+    // would have mattered.
+    decayGain = juce::jlimit (0.0f, pt::kDecayMax * pt::kDecayModHeadroom,
+                              decaySmooth.skip (pt::kCtrlInterval) + modDecay);
+
+    clock.setCrust01 (crustSmooth.skip (pt::kCtrlInterval));
 }
 
 void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& p, const float* modOct)
@@ -122,6 +145,7 @@ void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& 
     cutoffSmooth.setTargetValue (juce::jlimit (20.0f, 0.45f * (float) sr, p.filterHz));
     resSmooth.setTargetValue (juce::jlimit (0.0f, 1.0f, p.resonance01));
     absorbSmooth.setTargetValue (juce::jlimit (0.0f, 1.0f, p.absorb01));
+    crustSmooth.setTargetValue (juce::jlimit (0.0f, 1.0f, p.crust01));
 
     if (firstBlock || snapRequested.exchange (false, std::memory_order_acquire))
     {
@@ -132,6 +156,7 @@ void TimeFilterLoop::process (const float* in, float* wet, int n, const Params& 
         cutoffSmooth.setCurrentAndTargetValue (cutoffSmooth.getTargetValue());
         resSmooth.setCurrentAndTargetValue (resSmooth.getTargetValue());
         absorbSmooth.setCurrentAndTargetValue (absorbSmooth.getTargetValue());
+        crustSmooth.setCurrentAndTargetValue (crustSmooth.getTargetValue());
         controlCountdown = 0;
         refreshLoopCoeffs();
         firstBlock = false;

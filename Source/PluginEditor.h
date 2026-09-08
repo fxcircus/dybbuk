@@ -77,6 +77,9 @@ private:
     std::unique_ptr<EngravedKnob> timeKnob, decayKnob, filterKnob, blendKnob;
     std::unique_ptr<EngravedKnob> timeModKnob, strengthKnob, resonanceKnob, absorbKnob;
     std::unique_ptr<EngravedKnob> agitateKnob, speedKnob;
+    // The bottom strip's two free windows, added with the wildness pass:
+    // Chaos and Crust beside the IN trim, Tones and Pitch beside OUT.
+    std::unique_ptr<EngravedKnob> chaosKnob, crustKnob, tonesKnob, pitchKnob;
     std::unique_ptr<VerticalFader> inFader, outFader;
     std::unique_ptr<DiamondToggle> bypassToggle, syncToggle;
     std::unique_ptr<RailSwitch> modeSwitch;

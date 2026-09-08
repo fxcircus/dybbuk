@@ -31,6 +31,8 @@ namespace id
     inline constexpr auto tonespitch = "tonespitch";
     inline constexpr auto spread     = "spread";
     inline constexpr auto input      = "in";
+    inline constexpr auto chaos      = "chaos";
+    inline constexpr auto crust      = "crust";
     inline constexpr auto bypass     = "bypass";
 } // namespace id
 

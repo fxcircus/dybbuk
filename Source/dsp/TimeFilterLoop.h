@@ -25,6 +25,7 @@ public:
         // Harness defaults. The user's defaults live in the APVTS layout
         // (CLAUDE.md: defaults belong to the user).
         float time01 = 0.3f;
+        float crust01 = 0.0f; // how destroyed the chip is, independent of Time
         float decay = 0.5f;
         float filterHz = 18000.0f;
         float resonance01 = 0.2f;
@@ -72,7 +73,7 @@ private:
     OnePole absorbShelf;
     LoopSaturator sat;
 
-    juce::SmoothedValue<float> decaySmooth, resSmooth, absorbSmooth;
+    juce::SmoothedValue<float> decaySmooth, resSmooth, absorbSmooth, crustSmooth;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> cutoffSmooth;
 
     std::array<float, 3> tapWeight { { 1.0f, 0.0f, 0.0f } };

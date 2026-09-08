@@ -56,8 +56,17 @@ namespace pt
     // --- clock --------------------------------------------------------------
     inline constexpr float kFsChipMax     = 200000.0f;  // Time 0: 27.5 ms, in spec, clean
     inline constexpr float kFsChipMin     = 1500.0f;    // Time 1: 3.67 s, far past spec, destroyed
-    inline constexpr float kFsChipHardMax = 250000.0f;  // FM excursion headroom before clamping
-    inline constexpr float kFsChipHardMin = 750.0f;
+    // FM excursion headroom before clamping, and it is an INVARIANT rather than
+    // a pair of round numbers: min(headroom up at Time 0, headroom down at
+    // Time 1) = log2(3) = 1.585 octaves, which must stay strictly above
+    // modk::kTimeModClampOct. The modulator is therefore compressed by its own
+    // clamp before the clock is ever flat-topped, at EVERY Time setting.
+    //
+    // At 250000 / 750 the headroom was 0.32 octaves up and 1.0 down, so deep FM
+    // squared off against a wall at the short end of Time -- which is exactly
+    // where PT2399 clock FM is most metallic and most wanted.
+    inline constexpr float kFsChipHardMax = 600000.0f;
+    inline constexpr float kFsChipHardMin = 500.0f;
     inline constexpr float kLogFsMax      = 12.2060726f; // ln(200000)
     inline constexpr float kLogRange      = 4.8928527f;  // ln(200000 / 1500)
     inline constexpr float kInvLogRange   = 0.2043807f;
@@ -91,6 +100,39 @@ namespace pt
     inline constexpr float kOutMfbFc = 4500.0f; // fixed darkness: "flat to about 1 kHz then rolls off"
     inline constexpr float kOutMfbQ  = 0.6f;
     inline constexpr int   kGuardPoles = 1;     // 0, 1 or 2 tracking write-guard poles (long-Time character)
+
+    // Crust: the chip's destruction, decoupled from the delay time.
+    //
+    // Every grunge axis -- converter drive, bit depth, hiss, bandwidth -- was a
+    // monotone function of the clock, and the clock is the Time knob. So
+    // degradation was a side effect of choosing a long delay and never a
+    // choice: a 200 ms slapback that is bit-crushed, hissing and folding, which
+    // is the most-wanted lo-fi sound there is, was unreachable at every
+    // combination of the eighteen parameters.
+    //
+    // Crust pushes the degradation coordinate toward its floor independently of
+    // where the clock is, so Time keeps setting the musical function of the
+    // delay and Crust sets how destroyed it is. At 0 it is bit-identical to
+    // before at every Time setting, which is what makes `thd` and `noise` the
+    // orthogonality gate.
+    inline constexpr float kUDegMax     = 1.25f; // what the 500 Hz hard floor reaches
+    inline constexpr float kCrustBandOct = 4.0f; // 8 kHz down to 500 Hz at full Crust
+    inline constexpr float kBitsFloor   = 6.0f;  // even a destroyed chip keeps six bits
+    inline constexpr float kCrustSmoothSec = 0.030f;
+
+    // The modulated cutoff's soft ceiling. A hard clamp squared the top of
+    // every filter sweep off into a flat line, and did it at 0.45 * sr, so the
+    // SAME patch swept 1.43 octaves at 48 kHz and 2.43 at 96 kHz. Compressing
+    // the modulator against the ceiling instead keeps its shape as the depth
+    // runs out, and makes the sweep sample-rate independent.
+    inline constexpr float kFilterModCeilHz = 12000.0f;
+
+    // Modulation may push Decay past where the knob stops. That is the one
+    // gesture that makes an instrument feel dangerous: hit it hard, the loop
+    // surges past its own ceiling, and it settles back. The saturator bounds
+    // the result regardless of gain, so what this changes is how fast the loop
+    // gets there, not where it stops.
+    inline constexpr float kDecayModHeadroom = 1.15f;
 
     // Clock bleed: the ticking and burbling the Strega exposes instead of hiding.
     //

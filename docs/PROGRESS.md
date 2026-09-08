@@ -50,15 +50,16 @@ disagree with what is written here, this wins.
 
 ## Current state
 
-- Parameter count: 18, in Push bank order, all automatable (an IN trim came
-  with the v3 canvas)
+- Parameter count: 20, in Push bank order, all automatable (an IN trim came
+  with the v3 canvas; Chaos and Crust came with the wildness pass)
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 27 scenarios plus `render` (102 checks, 0 failures; 2.5 s
-  without the 30 minute soak, 8.3 s with it)
+- `EngineTest`: 31 scenarios plus `render` (116 checks, 0 failures; 2.8 s
+  without the 30 minute soak, 9.0 s with it)
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
 - Four factory presets ship as code tables and are proven to sound
 - UI: the v3 Claude Design canvas, both sheets, engraved line-art knobs, the
-  lamp, and metered IN and OUT trims on the edges
+  lamp (now flickering with the chaos), fourteen knobs, and metered IN and OUT
+  trims on the edges
 - Known issues: one open ear question on the tap rebalance, below; the
   listening gates are the user's call
 
@@ -91,6 +92,124 @@ wanted.
 The noise floor at the longest Time reads 14 dB lower than it did (-60 dBFS
 rather than -46) because most of what the old measurement was picking up was
 the squeal, not hiss.
+
+## Stage 2 of the wildness pass (2026-09-07)
+
+Stage 1 took the ceilings off the loop. This one gives the modulation system a
+reach and a pair of hands, and unhooks the chip's destruction from the delay
+time. Two new parameters, four new knobs.
+
+**Chaos gets its own control.** Every route was multiplied by one macro, so at
+Agitate 0 -- the shipped default -- the entire modulation content of the plugin
+was Drift's 7 cents of Time trim, and the only way to unmute the chaotic source
+was to simultaneously impose a periodic triangle on the cutoff. The matrix now
+has per-SOURCE gains: Agitate scales the periodic side, `chaos` scales the whole
+Interference row, Drift stays outside both. There is finally a setting at which
+the instrument haunts itself without an LFO on top.
+
+**The matrix reaches something.** Three of twenty-eight cells were non-zero and
+`setDepth` had no caller anywhere, so Resonance, Absorb, Blend and Strength were
+dead destinations for the life of the plugin. Now wired: Agitation to Time (wow,
+vibrato, then clang), Follower to Filter and to Strength (play harder, the loop
+opens and drives harder -- into a clipper ahead of the loop, so it cannot
+destabilise anything), Interference to Filter, Resonance and Absorb.
+
+**A rate knob finally bends pitch.** The only periodic Time modulator was the
+Tones sub-harmonic, whose floor is 16.35 Hz, so tape wow, vibrato and chorus
+were impossible at every setting -- including in the preset named "Wow and
+Flutter", whose wobble was actually un-steerable chaos. Agitation now has a
+per-sample path to the clock. `EngineTest agitfm` measures 760 cents of bend at
+0.8 Hz and 1729 at 5 Hz, and a sideband grid 1.77 times the carrier at 275 Hz.
+
+That scenario also documents something worth knowing: **this delay's FM has
+nulls.** One clock drives the write and the read, so what repitches buffered
+content is the difference between the modulator now and one delay-time ago --
+and when the delay is a whole number of modulator periods that difference is
+zero and the modulation cancels. At Time 0.25 the nulls are 10.8 Hz apart, and
+300 Hz sits close enough to one that the grid collapses from 1.77 to 0.28.
+
+**Time Mod got a taper instead of an amputation.** The first playthrough cut it
+8x, from 2.0 octaves to 0.25, linearly -- which deleted the destroyed-pitch
+region rather than relocating it, and left the knob topping out at exactly the
+point the original complaint was about. `timeModOctaves` is the old linear curve
+plus a quartic tail: 0.0328 octaves at 13 % of the knob against the old 0.0325,
+so every position tuned by ear is unchanged to within one per cent, and the top
+30 % is the region that never existed. 15 semitones at the top, and the sideband
+grid goes from 0.24 of the carrier to 16.7.
+
+**Two bugs on the Time column.** Time Mod's depth was added into the
+Interference cell and then multiplied by the chaos sample, so the knob was
+secretly a second chaos-depth control whose smear rode loop energy -- the
+metallic grid got LESS defined the harder you played. The Tones term was also
+added after `timeOctave` had clamped, so half the excursion escaped the bound
+its own constant claimed to enforce. There are now four independent terms,
+summed and clamped once. **`EngineTest generative` had to be re-pointed at the
+Chaos control as part of this**, because 100 % of the chaos it was measuring
+came through that bug; left alone it would have gone on passing while testing a
+modulator that had just been switched off.
+
+**Crust.** Every degradation axis -- converter drive, bit depth, hiss,
+bandwidth -- was a monotone function of the clock, and the clock is the Time
+knob, so destruction was a side effect of choosing a long delay and never a
+choice. At a 57 ms slapback Crust now takes THD from 2.8 % to 9.8 %, the floor
+from -88.9 to -56.0 dBFS, and 2 kHz down 43.6 dB relative to 200 Hz. At zero it
+is bit-identical, which is what keeps `thd` and `noise` a calibration rather
+than a coincidence.
+
+**The clock got room, and the bleed got a clamp in the same commit.**
+`kFsChipHardMax` / `kFsChipHardMin` 250000 / 750 -> 600000 / 500, stated as an
+invariant: log2(3) = 1.585 octaves of headroom in BOTH directions against a
+1.5 octave modulation clamp, so the modulator is compressed by its own clamp
+before the clock is ever flat-topped. The bleed exponent was unclamped and
+`kInvLogBleed` normalises against 1500 Hz, so widening the floor would have
+quietly re-opened the pitched squeal removed by ear in 6917f69 -- fs/2 at a 1 s
+delay is 2751 Hz, which is the tone that was reported. `bleed` still measures
+-86.6 dBFS on an empty loop.
+
+**The filter's sweep stopped squaring off.** Upward modulation is compressed
+against a fixed 12 kHz ceiling rather than clipped at 0.45 x sr, so the
+modulator keeps its shape as the depth runs out and the same patch sweeps
+identically at 44.1, 48 and 96 kHz.
+
+**Modulation may now push Decay past where the knob stops** (`kDecayModHeadroom`
+1.15), so a hard hit can surge the loop past its own ceiling and let it settle
+back. The saturator bounds the result regardless of gain.
+
+Control rate doubled to 3 kHz with `kInvControlBlock` now DERIVED rather than
+written out again as a literal -- as a hand-written 1/32 it was a landmine, since
+changing the block alone would have broken both the source ramp interpolation
+and the agitation mean with no compile error. Interference's speed ceiling went
+from about 13 Hz to about 32, so the chaos has a flutter register and not only a
+drunken bend. The follower's full scale went to 0.65 so a slam has somewhere to
+go now that it drives three destinations.
+
+**Four knobs on the plate**, a documented deviation from the v3 canvas: CHAOS
+and CRUST beside the IN trim, TONES and PITCH beside OUT, in the two 208 px
+windows either side of AGITATE and SPEED. Two of them are not new features --
+Tones Level and Tones Pitch have been working DSP with no control since Phase 4,
+and Tones Pitch silently sets the sideband spacing of the TIME MOD knob that was
+already on the plate. **The lamp now flickers with the chaos**, from an atomic
+the engine has published since Phase 3 and nothing ever read: a self-playing
+instrument you cannot watch is one a player concludes is doing nothing.
+
+Every new control has a scenario whose job is to prove it is worth turning, not
+that it exists: `crust`, `timemod`, `agitfm` and `routes`. That is the failure
+mode of the first playthrough written into the harness.
+
+### Defaults changed, with Roy's sign-off
+
+- **Filter 8000 -> 2000 Hz, range top 18000 -> 12000.** Each chip stage carries
+  a fixed 4.5 kHz output filter, so `bandwidth` measures 8 kHz at -25.6 dB
+  through one stage and `probe` returned the same self-oscillation level at
+  Filter 4 k, 8 k and 18 k. The top fifth of the knob was provably inaudible and
+  the old default sat inside it, which is why AGITATE read as cosmetic.
+- **Agitate 0 -> 25 %, Chaos ships at 20 %.** A fresh instance now modulates
+  itself. Chaos is gated by loop energy, so it stays quiet until you play into
+  it.
+- **Agitation to Filter is bipolar-centred**, a deliberate departure from the
+  hardware's unipolar 0-6 V normal, recorded in DESIGN.md section 4a. The source
+  is a unipolar ramp whose mean is exactly 0.5, so half the route was permanent
+  DC brightening pinned against the cutoff ceiling before the sweep began.
 
 ## Stage 1 of the wildness pass (2026-09-07)
 

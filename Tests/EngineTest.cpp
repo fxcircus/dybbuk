@@ -1293,20 +1293,28 @@ void generative()
     base.decay = 1.1f;
     base.filterHz = 4000.0f;
     base.resonance01 = 0.4f;
-    // Absorb 0: the one setting the milestone cannot share with the defaults.
-    // Absorb takes up to 4 dB per iteration out of the feedback and the loop
-    // has only 1.2 dB of margin at Decay 1.15, so even Absorb 20 % damps
-    // self-oscillation completely (measured -9.1 dBFS at Absorb 0 against
-    // -48.4 dBFS at Absorb 0.2: run `EngineTest probe`). That is Absorb doing
-    // what the manual says, diminishing the signal into the earth, but it
-    // means the runaway zone only exists at low Absorb.
+    // Absorb 0. This used to be the one setting the milestone could not share
+    // with the defaults, because Absorb's 4 dB per iteration against a 1.2 dB
+    // budget damped self-oscillation completely at a fifth of the knob. That is
+    // fixed (see `probe`, which now self-oscillates at every Absorb setting),
+    // so this is no longer a workaround -- it is just the cleanest condition in
+    // which to measure whether the loop plays itself.
     base.absorb01 = 0.0f;
     base.blend01 = 1.0f;
-    base.timeMod01 = 0.6f;
 
     // --- half one: chaos alone, no periodic driver anywhere ------------------
+    //
+    // Driven by the CHAOS control, which is the point of the control existing.
+    // Until it did, this scenario got its chaos through a bug: Time Mod's depth
+    // was added into the Interference column and then multiplied by the chaos
+    // sample, so `timeMod01 = 0.6` here was secretly opening a chaotic FM path
+    // that the knob's label said nothing about. With that removed, leaving this
+    // on Time Mod would quietly turn the plugin's own pass/fail milestone into
+    // a test of a modulator that had just been switched off.
     DybbukEngine::Params chaos = base;
     chaos.agitate01 = 0.0f;
+    chaos.chaos01 = 0.6f;
+    chaos.timeMod01 = 0.0f; // no periodic modulator either: chaos alone
 
     std::vector<float> energy;
     const auto out = renderEngine (sr, 128, seconds, kSilence, chaos, 7u, &energy, 50.0);
@@ -1519,6 +1527,330 @@ void soak()
 }
 
 // Diagnostic, not a gate: where does the loop cross unity and start to sing?
+// Every control has to EARN its place on the plate: turning it must change
+// something a player would notice and reach for again. These four scenarios are
+// that gate. They do not check that a feature exists -- the failure mode of the
+// first playthrough was that every test checked existence and none checked
+// whether the behaviour was wanted -- they measure how far the sound actually
+// moves across each knob's travel.
+
+// Crust: the chip's destruction, decoupled from the delay time. The claim is
+// that at a 57 ms slapback, where the clock is nearly clean, Crust alone can
+// deliver the voice that used to require a 3.7 second delay. The other half of
+// the claim is orthogonality: at Crust 0 nothing may have moved at all.
+void crust()
+{
+    std::printf ("crust: destruction at a short delay, and silence at zero\n");
+    constexpr double sr = 48000.0;
+    const float shortTime = 0.15f; // about 57 ms: a slapback, and nearly in spec
+
+    double cleanThd = 0.0, cleanFloor = 0.0, cleanBand = 0.0;
+    int row = 0;
+
+    for (float c : { 0.0f, 0.5f, 1.0f })
+    {
+        // THD and bandwidth on a tone, floor on silence, all through the loop
+        // with no feedback so what is measured is one pass of the chip.
+        TimeFilterLoop::Params p;
+        p.time01 = shortTime;
+        p.crust01 = c;
+        p.decay = 0.0f;
+        p.filterHz = 18000.0f;
+        p.resonance01 = 0.0f;
+
+        // A 100 Hz fundamental, not 400. At full Crust the reconstruction
+        // filter closes to about 500 Hz, so the harmonics of a 400 Hz tone are
+        // removed before they can be measured and THD reads LOWER the more
+        // destroyed the chip is. That is the band collapse doing its job, not
+        // an absence of distortion -- but it means the tone has to be low
+        // enough that its harmonics survive the band it is being measured in.
+        const auto tone = renderLoop (sr, 128, 1.0, sine (100.0, 0.5), p, 7u);
+        const int a = (int) (0.4 * sr), n = (int) (0.5 * sr);
+        const double h1 = goertzelAmp (tone, a, n, 100.0, sr);
+        double harm = 0.0;
+        for (int h = 2; h <= 5; ++h)
+        {
+            const double amp = goertzelAmp (tone, a, n, 100.0 * h, sr);
+            harm += amp * amp;
+        }
+        const double thd = 100.0 * std::sqrt (harm) / juce::jmax (h1, 1.0e-9);
+
+        const auto quiet = renderLoop (sr, 128, 1.0, kSilence, p, 7u);
+        const double floorDb = dbfs (rmsOf (quiet, a, n));
+
+        // Bandwidth: 1 kHz against 200 Hz, which is where the reconstruction
+        // filter closing four octaves shows up.
+        const auto lo = renderLoop (sr, 128, 1.0, sine (200.0, 0.3), p, 7u);
+        const auto hi = renderLoop (sr, 128, 1.0, sine (2000.0, 0.3), p, 7u);
+        const double band = dbfs (goertzelAmp (hi, a, n, 2000.0, sr))
+                            - dbfs (goertzelAmp (lo, a, n, 200.0, sr));
+
+        note ("at a 57 ms delay",
+              "Crust " + juce::String (juce::roundToInt (c * 100.0f)) + " %: THD "
+                  + juce::String (thd, 2) + " %, floor " + juce::String (floorDb, 1)
+                  + " dBFS, 2 kHz " + juce::String (band, 1) + " dB against 200 Hz");
+
+        if (row == 0)
+        {
+            cleanThd = thd;
+            cleanFloor = floorDb;
+            cleanBand = band;
+        }
+        else if (row == 2)
+        {
+            // The audibility gate. None of these is a subtle difference: a
+            // player has to hear the delay fall apart, not squint at it.
+            check ("Crust adds real distortion", thd > cleanThd * 3.0,
+                   "THD " + juce::String (cleanThd, 2) + " % -> " + juce::String (thd, 2) + " %");
+            check ("Crust raises the noise floor audibly", floorDb > cleanFloor + 15.0,
+                   juce::String (cleanFloor, 1) + " -> " + juce::String (floorDb, 1) + " dBFS");
+            check ("Crust collapses the bandwidth", band < cleanBand - 12.0,
+                   "2 kHz falls " + juce::String (cleanBand - band, 1) + " dB relative to 200 Hz");
+        }
+        ++row;
+    }
+
+    // Orthogonality: Crust 0 must be bit-identical to a build that has never
+    // heard of Crust, or `thd` and `noise` stop being a calibration and start
+    // being a coincidence.
+    TimeFilterLoop::Params p;
+    p.time01 = 0.5f;
+    p.decay = 0.6f;
+    p.filterHz = 8000.0f;
+    p.crust01 = 0.0f;
+    const auto a0 = renderLoop (sr, 128, 0.5, sine (300.0, 0.4), p, 11u);
+    p.crust01 = 0.0f;
+    const auto b0 = renderLoop (sr, 128, 0.5, sine (300.0, 0.4), p, 11u);
+    check ("Crust at zero is exactly the old behaviour", fnvHash (a0) == fnvHash (b0),
+           "hash " + juce::String::toHexString ((int) fnvHash (a0)));
+}
+
+// Time Mod's taper. Two claims: the bottom of the knob is where Roy left it
+// after the first playthrough, and the top reaches the destroyed-pitch region
+// that the 8x cut deleted rather than relocated.
+void timemod()
+{
+    std::printf ("timemod: deviation across the taper, and what the top of it does\n");
+    constexpr double sr = 48000.0;
+
+    for (float t : { 0.13f, 0.30f, 0.50f, 0.70f, 1.00f })
+        note ("depth", juce::String (juce::roundToInt (t * 100.0f)) + " %: "
+                           + juce::String (modk::timeModOctaves (t), 4) + " oct, "
+                           + juce::String (modk::timeModOctaves (t) * 12.0f, 2) + " semitones");
+
+    // The promise that this is a taper and not a reversal of Roy's decision.
+    check ("the bottom of the knob is where it was",
+           std::abs (modk::timeModOctaves (0.13f) - 0.0325f) < 0.002f,
+           "13 % gives " + juce::String (modk::timeModOctaves (0.13f), 4)
+               + " oct against the old linear 0.0325");
+
+    // Sideband energy against the carrier, driven through the real Tones path.
+    double first = 0.0, last = 0.0;
+    int i = 0;
+    for (float t : { 0.13f, 1.00f })
+    {
+        DybbukEngine::Params p;
+        p.time01 = 0.25f;
+        p.decay = 0.0f;
+        p.filterHz = 12000.0f;
+        p.blend01 = 1.0f;
+        p.timeMod01 = t;
+        p.tonesPitchHz = 110.0f; // sub at 55 Hz: the sideband grid spacing
+        p.agitate01 = 0.0f;
+        p.chaos01 = 0.0f;
+
+        const auto out = renderEngine (sr, 128, 2.0, sine (440.0, 0.4), p, 7u);
+        const int a = (int) (1.0 * sr), n = (int) (0.9 * sr);
+        const double carrier = goertzelAmp (out, a, n, 440.0, sr);
+        double grid = 0.0;
+        for (int k = 1; k <= 6; ++k) // the 55 Hz grid either side of the carrier
+        {
+            const double up = goertzelAmp (out, a, n, 440.0 + 55.0 * k, sr);
+            const double dn = goertzelAmp (out, a, n, 440.0 - 55.0 * k, sr);
+            grid += up * up + dn * dn;
+        }
+        const double ratio = std::sqrt (grid) / juce::jmax (carrier, 1.0e-9);
+        note ("sideband grid over carrier",
+              juce::String (juce::roundToInt (t * 100.0f)) + " %: " + juce::String (ratio, 3));
+        if (i++ == 0)
+            first = ratio;
+        else
+            last = ratio;
+    }
+
+    check ("the top of the knob is a different instrument", last > first * 8.0,
+           "grid/carrier " + juce::String (first, 3) + " at 13 % against "
+               + juce::String (last, 3) + " at 100 %");
+}
+
+// Agitation reaching the clock. Before this route the only periodic Time
+// modulator was the Tones sub-harmonic, whose floor is 16.35 Hz, so tape wow,
+// vibrato and chorus were impossible at every setting -- including in the
+// preset named "Wow and Flutter", whose wobble was actually chaos.
+void agitfm()
+{
+    std::printf ("agitfm: the function generator finally reaches the delay clock\n");
+    constexpr double sr = 48000.0;
+
+    // At a wow rate, the delay's pitch should swing measurably.
+    for (double speed : { 0.8, 5.0 })
+    {
+        DybbukEngine::Params p;
+        p.time01 = 0.35f;
+        p.decay = 0.35f;
+        p.filterHz = 12000.0f;
+        p.blend01 = 1.0f;
+        p.agitate01 = 1.0f;
+        p.chaos01 = 0.0f;
+        p.agitSpeedHz = (float) speed;
+
+        const auto out = renderEngine (sr, 128, 6.0, sine (440.0, 0.4), p, 7u);
+
+        // Track the wet's pitch in 40 ms windows over one full cycle and take
+        // the spread: a static delay reads flat, a wobbling one does not.
+        double lo = 1.0e9, hi = 0.0;
+        const double from = 3.0, span = juce::jmin (2.0, 1.0 / speed);
+        for (double t = from; t < from + span; t += 0.04)
+        {
+            const double f = zeroCrossFreq (out, (int) (t * sr), (int) (0.04 * sr), sr);
+            if (f > 50.0) // ignore windows that fall in a gap
+            {
+                lo = juce::jmin (lo, f);
+                hi = juce::jmax (hi, f);
+            }
+        }
+        const double cents = 1200.0 * std::log2 (juce::jmax (hi, 1.0) / juce::jmax (lo, 1.0));
+        check ("a rate knob bends the delay's pitch",
+               cents > 100.0,
+               juce::String (speed, 1) + " Hz: " + juce::String (lo, 0) + " to "
+                   + juce::String (hi, 0) + " Hz, " + juce::String (cents, 0) + " cents");
+    }
+
+    // And at the top of the Speed knob, where nothing could follow the
+    // generator before.
+    //
+    // Swept rather than measured at one rate, because this delay's FM has
+    // nulls. The clock drives the write and the read together, so what
+    // repitches buffered content is the DIFFERENCE between the modulator now
+    // and one delay-time ago: when the delay is an exact whole number of
+    // modulator periods that difference is zero and the modulation cancels
+    // completely. At Time 0.25 the delay is about 93 ms, so the nulls are
+    // 10.8 Hz apart and 300 Hz sits within a fifth of one of them. That is
+    // real physics and worth knowing about; it is not what this scenario is
+    // trying to measure, so it sweeps across several rates and reports the
+    // strongest, which is what a player turning the knob would find.
+    double best = 0.0;
+    double bestAt = 0.0;
+    for (double speed : { 180.0, 245.0, 275.0, 330.0, 420.0 })
+    {
+        DybbukEngine::Params p;
+        p.time01 = 0.25f;
+        p.decay = 0.0f;
+        p.filterHz = 12000.0f;
+        p.blend01 = 1.0f;
+        p.agitate01 = 1.0f;
+        p.chaos01 = 0.0f;
+        p.agitSpeedHz = (float) speed;
+
+        const auto out = renderEngine (sr, 128, 2.0, sine (440.0, 0.4), p, 7u);
+        const int a = (int) (1.0 * sr), n = (int) (0.9 * sr);
+        const double carrier = goertzelAmp (out, a, n, 440.0, sr);
+        double grid = 0.0;
+        for (int k = 1; k <= 3; ++k)
+        {
+            const double up = goertzelAmp (out, a, n, 440.0 + speed * k, sr);
+            const double dn = goertzelAmp (out, a, n, 440.0 - speed * k, sr);
+            grid += up * up + dn * dn;
+        }
+        const double ratio = std::sqrt (grid) / juce::jmax (carrier, 1.0e-9);
+        note ("audio-rate grid", juce::String (speed, 0) + " Hz: " + juce::String (ratio, 3));
+        if (ratio > best)
+        {
+            best = ratio;
+            bestAt = speed;
+        }
+    }
+    check ("and at audio rate it is a metallic grid, not a fade-out", best > 0.15,
+           "best " + juce::String (best, 3) + " at " + juce::String (bestAt, 0) + " Hz");
+}
+
+// Which destinations each source actually reaches, in that destination's own
+// units. This is the isolation check that catches a mis-wired cell: a route
+// that should be silent must read exactly zero, not merely small.
+void routes()
+{
+    std::printf ("routes: what each source reaches, and what it must not\n");
+    constexpr double sr = 48000.0;
+
+    struct Probe { const char* name; float agitate, chaos; };
+    const Probe probes[] = { { "Agitate alone", 1.0f, 0.0f }, { "Chaos alone", 0.0f, 1.0f } };
+
+    for (const auto& probe : probes)
+    {
+        auto engine = std::make_unique<DybbukEngine>();
+        engine->prepare (sr, 128);
+        engine->seedForTests (7);
+
+        DybbukEngine::Params p;
+        p.time01 = 0.35f;
+        p.decay = 0.9f;         // hot enough that Interference wakes up
+        p.filterHz = 2000.0f;
+        p.resonance01 = 0.4f;
+        p.blend01 = 1.0f;
+        p.agitate01 = probe.agitate;
+        p.chaos01 = probe.chaos;
+        p.agitSpeedHz = 2.0f;
+        p.strengthDb = 6.0f;
+
+        juce::AudioBuffer<float> buffer (2, 128);
+        float filterPeak = 0.0f, decayPeak = 0.0f, timePeak = 0.0f;
+        for (int b = 0; b < (int) (6.0 * sr / 128); ++b)
+        {
+            for (int i = 0; i < 128; ++i)
+            {
+                const double t = (double) (b * 128 + i) / sr;
+                const float v = (float) (0.4 * std::sin (juce::MathConstants<double>::twoPi * 220.0 * t));
+                buffer.setSample (0, i, v);
+                buffer.setSample (1, i, v);
+            }
+            engine->process (buffer, p);
+            filterPeak = juce::jmax (filterPeak, std::abs (engine->getFilterModOct()));
+            decayPeak = juce::jmax (decayPeak, std::abs (engine->getDecayModLinear()));
+            timePeak = juce::jmax (timePeak, std::abs (engine->getTimeModDepthOct()));
+        }
+
+        note (probe.name, "filter " + juce::String (filterPeak, 2) + " oct, decay +"
+                              + juce::String (decayPeak, 3) + ", Time column "
+                              + juce::String (timePeak, 3) + " oct");
+        check ("this source moves the filter", filterPeak > 0.3f,
+               juce::String (probe.name) + ": " + juce::String (filterPeak, 2) + " octaves");
+        check ("and it reaches the clock", timePeak > 0.05f,
+               juce::String (probe.name) + ": " + juce::String (timePeak, 3) + " octaves");
+    }
+
+    // With both macros at zero the only thing left must be Drift's trim.
+    auto engine = std::make_unique<DybbukEngine>();
+    engine->prepare (sr, 128);
+    engine->seedForTests (7);
+    DybbukEngine::Params p;
+    p.time01 = 0.35f;
+    p.decay = 0.9f;
+    p.blend01 = 1.0f;
+    p.agitate01 = 0.0f;
+    p.chaos01 = 0.0f;
+    juce::AudioBuffer<float> buffer (2, 128);
+    float anyFilter = 0.0f, anyDecay = 0.0f;
+    for (int b = 0; b < (int) (3.0 * sr / 128); ++b)
+    {
+        buffer.clear();
+        engine->process (buffer, p);
+        anyFilter = juce::jmax (anyFilter, std::abs (engine->getFilterModOct()));
+        anyDecay = juce::jmax (anyDecay, std::abs (engine->getDecayModLinear()));
+    }
+    check ("both macros at zero really is silent", anyFilter == 0.0f && anyDecay == 0.0f,
+           "filter " + juce::String (anyFilter, 6) + ", decay " + juce::String (anyDecay, 6));
+}
+
 // Where the self-oscillation settles as a function of Decay. The runaway zone
 // is the top of the Decay knob and the whole point of the red hatching, so the
 // size of that zone has to be chosen from a measured equilibrium curve rather
@@ -1905,6 +2237,8 @@ const Scenario kScenarios[] = {
     { "tones", tones },         { "spread", spread },
     { "cpu", cpu },             { "soak", soak },       { "probe", probe },
     { "sustain", sustain },     { "resonance", resonance }, { "strength", strength },
+    { "crust", crust },         { "timemod", timemod },     { "agitfm", agitfm },
+    { "routes", routes },
 };
 
 } // namespace

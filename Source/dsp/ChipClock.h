@@ -18,7 +18,7 @@ public:
     struct Frame
     {
         // Per host sample.
-        int   nTicks     = 0;     // chip ticks that fall inside this host sample (0 to 6)
+        int   nTicks     = 0;     // chip ticks that fall inside this host sample (0 to about 14)
         float invRatio   = 1.0f;  // 1 / (fs_chip / fs_host)
         float tickOffset = 1.0f;  // tick j sits at host fraction (tickOffset + j) * invRatio
         float readFrac   = 0.0f;  // how far past the last tick we are, for the read interpolation
@@ -43,6 +43,9 @@ public:
     void reset() noexcept;      // phase to zero and force a coefficient refresh; the Time target survives
     void snapTime() noexcept;   // first block, prepare, preset load: no 20 ms chirp up from the hard minimum
     void setTime01 (float t) noexcept;
+    // 0 to 1, smoothed by the caller. Independent of Time: it pushes the
+    // degradation coordinate toward the floor wherever the clock happens to be.
+    void setCrust01 (float c) noexcept { crust01 = c < 0.0f ? 0.0f : (c > 1.0f ? 1.0f : c); }
 
     inline const Frame& advance (float modOctaves) noexcept
     {
@@ -98,4 +101,5 @@ private:
     float phase = 0.0f;
     int ctrlCountdown = 0;
     unsigned int ctrlStamp = 0;
+    float crust01 = 0.0f;
 };

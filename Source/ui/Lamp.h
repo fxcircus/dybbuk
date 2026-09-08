@@ -22,6 +22,14 @@ public:
     void setRunaway (bool shouldBeRunaway) noexcept { runaway = shouldBeRunaway; }
     void setBypassed (bool shouldBeBypassed) noexcept { bypassed = shouldBeBypassed; }
     void setAgitation (float agitate01, float speed01) noexcept;
+    // The chaos source's own energy, which the engine already publishes and
+    // nothing consumed. It is the one thing on the plate that moves without
+    // anybody touching a knob, and a self-playing instrument you cannot watch
+    // is one a player concludes is doing nothing.
+    void setChaos (float energy01) noexcept
+    {
+        chaos = energy01 < 0.0f ? 0.0f : (energy01 > 1.0f ? 1.0f : energy01);
+    }
     void flash() noexcept { dip = 1.0f; } // Clear: drop to the ember bed, then re-light
     void tick();
     float liveLevel() const noexcept { return live; }
@@ -30,7 +38,7 @@ public:
 
 private:
     float target = 0.0f, envelope = 0.0f, flicker = 0.0f, live = 0.0f;
-    float agitation = 0.0f, speed = 0.35f;
+    float agitation = 0.0f, speed = 0.35f, chaos = 0.0f;
     bool runaway = false, bypassed = false;
     float runawayMix = 0.0f, dip = 0.0f;
     float lastPainted = -1.0f;
