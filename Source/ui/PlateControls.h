@@ -4,9 +4,9 @@
 
 #include "Theme.h"
 
-// The small marks on the plate: the bypass and sync diamonds, the loop/gate
-// rail, the clear stamp and the theme mark. Each is a handful of lines, so
-// they share one file rather than five.
+// The small marks on the plate: the bypass and sync diamonds, the Record and
+// Full rails, the clear and export stamps, the dice and the theme mark. Each
+// is a handful of lines, so they share one file rather than seven.
 
 // A filled diamond means engaged. Used for Bypass in the header (where the
 // label reads IN or BYPASS) and for Sync beside the Time knob.
@@ -35,14 +35,20 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DiamondToggle)
 };
 
-// The agitation's Loop / Gate slide: a rail with a travelling diamond and the
-// two names beneath it, so the state is readable without knowing which way is
-// on.
+// A two-position slide: a rail with a travelling diamond and the two names
+// beneath it, so the state is readable without knowing which way is on. Used
+// for Full (Replace / Hold) and, with a caption over it and a red carriage
+// while armed, for Record, the main performance control beside Clear.
 class RailSwitch : public juce::Component
 {
 public:
     RailSwitch (juce::RangedAudioParameter& parameterToUse, juce::String leftLabel,
-                juce::String rightLabel);
+                juce::String rightLabel, juce::String caption = {});
+
+    // Fill the carriage red at one end of the travel (-1 none, 0 left, 1
+    // right): the plate's sign for "this is recording".
+    void setRedAt (int side) noexcept { redSide = side; repaint(); }
+    bool isRight() const noexcept { return normValue >= 0.5f; }
 
     void paint (juce::Graphics& g) override;
     void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
@@ -50,12 +56,11 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
 
 private:
-    bool isRight() const noexcept { return normValue >= 0.5f; }
-
     juce::RangedAudioParameter& param;
     juce::ParameterAttachment attachment;
-    juce::String leftText, rightText;
+    juce::String leftText, rightText, captionText;
     float normValue = 0.0f;
+    int redSide = -1;
     bool hovering = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RailSwitch)
@@ -82,6 +87,32 @@ private:
     int flashTicks = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ClearStamp)
+};
+
+// The export stamp beside Record: a ringed tray with a wave on it. Drag it
+// and the pattern leaves as a WAV (onDragStart fires once, a few pixels into
+// the gesture, and the editor hands the file to the OS); click it for a save
+// dialog. Disabled while there is nothing to export, and drawn faded then.
+class ExportStamp : public juce::Component
+{
+public:
+    ExportStamp();
+
+    std::function<void()> onClick;
+    std::function<void()> onDragStart;
+
+    void paint (juce::Graphics& g) override;
+    void enablementChanged() override { repaint(); }
+    void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
+    void mouseExit (const juce::MouseEvent&) override { hovering = false; repaint(); }
+    void mouseDown (const juce::MouseEvent&) override { dragged = false; }
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
+
+private:
+    bool hovering = false, dragged = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ExportStamp)
 };
 
 // A horizontal engraved trim: a caption, a hairline rail with a travelling

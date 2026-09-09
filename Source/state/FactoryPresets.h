@@ -1,8 +1,8 @@
 #pragma once
 
-// The manual's Patch Corner pages, as starting points. They ship as tables in
-// code rather than embedded XML: four presets are a dozen numbers each, a typo
-// in a parameter id fails to compile, the values are reviewable in a diff, and
+// Starting points for the pattern maker. They ship as tables in code rather
+// than embedded XML: five presets are a dozen numbers each, a typo in a
+// parameter id fails to compile, the values are reviewable in a diff, and
 // there is no binary-data target to keep in sync across three build targets.
 //
 // Plain arrays rather than std::initializer_list members: an initializer_list

@@ -4,18 +4,6 @@
 
 namespace
 {
-    // How many octaves each knob's own range spans, for placing the modulation
-    // arc in that knob's coordinates. Time's is fixed by the chip's clock range;
-    // Filter's is READ OFF the parameter, because a hand-written 9.81 for a
-    // 20 Hz..18 kHz range silently became wrong the moment the range moved and
-    // the only symptom would have been an arc that drew slightly short.
-    constexpr float kTimeKnobOctaves = 7.06f; // 200 kHz down to 1.5 kHz
-
-    float filterKnobOctaves (const juce::NormalisableRange<float>& r) noexcept
-    {
-        return std::log2 (juce::jmax (r.end, 1.0f) / juce::jmax (r.start, 1.0f));
-    }
-
     // Layout, read off the canvas. The plate is a fixed sheet; nothing here is
     // responsive, which is what keeps a hand-drawn window honest at every size.
     // The canvas transitions its sheet over 350 ms.
@@ -31,6 +19,11 @@ namespace
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
     constexpr int kMidX[5] = { 151, 300, 450, 600, 749 };
+
+    // The dybbuk's box. Wider than the old lamp so sixteen pips fit around
+    // the ember with room to breathe; it sits between the trims (which end at
+    // y 318) and the clear stamp.
+    constexpr int kLampSize = 128;
 
     juce::Image makeGrain (int w, int h, juce::Random& rng)
     {
@@ -152,7 +145,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     dice.onClick = [this]
     {
         proc.randomiseParameters();
-        // Say what was rolled. A dice that changes eighteen numbers at once is
+        // Say what was rolled. A dice that changes a dozen numbers at once is
         // otherwise unreadable, and the character's name is the one piece of
         // information that makes the patch make sense.
         rolledName = proc.lastRandomCharacter();
@@ -170,201 +163,123 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     outFader->setBounds (canvasW - kFaderW - 8, kRuleY + 6, kFaderW, canvasH - kRuleY - 18);
 
     // --- hero row -------------------------------------------------------------
-    auto& time = addKnob (timeKnob, params::id::time, "TIME", EngravedKnob::heroSpec(),
-                          { kHeroX[0], kHeroY }, "27 MS", "3.6 S");
-    auto& decay = addKnob (decayKnob, params::id::decay, "DECAY", EngravedKnob::heroSpec(),
-                           { kHeroX[1], kHeroY }, "0", juce::String::fromUTF8 ("\xe2\x88\x9e").toRawUTF8());
-    addKnob (filterKnob, params::id::filter, "FILTER", EngravedKnob::heroSpec(),
-             { kHeroX[2], kHeroY }, "20", "12K");
+    auto& step = addKnob (stepKnob, params::id::step, "STEP", EngravedKnob::heroSpec(),
+                          { kHeroX[0], kHeroY }, "20 MS", "2 S");
+    auto& steps = addKnob (stepsKnob, params::id::steps, "STEPS", EngravedKnob::heroSpec(),
+                           { kHeroX[1], kHeroY }, "1", "16");
+    addKnob (thresholdKnob, params::id::threshold, "THRESHOLD", EngravedKnob::heroSpec(),
+             { kHeroX[2], kHeroY }, "-60", "0");
     addKnob (blendKnob, params::id::blend, "BLEND", EngravedKnob::heroSpec(),
              { kHeroX[3], kHeroY }, "DRY", "WET");
 
-    // Time reads as a delay, or as a note division while synced, because a
-    // knob position cannot say what it means.
-    time.setValueTextProvider ([this]
+    // Step reads as a time, or as a note division while synced, because a
+    // knob position cannot say what it means. The free readout shares its
+    // formatter with the host string; the synced one IS the host string.
+    step.setValueTextProvider ([this]
     {
-        const float knob = proc.apvts.getRawParameterValue (params::id::time)->load();
-        if (proc.apvts.getRawParameterValue (params::id::timesync)->load() >= 0.5f)
-        {
-            const int division = timemap::divisionIndexForTime01 (knob);
-            const auto resolved = timemap::syncedDelaySeconds (division, proc.getLastKnownBpm(),
-                                                               (double) proc.getBeatsPerBar());
-            auto text = juce::String (timemap::kDivisions[division].name);
-            if (resolved.clamped)
-                text += " max";
-            return text;
-        }
-        return params::timeReadout ((double) pt::delaySecondsForTime01 (knob));
+        if (proc.isSynced())
+            return juce::String (timemap::kDivisions[timemap::divisionIndexForTime01 (raw (params::id::step))].name);
+        return params::stepReadout (params::stepSecondsForKnob01 (raw (params::id::step)));
     });
 
-    // Decay names its own red zone rather than leaving the colour to explain it.
-    // The threshold is READ OFF THE RANGE rather than computed, because the
-    // range is no longer linear: 1/kDecayMax is 0.690 while unity actually
-    // sits at 0.870, so the hatching would start a fifth of a turn early and
-    // the plate would promise a runaway that is not there yet.
-    decay.setDangerFrom (param (params::id::decay).getNormalisableRange().convertTo0to1 (1.0f));
-    decay.setValueTextProvider ([this]
-    {
-        const float v = proc.apvts.getRawParameterValue (params::id::decay)->load();
-        return juce::String (v, 2) + (v > 1.005f ? " runaway" : "");
-    });
-    decay.onDoubleClick = [this]
-    {
-        proc.requestClear();
-        return true;
-    };
+    // Steps is a count: a detent on every integer and a bare number under it.
+    steps.setDetents (BurstEngine::kMaxSteps);
+    steps.setValueTextProvider ([this] { return juce::String (juce::roundToInt (raw (params::id::steps))); });
 
-    syncToggle = std::make_unique<DiamondToggle> (param (params::id::timesync),
+    thresholdKnob->setValueTextProvider ([this]
+    {
+        return juce::String (raw (params::id::threshold), 1) + " dB";
+    });
+
+    syncToggle = std::make_unique<DiamondToggle> (param (params::id::stepsync),
                                                   DiamondToggle::Style::bare, "SYNC", "SYNC");
     plate.addAndMakeVisible (*syncToggle);
     syncToggle->setBounds (kHeroX[0] + 46, kHeroY - 12, 40, 26);
 
-    // --- second row -----------------------------------------------------------
-    addKnob (timeModKnob, params::id::timemod, "TIME MOD", EngravedKnob::midSpec(),
-             { kMidX[0], kMidY }, "0", "100");
-    addKnob (strengthKnob, params::id::strength, "STRENGTH", EngravedKnob::midSpec(),
-             { kMidX[1], kMidY }, "0", "+40");
-    addKnob (resonanceKnob, params::id::resonance, "RESONANCE", EngravedKnob::midSpec(),
-             { kMidX[3], kMidY }, "0", "100");
-    addKnob (absorbKnob, params::id::absorb, "ABSORB", EngravedKnob::midSpec(),
-             { kMidX[4], kMidY }, "0", "100");
-
-    // The band between the hero boxes (which end at y 278) and the lamp (whose
-    // top is y 324) is empty across the full width. Two trims at y 284..318 sit
-    // 6 px clear of both, flanking the lamp: FOLD to its left, COLOUR to its
-    // right. Verified against the real geometry, not estimated.
-    foldTrim = std::make_unique<EngravedTrim> (param (params::id::tonesfold), "FOLD");
-    plate.addAndMakeVisible (*foldTrim);
-    foldTrim->setBounds (76, 284, 304, 34);
-    foldTrim->setValueTextProvider ([this]
+    // --- second row, around the dybbuk ---------------------------------------
+    addKnob (fillsKnob, params::id::fills, "FILLS", EngravedKnob::midSpec(),
+             { kMidX[0], kMidY }, "OFF", "100");
+    addKnob (chaosKnob, params::id::chaos, "CHAOS", EngravedKnob::midSpec(),
+             { kMidX[1], kMidY }, "STILL", "100");
+    auto& direction = addKnob (directionKnob, params::id::direction, "DIRECTION",
+                               EngravedKnob::midSpec(), { kMidX[3], kMidY }, "FWD", "DRUNK");
+    // Five ways round the pattern: a detent for each, and the word under it.
+    direction.setDetents (BurstEngine::kDirectionCount);
+    direction.setValueTextProvider ([this]
     {
-        const float v = proc.apvts.getRawParameterValue (params::id::tonesfold)->load();
-        return v < 0.5f ? juce::String ("PURE") : juce::String (juce::roundToInt (v)) + " %";
+        auto& d = param (params::id::direction);
+        return d.getText (d.getValue(), 32);
     });
 
-    colourTrim = std::make_unique<EngravedTrim> (param (params::id::colour), "COLOUR");
-    plate.addAndMakeVisible (*colourTrim);
-    colourTrim->setBounds (520, 284, 304, 34);
-    colourTrim->setValueTextProvider ([this]
+    // Full: what an armed pattern does at its ceiling, in the last mid-row
+    // slot. A two-word choice reads better on a rail than as a knob with two
+    // detents.
+    fullSwitch = std::make_unique<RailSwitch> (param (params::id::full), "REPLACE", "HOLD", "FULL");
+    plate.addAndMakeVisible (*fullSwitch);
+    fullSwitch->setBounds (kMidX[4] - 48, kMidY - 25, 96, 50);
+
+    // The band between the hero boxes (which end at y 278) and the dybbuk
+    // (whose top is y 316) is empty across the full width. Two trims at
+    // y 284..318 flank the dybbuk: LENGTH to its left, FADE to its right.
+    lengthTrim = std::make_unique<EngravedTrim> (param (params::id::length), "LENGTH");
+    plate.addAndMakeVisible (*lengthTrim);
+    lengthTrim->setBounds (76, 284, 304, 34);
+    lengthTrim->setValueTextProvider ([this]
     {
-        const float v = proc.apvts.getRawParameterValue (params::id::colour)->load();
-        return v < 0.5f ? juce::String ("DARK") : juce::String (juce::roundToInt (v)) + " %";
+        return juce::String (juce::roundToInt (raw (params::id::length))) + " %";
+    });
+
+    fadeTrim = std::make_unique<EngravedTrim> (param (params::id::fade), "FADE");
+    plate.addAndMakeVisible (*fadeTrim);
+    fadeTrim->setBounds (520, 284, 304, 34);
+    fadeTrim->setValueTextProvider ([this]
+    {
+        const float v = raw (params::id::fade);
+        return v < 0.5f ? juce::String ("NEVER") : juce::String (juce::roundToInt (v)) + " %";
     });
 
     plate.addAndMakeVisible (lamp);
-    lamp.setBounds (kMidX[2] - 52, kMidY - 56, 104, 104);
+    lamp.setBounds (kMidX[2] - kLampSize / 2, kMidY - kLampSize / 2, kLampSize, kLampSize);
 
     plate.addAndMakeVisible (clearStamp);
-    clearStamp.setBounds (kMidX[2] - 24, kMidY + 52, 48, 40);
+    clearStamp.setBounds (kMidX[2] - 24, kMidY + kLampSize / 2, 48, 40);
     clearStamp.onClick = [this] { proc.requestClear(); };
 
     // --- bottom strip ---------------------------------------------------------
-    addKnob (agitateKnob, params::id::agitate, "AGITATE", EngravedKnob::macroSpec(),
-             { 330, kBottomY }, "0", "100");
-    addKnob (speedKnob, params::id::agitspeed, "SPEED", EngravedKnob::speedSpec(),
-             { 570, kBottomY }, "", "");
+    // Record and the export stamp, as one group under the dybbuk. The rest of
+    // the strip stays empty: these two and Clear are the whole performance.
+    recordSwitch = std::make_unique<RailSwitch> (param (params::id::record), "FROZEN", "ARMED", "RECORD");
+    recordSwitch->setRedAt (1);
+    plate.addAndMakeVisible (*recordSwitch);
+    recordSwitch->setBounds (canvasW / 2 - 104, kBottomY - 25, 140, 50);
 
-    modeSwitch = std::make_unique<RailSwitch> (param (params::id::agitmode), "LOOP", "GATE");
-    plate.addAndMakeVisible (*modeSwitch);
-    modeSwitch->setBounds (canvasW / 2 - 48, kBottomY - 15, 96, 34);
-
-    // The bottom strip's two free windows. A documented deviation from the v3
-    // Claude Design canvas, which this session cannot open -- recorded in
-    // PROGRESS beside the four existing ones.
-    //
-    // Geometry, measured rather than guessed: the IN fader ends at x 68 and
-    // AGITATE's box starts at 276, leaving 208 px; SPEED's box ends at 624 and
-    // the OUT fader starts at 832, leaving another 208. A midSpec box is 92 px
-    // wide and 126 tall, so two fit in each window with 8 px clear on every
-    // edge, and at kBottomY they span y 489..615 inside the 620 px plate.
-    //
-    // Two of these four are not new features at all: Tones Level and Tones
-    // Pitch have been working DSP with no control anywhere since Phase 4, and
-    // Tones Pitch silently sets the sideband spacing of the TIME MOD knob that
-    // is already on the plate.
-    addKnob (chaosKnob, params::id::chaos, "CHAOS", EngravedKnob::midSpec(),
-             { 122, kBottomY }, "0", "100");
-    addKnob (crustKnob, params::id::crust, "CRUST", EngravedKnob::midSpec(),
-             { 222, kBottomY }, "CLEAN", "RUINED");
-    addKnob (tonesKnob, params::id::toneslevel, "TONES", EngravedKnob::midSpec(),
-             { 678, kBottomY }, "OFF", "100");
-    addKnob (pitchKnob, params::id::tonespitch, "PITCH", EngravedKnob::midSpec(),
-             { 778, kBottomY }, "C1", "C7");
+    plate.addAndMakeVisible (exportStamp);
+    exportStamp.setBounds (canvasW / 2 + 56, kBottomY - 12, 48, 40);
+    exportStamp.onDragStart = [this] { dragPatternOut(); };
+    exportStamp.onClick = [this] { savePatternAs(); };
+    exportStamp.setEnabled (proc.canExportPattern());
 
     // The plate spells out every unit, because a bare number under a knob is
-    // only readable if you already know what the knob is. These follow the
-    // canvas, which differs from the host strings in one place: Filter reads
-    // kHz here and integers in the DAW's automation lane.
+    // only readable if you already know what the knob is.
     auto percent = [this] (const char* id)
     {
-        return [this, id] { return juce::String (juce::roundToInt (
-                                       proc.apvts.getRawParameterValue (id)->load())) + " %"; };
+        return [this, id] { return juce::String (juce::roundToInt (raw (id))) + " %"; };
     };
-
-    filterKnob->setValueTextProvider ([this]
-    {
-        const float hz = proc.apvts.getRawParameterValue (params::id::filter)->load();
-        return hz >= 1000.0f ? juce::String (hz / 1000.0f, 1) + " kHz"
-                             : juce::String (juce::roundToInt (hz)) + " Hz";
-    });
     blendKnob->setValueTextProvider (percent (params::id::blend));
 
-    // Chaos, Crust and Tones say a word at the bottom of their travel rather
-    // than "0 %", because "Still", "Clean" and "Off" are what they mean.
+    // Fills and Chaos say a word at the bottom of their travel rather than
+    // "0 %", because "Off" and "Still" are what they mean. The words are the
+    // parameters' own, so the plate and the host agree.
     auto percentOrWord = [this] (const char* id, const char* word)
     {
         return [this, id, word]
         {
-            const float v = proc.apvts.getRawParameterValue (id)->load();
-            return v < 0.5f ? juce::String (word)
-                            : juce::String (juce::roundToInt (v)) + " %";
+            const float v = raw (id);
+            return v < 0.5f ? juce::String (word) : juce::String (juce::roundToInt (v)) + " %";
         };
     };
-    chaosKnob->setValueTextProvider (percentOrWord (params::id::chaos, "STILL"));
-    crustKnob->setValueTextProvider (percentOrWord (params::id::crust, "CLEAN"));
-    tonesKnob->setValueTextProvider (percentOrWord (params::id::toneslevel, "OFF"));
-
-    // Pitch reads as a note, because it is a drone and it is also the rate of
-    // the Time Mod sidebands: a number in Hz would say neither.
-    pitchKnob->setValueTextProvider ([this]
-    {
-        const float hz = proc.apvts.getRawParameterValue (params::id::tonespitch)->load();
-        const double midi = 69.0 + 12.0 * std::log2 ((double) hz / 440.0);
-        const int note = juce::roundToInt (midi);
-        const int cents = juce::roundToInt ((midi - note) * 100.0);
-        const auto name = juce::MidiMessage::getMidiNoteName (note, true, true, 4);
-        return std::abs (cents) > 5 ? name + (cents > 0 ? " +" : " ") + juce::String (cents)
-                                    : name;
-    });
-    timeModKnob->setValueTextProvider (percent (params::id::timemod));
-    resonanceKnob->setValueTextProvider (percent (params::id::resonance));
-    absorbKnob->setValueTextProvider (percent (params::id::absorb));
-
-    strengthKnob->setValueTextProvider ([this]
-    {
-        return "+" + juce::String (proc.apvts.getRawParameterValue (params::id::strength)->load(), 1)
-               + " dB";
-    });
-
-    // Agitate reads as a multiplier on the whole modulation system, which is
-    // what it is: one control over every route at once.
-    agitateKnob->setValueTextProvider ([this]
-    {
-        const float v = proc.apvts.getRawParameterValue (params::id::agitate)->load() * 0.01f;
-        return juce::String::fromUTF8 ("\xc3\x97 ") + juce::String (v * 2.0f, 2);
-    });
-    agitateKnob->setLegends ("0", juce::String::fromUTF8 ("\xc3\x97" "2"));
-
-    speedKnob->setValueTextProvider ([this]
-    {
-        const float hz = proc.apvts.getRawParameterValue (params::id::agitspeed)->load();
-        if (hz < 1.0f)
-            return juce::String (hz, 3) + " Hz";
-        if (hz < 100.0f)
-            return juce::String (hz, 1) + " Hz";
-        return juce::String (juce::roundToInt (hz)) + " Hz";
-    });
-
+    fillsKnob->setValueTextProvider (percentOrWord (params::id::fills, "Off"));
+    chaosKnob->setValueTextProvider (percentOrWord (params::id::chaos, "Still"));
 
     plate.addChildComponent (themeFade);
     themeFade.setBounds (0, 0, canvasW, canvasH);
@@ -405,19 +320,52 @@ void DybbukEditor::applyTheme()
         child->repaint();
 }
 
+void DybbukEditor::dragPatternOut()
+{
+    // Rendered on the spot into the Dybbuk folder, then handed to the OS: the
+    // drop lands on a DAW track as a plain WAV, and the folder keeps a copy.
+    const auto file = proc.renderPatternToFile();
+    if (file == juce::File())
+        return;
+    juce::DragAndDropContainer::performExternalDragDropOfFiles ({ file.getFullPathName() }, true, this);
+}
+
+void DybbukEditor::savePatternAs()
+{
+    if (! proc.canExportPattern())
+        return;
+
+    auto chooser = std::make_shared<juce::FileChooser> ("Export the pattern as WAV",
+                                                        DybbukProcessor::exportFolder().getChildFile (proc.exportFileName()),
+                                                        "*.wav");
+    // The chooser outlives an editor a host closes under it: the panel is
+    // self-owned, so the completion must not assume `this` is alive.
+    juce::Component::SafePointer<DybbukEditor> safe (this);
+    chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                              | juce::FileBrowserComponent::warnAboutOverwriting,
+                          [safe, chooser] (const juce::FileChooser& fc)
+                          {
+                              if (safe == nullptr)
+                                  return;
+                              const auto file = fc.getResult();
+                              if (file != juce::File())
+                                  safe->proc.writePatternWav (file.withFileExtension ("wav"));
+                          });
+}
+
 void DybbukEditor::timerCallback()
 {
-    const float energy = proc.getLoopEnergy();
-    const float decayValue = proc.apvts.getRawParameterValue (params::id::decay)->load();
-    const bool bypassed = proc.apvts.getRawParameterValue (params::id::bypass)->load() >= 0.5f;
+    const bool bypassed = raw (params::id::bypass) >= 0.5f;
 
-    lamp.setEnergy (energy);
-    lamp.setRunaway (decayValue > 1.005f && energy > kRunawayEnergy);
+    // The dybbuk: everything the engine publishes, once per frame.
+    const int count = proc.getStepCount();
+    for (int i = 0; i < BurstEngine::kMaxSteps; ++i)
+        lamp.setStep (i, proc.getStepLevel (i), proc.getStepGain (i));
+    lamp.setPattern (count, proc.getCurrentStep(), proc.getTicks());
+    lamp.setCeiling (juce::roundToInt (raw (params::id::steps)), raw (params::id::full) >= 0.5f);
+    lamp.setGateOpen (proc.isGateOpen());
+    lamp.setFillRunning (proc.isFillRunning());
     lamp.setBypassed (bypassed);
-    lamp.setAgitation (proc.apvts.getRawParameterValue (params::id::agitate)->load() * 0.01f,
-                       agitateKnob != nullptr ? speedKnob->normalisedValue() : 0.35f);
-    // The engine has published this since Phase 3 and nothing has ever read it.
-    lamp.setChaos (proc.getInterferenceEnergy());
 
     // The rolled character's name fades out over about three seconds.
     if (rolledTicks > 0 && --rolledTicks >= 0)
@@ -429,38 +377,21 @@ void DybbukEditor::timerCallback()
     inFader->tick();
     outFader->tick();
 
-    // Sync turns the Time knob into detents, and marks them on the ring.
-    const bool synced = proc.apvts.getRawParameterValue (params::id::timesync)->load() >= 0.5f;
+    // Sync turns the Step knob into detents, and marks them on the ring.
+    const bool synced = proc.isSynced();
     if (synced != lastSynced)
     {
         lastSynced = synced;
-        timeKnob->setDetents (synced ? timemap::kDivisionCount : 0);
-        timeKnob->setLegends (synced ? "1/32" : "27 MS", synced ? "1 BAR" : "3.6 S");
+        stepKnob->setDetents (synced ? timemap::kDivisionCount : 0);
+        stepKnob->setLegends (synced ? "1/32" : "20 MS", synced ? "1 BAR" : "2 S");
     }
 
-    // Where modulation has actually taken each destination, in that knob's own
-    // coordinates. The needle stays on what you set; the arc is what you hear.
-    const float timeDepthOct = proc.getTimeModDepthOct();
-    timeKnob->setModulation (timeDepthOct > 0.001f,
-                             timeKnob->normalisedValue() + timeDepthOct / kTimeKnobOctaves);
-
-    const float filterOct = proc.getFilterModOct();
-    filterKnob->setModulation (std::abs (filterOct) > 0.001f,
-                               filterKnob->normalisedValue()
-                                   + filterOct / filterKnobOctaves (
-                                         filterKnob->parameter().getNormalisableRange()));
-
-    const float decayMod = proc.getDecayModLinear();
-    decayKnob->setModulation (std::abs (decayMod) > 0.001f,
-                              decayKnob->normalisedValue() + decayMod / pt::kDecayMax);
-
-    for (auto* knob : { timeKnob.get(), decayKnob.get(), filterKnob.get(), blendKnob.get(),
-                        timeModKnob.get(), strengthKnob.get(), resonanceKnob.get(),
-                        absorbKnob.get(), agitateKnob.get(), speedKnob.get() })
+    for (auto* knob : { stepKnob.get(), stepsKnob.get(), thresholdKnob.get(), blendKnob.get(),
+                        fillsKnob.get(), chaosKnob.get(), directionKnob.get() })
         knob->tick();
 
     // The clear stamp lights on the engine's acknowledgement, not on the
-    // click, so what you see is the loop actually being emptied.
+    // click, so what you see is the pattern actually being emptied.
     const int served = proc.getClearsServed();
     if (served != lastClearsServed)
     {
@@ -469,6 +400,11 @@ void DybbukEditor::timerCallback()
         lamp.flash();
     }
     clearStamp.tick();
+
+    // Nothing to drag while there is nothing in the pattern.
+    const bool exportable = proc.canExportPattern();
+    if (exportable != exportStamp.isEnabled())
+        exportStamp.setEnabled (exportable);
 
     presetHeader.tick();
 

@@ -13,8 +13,14 @@
 // canvas coordinates; resized() only applies the scale.
 //
 // Values live under their own knobs rather than in a shared strip, so nothing
-// has to be hovered to be read.
+// has to be hovered to be read. The red dot in the middle is the dybbuk: the
+// pattern drawn as a ring of pips around the ember, with the clear stamp
+// under it.
+//
+// A DragAndDropContainer so the export stamp can hand the rendered pattern to
+// the OS as a file drag, straight onto a DAW track.
 class DybbukEditor : public juce::AudioProcessorEditor,
+                     public juce::DragAndDropContainer,
                      private juce::Timer
 {
 public:
@@ -31,7 +37,6 @@ private:
     static constexpr int canvasW = 900;
     static constexpr int canvasH = 620;
     static constexpr int kUiHz = 30;
-    static constexpr float kRunawayEnergy = 0.5f;
 
     struct Plate : juce::Component
     {
@@ -69,26 +74,29 @@ private:
     EngravedKnob& addKnob (std::unique_ptr<EngravedKnob>& slot, const char* id, const char* label,
                            EngravedKnob::Spec spec, juce::Point<int> faceCentre,
                            const char* minLegend, const char* maxLegend);
+    float raw (const char* id) const { return proc.apvts.getRawParameterValue (id)->load(); }
+
+    // Export: the drag hands the OS a file rendered into the Dybbuk folder;
+    // the click asks where to put one.
+    void dragPatternOut();
+    void savePatternAs();
 
     DybbukProcessor& proc;
     Plate plate;
     juce::Image grain;
 
-    std::unique_ptr<EngravedKnob> timeKnob, decayKnob, filterKnob, blendKnob;
-    std::unique_ptr<EngravedKnob> timeModKnob, strengthKnob, resonanceKnob, absorbKnob;
-    std::unique_ptr<EngravedKnob> agitateKnob, speedKnob;
-    // The bottom strip's two free windows, added with the wildness pass:
-    // Chaos and Crust beside the IN trim, Tones and Pitch beside OUT.
-    std::unique_ptr<EngravedKnob> chaosKnob, crustKnob, tonesKnob, pitchKnob;
+    std::unique_ptr<EngravedKnob> stepKnob, stepsKnob, thresholdKnob, blendKnob;
+    std::unique_ptr<EngravedKnob> fillsKnob, chaosKnob, directionKnob;
     // Aim-and-forget controls, in the free band between the hero row and the
-    // lamp: the two knob rows are full and these are not knobs you ride.
-    std::unique_ptr<EngravedTrim> foldTrim, colourTrim;
+    // dybbuk: the choke and the fade are set, not ridden.
+    std::unique_ptr<EngravedTrim> lengthTrim, fadeTrim;
     std::unique_ptr<VerticalFader> inFader, outFader;
     std::unique_ptr<DiamondToggle> bypassToggle, syncToggle;
-    std::unique_ptr<RailSwitch> modeSwitch;
+    std::unique_ptr<RailSwitch> fullSwitch, recordSwitch;
     ThemeFade themeFade;
     Lamp lamp;
     ClearStamp clearStamp;
+    ExportStamp exportStamp;
     PresetHeader presetHeader { proc.presetManager };
     ThemeMark themeMark;
     DiceButton dice;

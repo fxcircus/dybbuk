@@ -14,9 +14,11 @@ disagree with what is written here, this wins.
   brief deliberately differs from the hardware, the model that shipped as
   `BurstEngine`, and a proposed port-over plan with the decisions still
   Roy's. `docs/PLAN.md` phases below Phase 5 are superseded for the engine.
-  The delay engine is still what the plugin runs until B2 swaps it; the new
-  engine is headless, proven by `EngineTest burst` (20 checks) and audible as
-  `dybbuk_burst.wav` from `EngineTest render`.
+  B2 shipped the same day: the plugin now runs `BurstEngine`, the delay DSP
+  is deleted (git has it), and the plate is remapped with the lamp as the
+  pattern. Roy's decisions on the open questions: no pattern in the session
+  (drag it out as a WAV instead), deaf bypass, Steps 1..16, Replace / Hold as
+  a switch; transport phase and the knob map were left to me.
 
 - **Design came out of a multi-agent round, not a single pass.** Three
   independent PT core designs and two modulation designs were written, scored
@@ -60,22 +62,39 @@ disagree with what is written here, this wins.
   unaffected; the EngineTest scenario asserts the decay rates rather than
   demanding infinite sustain at exactly 1.0.
 
-## Current state
+## Current state (2026-09-09, after the Burst pivot)
 
-- Parameter count: 22, in Push bank order, all automatable (an IN trim came
-  with the v3 canvas; Chaos, Crust, Tones Fold and Colour came with the
-  wildness pass)
+- Parameter count: 15, in Push bank order, all automatable: Step, Steps,
+  Threshold, Blend, Record, Fills, Chaos, Direction (bank 1), then Length,
+  Fade, Full, Sync, In, Out, Bypass last
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 35 scenarios plus `render` (145 checks, 0 failures; 11.8 s
-  with the 30 minute soak). `burst` is the new engine; the rest still test
-  the delay until B2 removes it
-- `ProcessorTest`: state, readouts, presets, bypass (0 failures)
-- Five factory presets ship as code tables and are proven to sound
-- UI: the v3 Claude Design canvas, both sheets, engraved line-art knobs, the
-  lamp (now flickering with the chaos), fourteen knobs, two engraved trims, a
-  dice, and metered IN and OUT trims on the edges
-- Known issues: one open ear question on the tap rebalance, below; the
-  listening gates are the user's call
+- `EngineTest`: 13 scenarios plus `render` (54 checks, 0 failures, 0.1 s):
+  burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
+  levels, cpu, hostile
+- `ProcessorTest`: ordering, readouts, session and preset round-trips, five
+  factory presets load and sound, dice, mono to stereo, stereo dry, bypass
+  crossfade with the engine deaf, WAV export (0 failures)
+- Five factory presets: Sixteenths, Stutter, Erosion, Pendulum, Deadpan
+- UI: the same plate, both sheets. Hero row Step (+Sync), Steps, Threshold,
+  Blend; trims Length and Fade; mid row Fills, Chaos, the dybbuk, Direction,
+  Full rail; Clear stamp under the dybbuk; Record rail and the Drag Out stamp
+  on the bottom strip. The dybbuk is the pattern: a ring of pips, one per
+  step, the sounding one bright, the ember pulsing on the tick, breathing
+  while listening, flaring while the gate is open, an outlined pip where the
+  next step will land, amber and jittering during a fill
+- Export: drag the stamp into a DAW for one cycle of the pattern as a
+  32-bit float WAV (~/Music/Dybbuk), or click it for a save dialog
+- Not yet done: played in Ableton (Live only rescans at startup, so quit
+  and reopen), the drag itself exercised with a mouse, the listening pass
+  on `dybbuk_burst.wav`, B3 and B4 from `docs/BURST.md`
+
+## Before the pivot
+
+Everything from here down describes the PT2399 delay that the plugin was
+until 2026-09-09. It is kept because the decisions in it (the verification
+habits, the bypass and preset rules, the readout traps) still apply, and
+because the variable-rate read and the loop saturator are earmarked for B3
+and B4.
 
 ## Changed after the first playthrough (2026-09-06)
 

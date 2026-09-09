@@ -147,6 +147,44 @@ a long note is cut at the boundary with no click (largest sample step
 0.022 against a sine's own 0.022); a louder re-attack splits, a held note
 does not.
 
+## B2 engine additions (2026-09-09, same day)
+
+Roy's decisions: the pattern is not saved with the session but can be
+dragged out as a WAV; bypassed means deaf; the ceiling is a Steps control
+from 1 to 16; full-and-armed is a switch between replacing the oldest and
+holding; the transport phase and the knob map were left to me.
+
+- **Transport mode.** The processor resolves the step clock, never the
+  engine: free mode hands over the knob in seconds; synced mode hands over
+  the division in seconds plus the distance from the block start to the
+  next grid line. The engine puts its tick there, every block, so a
+  relocate or a tempo change lands within one block, and the first tick
+  after a first commit waits for the grid. The pattern keeps its own step
+  phase on that grid; a "reset on the bar" is a later option.
+- **Steps 1..16** is the active length of the pattern, live: lowering it
+  loops the first N steps, raising it brings the rest back. Only at a
+  commit does the ceiling drop or refuse material (Replace / Hold).
+- **Direction:** forward, reverse, pendulum, random, drunk.
+- **Length:** a choke, the fraction of the step a slice may sound.
+- **Fade:** every play costs level (24 dB at full); a step under -60 dB
+  leaves the pattern, so an armed pattern evolves like a delay instead of
+  piling up.
+- **Fills:** disarmed, a gated onset scrambles the order for one cycle,
+  depth being how many pairs are swapped. The hardware's one trick.
+- **Chaos:** per tick, a chance of a skip, a ratchet (the slice again at
+  the half step), a reverse, or a repeat. Seeded, so the tests are exact.
+- **Deaf bypass:** the gate hears silence while bypassed; the sequencer
+  keeps its place. The processor's 20 ms crossfade handles the audio.
+- **Export.** `copyPattern` is a seqlock read of the pattern from the
+  message thread (slices in the pattern are immutable until a mutation
+  bumps the generation), and `renderPattern` plays one cycle offline with
+  the same voice as the live sequencer. `EngineTest export` proves the
+  render matches the live cycle sample for sample.
+- **Levels:** In feeds the gate (so the trim is also sensitivity), Blend
+  is equal power, Out's floor is silence.
+
+`EngineTest`: 13 scenarios, 54 checks, 0.1 s.
+
 ## Proposed port-over plan (for Roy to edit)
 
 What to keep from the repo: the plate, both themes, knobs, faders, trims,
@@ -211,3 +249,15 @@ Tones, drift. Git keeps them.
 6. **The knob map.** Fourteen knobs and two trims exist on the plate; the
    list above has sixteen controls plus IN, OUT and the switches. Which
    go on the plate and which become hidden or dice-only.
+
+## Gates for the new engine
+
+- **B0 — the basic test.** Headless `BurstEngine` and `EngineTest burst`.
+  **Shipped 2026-09-09.**
+- **B1 — port-over plan** agreed with Roy: the decisions above. **Done.**
+- **B2 — the engine in the plugin.** Parameters, processor, presets, dice,
+  the plate remapped, the dybbuk as the pattern, drag-out export, transport
+  mode; build.sh, pluginval, auval, both harnesses, snapshots reviewed.
+  **Shipped 2026-09-09.** Left for Roy: play it in Ableton, drag a pattern
+  onto a track, listen to whether the gap and the instant start feel right.
+- **B3 — step manipulation** and **B4 — character** as proposed above.

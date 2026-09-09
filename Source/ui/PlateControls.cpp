@@ -94,7 +94,7 @@ void DiamondToggle::paint (juce::Graphics& g)
 // --- RailSwitch --------------------------------------------------------------
 
 RailSwitch::RailSwitch (juce::RangedAudioParameter& parameterToUse, juce::String leftLabel,
-                        juce::String rightLabel)
+                        juce::String rightLabel, juce::String caption)
     : param (parameterToUse),
       attachment (parameterToUse,
                   [this] (float newValue)
@@ -103,7 +103,8 @@ RailSwitch::RailSwitch (juce::RangedAudioParameter& parameterToUse, juce::String
                       repaint();
                   }),
       leftText (std::move (leftLabel)),
-      rightText (std::move (rightLabel))
+      rightText (std::move (rightLabel)),
+      captionText (std::move (caption))
 {
     attachment.sendInitialUpdate();
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
@@ -118,9 +119,15 @@ void RailSwitch::paint (juce::Graphics& g)
 {
     const auto& p = theme::palette();
     const float w = (float) getWidth();
-    const float railY = 10.0f;
+    // A captioned rail sits lower, with its name over it like a knob's under it.
+    const float railY = captionText.isNotEmpty() ? 26.0f : 10.0f;
     const float left = 4.0f, right = w - 4.0f;
     const bool atRight = isRight();
+    const bool lit = redSide == (atRight ? 1 : 0);
+
+    if (captionText.isNotEmpty())
+        theme::drawTracked (g, captionText, { 0.0f, 0.0f, w, 14.0f }, juce::Justification::centred,
+                            theme::Face::semibold, 10.5f, 0.14f, hovering ? p.bright : p.ink);
 
     g.setColour (hovering ? p.bright : p.ink);
     g.drawLine (left, railY, right, railY, 1.0f);
@@ -134,8 +141,13 @@ void RailSwitch::paint (juce::Graphics& g)
     const auto carriage = diamondAt ({ atRight ? right : left, railY }, 5.0f, 6.0f);
     g.setColour (p.paper);
     g.strokePath (carriage, juce::PathStrokeType (2.6f));
-    g.setColour (p.ink);
+    g.setColour (lit ? p.red : p.ink);
     g.fillPath (carriage);
+    if (lit)
+    {
+        g.setColour (p.ink);
+        g.strokePath (carriage, juce::PathStrokeType (1.0f));
+    }
 
     theme::drawTracked (g, leftText, { 0.0f, railY + 9.0f, w * 0.5f, 12.0f },
                         juce::Justification::centredLeft, theme::Face::semibold, 8.5f, 0.14f,
@@ -193,6 +205,66 @@ void ClearStamp::paint (juce::Graphics& g)
     g.drawLine (cx + 1.3f, cy, cx + 1.05f, cy + 3.6f, 0.9f);
 
     theme::drawTracked (g, "CLEAR", { 0.0f, ring.getBottom() + 3.0f, b.getWidth(), 10.0f },
+                        juce::Justification::centred, theme::Face::semibold, 7.0f, 0.16f, lineInk);
+}
+
+// --- ExportStamp -------------------------------------------------------------
+
+ExportStamp::ExportStamp()
+{
+    setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+}
+
+void ExportStamp::mouseDrag (const juce::MouseEvent& e)
+{
+    // A few pixels of travel turn a click into a drag, once per gesture. The
+    // editor starts the OS drag from here, so nothing after it in this
+    // gesture can be relied on to arrive.
+    if (dragged || e.getDistanceFromDragStart() < 5)
+        return;
+    dragged = true;
+    if (onDragStart)
+        onDragStart();
+}
+
+void ExportStamp::mouseUp (const juce::MouseEvent& e)
+{
+    if (! dragged && onClick && getLocalBounds().contains (e.getPosition()))
+        onClick();
+    dragged = false;
+}
+
+void ExportStamp::paint (juce::Graphics& g)
+{
+    const auto& p = theme::palette();
+    const auto b = getLocalBounds().toFloat();
+    const auto lineInk = ! isEnabled() ? p.faded.withAlpha (0.45f) : (hovering ? p.ink : p.faded);
+
+    const juce::Rectangle<float> ring (b.getCentreX() - 13.0f, b.getY(), 26.0f, 26.0f);
+    g.setColour (lineInk);
+    g.drawEllipse (ring, 1.0f);
+
+    // A tray with a wave lifting out of it, at the clear stamp's proportions.
+    const float cx = ring.getCentreX(), cy = ring.getCentreY();
+    juce::Path tray;
+    tray.startNewSubPath (cx - 5.2f, cy + 1.6f);
+    tray.lineTo (cx - 5.2f, cy + 5.0f);
+    tray.lineTo (cx + 5.2f, cy + 5.0f);
+    tray.lineTo (cx + 5.2f, cy + 1.6f);
+    g.strokePath (tray, juce::PathStrokeType (1.1f));
+
+    juce::Path wave;
+    wave.startNewSubPath (cx - 5.0f, cy - 1.2f);
+    wave.lineTo (cx - 3.6f, cy - 4.2f);
+    wave.lineTo (cx - 2.2f, cy + 1.0f);
+    wave.lineTo (cx - 0.8f, cy - 5.6f);
+    wave.lineTo (cx + 0.8f, cy + 1.6f);
+    wave.lineTo (cx + 2.2f, cy - 3.4f);
+    wave.lineTo (cx + 3.6f, cy);
+    wave.lineTo (cx + 5.0f, cy - 1.8f);
+    g.strokePath (wave, juce::PathStrokeType (1.0f));
+
+    theme::drawTracked (g, "DRAG OUT", { -6.0f, ring.getBottom() + 3.0f, b.getWidth() + 12.0f, 10.0f },
                         juce::Justification::centred, theme::Face::semibold, 7.0f, 0.16f, lineInk);
 }
 

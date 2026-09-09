@@ -17,4 +17,6 @@ struct Rng
         state ^= state << 5;
         return (float) (int) state * (1.0f / 2147483648.0f); // [-1, 1)
     }
+
+    inline float unit() noexcept { return 0.5f * white() + 0.5f; } // [0, 1)
 };

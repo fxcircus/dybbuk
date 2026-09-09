@@ -4,7 +4,7 @@
 // Run it from wherever you want the files, then LOOK AT THE OUTPUT. A UI
 // change that has not been looked at is not finished.
 //
-//   cd /tmp && .../UISnapshot   ->  editor_snapshot*.png
+//   cd /tmp && .../UISnapshot   ->  editor_snapshot_*.png
 #include "../Source/PluginEditor.h"
 #include "../Source/PluginProcessor.h"
 
@@ -12,6 +12,9 @@
 
 namespace
 {
+    constexpr double kRate = 48000.0;
+    constexpr int kBlock = 128;
+
     // Always rebuild through the REAL construction path. Flipping a global on
     // a live editor would miss colours that components cached when they were
     // built, which is exactly the class of bug this exists to catch.
@@ -23,20 +26,40 @@ namespace
 
     double phase = 0.0;
 
-    void pushAudio (DybbukProcessor& processor, int blocks, bool signalOn)
+    // Feeds the processor `seconds` of a tone at `amp` (with a 2 ms edge so
+    // the gate sees a pick and not a step), or of silence when amp is 0.
+    void push (DybbukProcessor& processor, double seconds, float amp, double freq = 220.0)
     {
-        juce::AudioBuffer<float> buffer (2, 128);
+        juce::AudioBuffer<float> buffer (2, kBlock);
         juce::MidiBuffer midi;
+        // Whole blocks, like a host: the tail of the last one is silence.
+        const int blocks = (int) std::ceil (seconds * kRate / kBlock);
         for (int b = 0; b < blocks; ++b)
         {
-            for (int i = 0; i < 128; ++i)
+            for (int i = 0; i < kBlock; ++i)
             {
-                const float v = signalOn ? 0.5f * (float) std::sin (phase) : 0.0f;
-                phase += 220.0 / 48000.0 * juce::MathConstants<double>::twoPi;
+                const double rel = (b * kBlock + i) / kRate;
+                const double edge = 0.002;
+                const double env = amp > 0.0f ? juce::jmax (0.0, juce::jmin (1.0, rel / edge, (seconds - rel) / edge)) : 0.0;
+                const float v = (float) (amp * env * std::sin (phase));
+                phase += freq / kRate * juce::MathConstants<double>::twoPi;
                 buffer.setSample (0, i, v);
                 buffer.setSample (1, i, v);
             }
             processor.processBlock (buffer, midi);
+        }
+    }
+
+    // A gated phrase: `notes` bursts of 100 ms at 0.5 with 150 ms of rest
+    // between them, so each becomes a step of the pattern and the pattern
+    // runs at the default quarter second.
+    void pushPhrase (DybbukProcessor& processor, int notes)
+    {
+        const double pitches[] = { 220.0, 330.0, 277.0, 165.0, 247.0, 196.0, 294.0, 370.0 };
+        for (int i = 0; i < notes; ++i)
+        {
+            push (processor, 0.100, 0.5f, pitches[i % 8]);
+            push (processor, 0.150, 0.0f);
         }
     }
 
@@ -52,7 +75,7 @@ int main()
     juce::ScopedJuceInitialiser_GUI juceInit;
 
     DybbukProcessor processor;
-    processor.prepareToPlay (48000.0, 128);
+    processor.prepareToPlay (kRate, kBlock);
 
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
 
@@ -70,30 +93,67 @@ int main()
 
     auto snap = [&snapAfter] (const juce::String& name) { snapAfter (name, 250); };
 
-    // 1. At rest, defaults, brass.
-    snap ("editor_snapshot.png");
+    auto report = [&processor] (const char* what)
+    {
+        std::printf ("  %s: steps %d, current %d, gate %s, fill %s\n", what, processor.getStepCount(),
+                     processor.getCurrentStep(), processor.isGateOpen() ? "open" : "shut",
+                     processor.isFillRunning() ? "on" : "off");
+    };
 
-    // 2. Playing: the ember lit, the meter moving, a value on the strip.
-    setParam (processor, params::id::decay, 0.85f);
-    setParam (processor, params::id::agitate, 55.0f);
-    pushAudio (processor, 300, true);
-    pushAudio (processor, 40, false);
-    snap ("editor_snapshot_active.png");
+    // 1. Listening: nothing played yet, the ember breathing, the ring empty.
+    push (processor, 0.5, 0.0f);
+    report ("listening");
+    snap ("editor_snapshot_listening.png");
 
-    // 3. Runaway: Decay past unity, the red zone lit and the ember hot.
-    setParam (processor, params::id::decay, 1.12f);
-    setParam (processor, params::id::filter, 3000.0f);
-    pushAudio (processor, 500, true);
-    pushAudio (processor, 200, false);
-    snap ("editor_snapshot_runaway.png");
+    // 2. A four-note phrase became four steps, and the sequencer is on one
+    // of them. Stopping mid-way between ticks leaves the sounding step lit.
+    pushPhrase (processor, 4);
+    push (processor, 0.55, 0.0f);
+    report ("pattern");
+    snap ("editor_snapshot_pattern.png");
 
-    // 4. Synced Time: detents on the ring, a note value on the readout.
-    setParam (processor, params::id::decay, 0.45f);
-    setParam (processor, params::id::timesync, 1.0f);
-    setParam (processor, params::id::time, 0.5f);
-    pushAudio (processor, 60, true);
+    // 3. Mid-burst: the gate is open and a fifth pip is being written. The
+    // engine only updates its atomics inside processBlock, so stopping the
+    // feed half way through a note holds the gate open for the picture.
+    push (processor, 0.050, 0.5f, 330.0);
+    report ("armed_gate");
+    snap ("editor_snapshot_armed_gate.png");
+    push (processor, 0.050, 0.5f, 330.0);
+    push (processor, 0.400, 0.0f);
+
+    // 3b. A fill: disarmed, a gated onset scrambles the order for one cycle,
+    // and the ring should warm and shiver for as long as it runs.
+    setParam (processor, params::id::record, 0.0f);
+    push (processor, 0.100, 0.5f, 330.0);
+    push (processor, 0.020, 0.0f);
+    report ("fill");
+    snap ("editor_snapshot_fill.png");
+    setParam (processor, params::id::record, 1.0f);
+    push (processor, 1.5, 0.0f);
+
+    // 3c. Bypassed: everything in the middle dims, the pattern keeps its place.
+    setParam (processor, params::id::bypass, 1.0f);
+    push (processor, 0.3, 0.0f);
+    report ("bypassed");
+    snap ("editor_snapshot_bypassed.png");
+    setParam (processor, params::id::bypass, 0.0f);
+    push (processor, 0.3, 0.0f);
+
+    // 3d. A clear, caught while the ring is still falling into the ember.
+    processor.requestClear();
+    push (processor, 0.05, 0.0f);
+    report ("cleared");
+    snapAfter ("editor_snapshot_cleared.png", 100);
+    pushPhrase (processor, 5);
+    push (processor, 0.3, 0.0f);
+
+    // 4. Synced Step: detents on the ring, a note value on the readout.
+    setParam (processor, params::id::stepsync, 1.0f);
+    setParam (processor, params::id::step, 0.5f);
+    push (processor, 0.3, 0.0f);
+    report ("synced");
     snap ("editor_snapshot_synced.png");
-    setParam (processor, params::id::timesync, 0.0f);
+    setParam (processor, params::id::stepsync, 0.0f);
 
     // 5. The theme cross-fade, caught in the middle. The dispatch loop runs the
     // editor's timer, so a short wait after the toggle lands part way through
@@ -104,13 +164,16 @@ int main()
         snapAfter ("editor_snapshot_theme_fade.png", 110);
     }
 
-    // 6. The alternate sheet, settled, rebuilt through the real path.
+    // 6. The alternate sheet, settled, rebuilt through the real path, with
+    // the pattern still running.
     processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::Kind::light, nullptr);
     rebuild (processor, editor);
-    pushAudio (processor, 120, true);
+    push (processor, 0.3, 0.0f);
+    report ("light");
     snap ("editor_snapshot_light.png");
 
     // 7. Every factory preset, which also reviews every readout in the tables.
+    // Each is played a phrase of its own so the ring shows its step count.
     processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::kDefaultTheme, nullptr);
     for (const auto& info : processor.presetManager.getPresets())
     {
@@ -119,7 +182,11 @@ int main()
 
         processor.presetManager.loadPreset (info);
         rebuild (processor, editor);
-        pushAudio (processor, 200, true);
+        processor.requestClear();
+        push (processor, 0.1, 0.0f);
+        pushPhrase (processor, 8);
+        push (processor, 0.3, 0.0f);
+        report (info.name.toRawUTF8());
         snap ("editor_snapshot_" + info.name.toLowerCase().replaceCharacter (' ', '_') + ".png");
     }
 

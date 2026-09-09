@@ -6,6 +6,8 @@
 #include <atomic>
 #include <vector>
 
+#include "Rng.h"
+
 // The Burst engine: a gated step recorder feeding a steady step sequencer.
 //
 //   in L+R -> mono sum -> gate -> the next free step slice
@@ -15,10 +17,9 @@
 // Nothing is captured until the input gate opens; while armed, every gated
 // event becomes one step, appended to the pattern as it closes, and the
 // pattern starts playing on the first commit. Disarm to freeze it and play
-// over it. The sequencer's pace is the whole point: the
-// material is whatever you played, but it always lands on the step clock.
-// See docs/BURST.md for the hardware this is drawn from and where it
-// deliberately differs.
+// over it. The sequencer's pace is the whole point: the material is whatever
+// you played, but it always lands on the step clock. See docs/BURST.md for
+// the hardware this is drawn from and where it deliberately differs.
 class BurstEngine
 {
 public:
@@ -26,13 +27,37 @@ public:
     // Ceiling on one step's material. A held note past this commits as-is.
     static constexpr double kMaxStepSeconds = 2.0;
 
+    enum class Direction { forward = 0, reverse, pendulum, random, drunk };
+    static constexpr int kDirectionCount = 5;
+
     struct Params
     {
+        float inputDb = 0.0f;
+        float outDb = 0.0f;
         float thresholdDb = -30.0f;   // gate open level (the hardware's Sensitivity)
-        float stepMs = 250.0f;        // free-mode step length
-        int maxSteps = 8;             // pattern ceiling; a new step past it replaces the oldest
+        // The step clock, resolved by the processor so the engine never sees
+        // a playhead: free mode is the knob in seconds; transport mode is a
+        // division in seconds plus the distance to the next grid line.
+        double stepSeconds = 0.25;
+        int gridOffsetSamples = -1;   // samples from this block's start to the next grid line; -1 = free-running
+        int maxSteps = 8;             // pattern ceiling, 1..kMaxSteps
         bool record = true;           // armed: every gated event becomes a step; off freezes the pattern
-        float mix01 = 1.0f;           // dry/wet
+        bool replaceOldest = true;    // full and armed: replace the oldest step (else stop adding)
+        float blend01 = 0.5f;         // equal-power dry/wet
+        float fills01 = 0.0f;         // disarmed, a gated onset scrambles the order for one cycle, this deep
+        float chaos01 = 0.0f;         // per-tick chance of a skip, a ratchet, a reverse or a repeat
+        float length01 = 1.0f;        // choke: the fraction of the step a slice may sound
+        float fade01 = 0.0f;          // level lost every play; a step that fades out leaves the pattern
+        Direction direction = Direction::forward;
+        bool bypass = false;          // deaf: the gate hears silence, the sequencer keeps its place
+    };
+
+    // A consistent copy of the pattern for the message thread (export).
+    struct PatternCopy
+    {
+        std::vector<std::vector<float>> steps;   // in pattern order, each the step's material
+        std::array<float, kMaxSteps> gain {};    // the fade state of each
+        double sampleRate = 0.0;
     };
 
     void prepare (double sampleRate, int maxBlockSize);
@@ -42,20 +67,34 @@ public:
     // Start over: momentary command through a mailbox, never a parameter,
     // so a session recall can never empty the pattern on load.
     void requestClear() noexcept { clearRequests.fetch_add (1, std::memory_order_relaxed); }
+    void seedForTests (unsigned int s) noexcept { rng.seed (s); }
 
-    // Polled by the editor; the lamp is going to be the pattern.
+    // Message-thread read of the pattern: retries while the audio thread is
+    // changing it, returns false if it never settles. Allocates.
+    bool copyPattern (PatternCopy& out) const;
+
+    // One pass through a pattern, offline, with the same voice as the live
+    // sequencer: forward order, the choke and the fades, no chaos or fills.
+    // Stereo out, sized by this call. Returns the number of samples.
+    static int renderPattern (const PatternCopy& pattern, double stepSeconds, float length01,
+                              Direction direction, juce::AudioBuffer<float>& out);
+
+    // Polled by the editor; the lamp is the pattern.
     std::atomic<int> uiStepCount { 0 };
     std::atomic<int> uiCurrentStep { -1 };     // -1 while listening
+    std::atomic<int> uiTicks { 0 };            // counts step-clock ticks, for a pulse
     std::atomic<int> uiClearsServed { 0 };
     std::atomic<float> uiGate { 0.0f };        // 1 while capturing
+    std::atomic<float> uiFill { 0.0f };        // 1 while a fill's scrambled order is running
     std::atomic<float> uiInputLevel { 0.0f };
     std::atomic<float> uiOutputLevel { 0.0f };
-    std::array<std::atomic<float>, kMaxSteps> uiStepLevel {};
+    std::array<std::atomic<float>, kMaxSteps> uiStepLevel {};   // peak of each step's material
+    std::array<std::atomic<float>, kMaxSteps> uiStepGain {};    // its fade state, 1 = fresh
 
 private:
-    // Gate constants. Attack fast enough to catch a pick, release short so the
-    // silence after a muted note closes the step promptly; the hysteresis
-    // stops a decaying tail from chattering the gate.
+    // Gate constants. Release short so the silence after a muted note closes
+    // the step promptly; the hysteresis stops a decaying tail from chattering
+    // the gate.
     static constexpr float kReleaseMs = 20.0f;
     static constexpr float kCloseBelowDb = -6.0f;
     static constexpr float kHoldOffMs = 20.0f;
@@ -71,12 +110,42 @@ private:
     // their front edge. Fades are applied on playback, never to the material.
     static constexpr float kPreRollMs = 4.0f;
     static constexpr float kFadeMs = 2.0f;
+    // Fade: full depth takes this much off a step every play; a step under
+    // the floor leaves the pattern.
+    static constexpr float kFadeMaxDb = 24.0f;
+    static constexpr float kFadeFloorDb = -60.0f;
+    // Chaos at full depth: the chance per tick that something happens.
+    static constexpr float kChaosMaxChance = 0.6f;
+
+    // One step playing: the voice both the live sequencer and the offline
+    // render use, so an export sounds like the plugin did.
+    struct Voice
+    {
+        const float* data = nullptr;
+        int len = 0;          // samples of material that will sound
+        int pos = 0;
+        bool reverse = false;
+        float gain = 1.0f;
+        int fadeSamples = 1;
+        bool active() const noexcept { return data != nullptr && pos < len; }
+        float next() noexcept;
+    };
 
     float* slice (int slot) noexcept { return pool.data() + (size_t) slot * (size_t) capacity; }
+    const float* slice (int slot) const noexcept { return pool.data() + (size_t) slot * (size_t) capacity; }
     void onset() noexcept;
     void commit() noexcept;
+    void dropStep (int index) noexcept;
     void advance() noexcept;
+    int nextIndex() noexcept;
+    int activeCount() const noexcept;
+    int samplesToGrid() const noexcept;
+    void startStep (int index, int stepSamples, bool ratchet, bool reverse) noexcept;
+    void beginFill() noexcept;
     void doClear() noexcept;
+    void publishSteps() noexcept;
+    void beginMutation() noexcept { patternGen.fetch_add (1, std::memory_order_release); }
+    void endMutation() noexcept { patternGen.fetch_add (1, std::memory_order_release); }
 
     double sr = 48000.0;
     int capacity = 0;                       // samples per slice
@@ -89,8 +158,10 @@ private:
     std::array<int, kMaxSteps + 1> sliceLen {};
     std::array<float, kMaxSteps + 1> slicePeak {};
     std::array<int, kMaxSteps> pattern {};
+    std::array<float, kMaxSteps> stepGain {};   // fade state, in pattern order
     int count = 0;
     int captureSlot = 0;
+    std::atomic<int> patternGen { 0 };          // even = stable, odd = mid-change
 
     std::vector<float> preRoll;
     int preRollPos = 0;
@@ -100,10 +171,20 @@ private:
     int openedFor = 0;
     int capWrite = 0;
 
-    int playIndex = -1, playSlot = -1, playPos = 0, playLen = 0;
+    // Sequencer
+    Voice voice;
+    int playIndex = -1;
     int tickCounter = 0;
-    float pendingStepMs = 250.0f;   // the block's params, read at commit/tick time
-    int pendingMaxSteps = 8;
+    int ratchetCounter = 0;
+    int blockPos = 0;
+    bool fillArmed = true;
+    int pendulumDir = 1;
+    int fillTicksLeft = 0;
+    std::array<int, kMaxSteps> fillOrder {};
+    Params cur;                                 // this block's params, read at commit/tick time
+    Rng rng;
+
+    juce::SmoothedValue<float> inGain, outGain, wetMix, dryMix;
 
     std::atomic<int> clearRequests { 0 };
     int clearsSeen = 0;
