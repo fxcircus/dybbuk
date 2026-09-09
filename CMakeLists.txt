@@ -58,7 +58,8 @@ set(ENGINE_SOURCES
     Source/dsp/Agitation.cpp
     Source/dsp/Interference.cpp
     Source/dsp/ModMatrix.cpp
-    Source/dsp/DybbukEngine.cpp)
+    Source/dsp/DybbukEngine.cpp
+    Source/dsp/BurstEngine.cpp)
 
 set(PLUGIN_SOURCES
     Source/PluginProcessor.cpp

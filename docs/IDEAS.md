@@ -4,6 +4,13 @@ Park ideas here instead of derailing the current phase. Ranked by musical
 payoff against implementation cost. Things are marked DONE with a date rather
 than deleted: knowing what was considered and rejected is useful later.
 
+## Parked by the Burst pivot (2026-09-09)
+
+- **Radio mode** (five reinterpretations of one loop) and **Mask mode** (a
+  threshold-driven disguise of the loud parts) from BAD MOOD, once Burst is
+  finished. See `docs/BURST.md`.
+- Everything below this line concerns the delay engine, which B2 removes.
+
 ## The wildness pass
 
 `docs/WILDNESS-PLAN.md` holds stages 2 to 4 of the pass that answers Roy's

@@ -1,5 +1,9 @@
 # Dybbuk — plan
 
+> **Superseded on 2026-09-09 below the UI.** The Strega emulation is no
+> longer the concept; `docs/BURST.md` has the new direction and its gates.
+> Phases 5 and 6 (UI, validation matrix) still apply as written.
+
 ## What it is
 
 An Ableton audio effect (VST3 / AU / Standalone) that emulates the Time/Filter

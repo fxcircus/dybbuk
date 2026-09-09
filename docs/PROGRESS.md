@@ -6,6 +6,18 @@ disagree with what is written here, this wins.
 
 ## Scope changes since the plan
 
+- **2026-09-09: the Strega concept is scrapped; the direction is now the
+  BAD MOOD micro-looper's Burst mode.** Roy kept the plate, themes, knob and
+  fader design, the lamp and the start-over command, and pointed the engine at
+  an audio-gated step sequencer instead of a PT2399 loop. `docs/BURST.md`
+  holds the research (the manual, verbatim where it matters), where the
+  brief deliberately differs from the hardware, the model that shipped as
+  `BurstEngine`, and a proposed port-over plan with the decisions still
+  Roy's. `docs/PLAN.md` phases below Phase 5 are superseded for the engine.
+  The delay engine is still what the plugin runs until B2 swaps it; the new
+  engine is headless, proven by `EngineTest burst` (20 checks) and audible as
+  `dybbuk_burst.wav` from `EngineTest render`.
+
 - **Design came out of a multi-agent round, not a single pass.** Three
   independent PT core designs and two modulation designs were written, scored
   by four judge lenses (DSP engineer, real-time systems, musician, plus a
@@ -54,8 +66,9 @@ disagree with what is written here, this wins.
   with the v3 canvas; Chaos, Crust, Tones Fold and Colour came with the
   wildness pass)
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 34 scenarios plus `render` (125 checks, 0 failures; 5.4 s
-  without the 30 minute soak, 11.6 s with it)
+- `EngineTest`: 35 scenarios plus `render` (145 checks, 0 failures; 11.8 s
+  with the 30 minute soak). `burst` is the new engine; the rest still test
+  the delay until B2 removes it
 - `ProcessorTest`: state, readouts, presets, bypass (0 failures)
 - Five factory presets ship as code tables and are proven to sound
 - UI: the v3 Claude Design canvas, both sheets, engraved line-art knobs, the

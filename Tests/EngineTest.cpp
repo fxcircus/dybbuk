@@ -9,6 +9,7 @@
 //   build/EngineTest_artefacts/RelWithDebInfo/EngineTest            (runs all)
 //   build/EngineTest_artefacts/RelWithDebInfo/EngineTest runaway    (one scenario)
 //   build/EngineTest_artefacts/RelWithDebInfo/EngineTest render     (writes wavs to listen to)
+#include "../Source/dsp/BurstEngine.h"
 #include "../Source/dsp/DybbukEngine.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -965,6 +967,77 @@ void cpu()
 }
 
 // Not a pass/fail: renders files for the by-ear milestone in Phase 1.
+// The Burst direction, as a sound: six damped plucks at uneven times go in
+// while armed, the pattern plays them back on a 180 ms clock; two more while
+// disarmed are ignored; two more after re-arming join the pattern. The dry
+// plucks are mixed in low so what went in can be told from what came out.
+void renderBurst (double sr)
+{
+    constexpr double seconds = 16.0;
+    const int total = (int) (seconds * sr);
+    std::vector<float> in ((size_t) total, 0.0f);
+
+    struct Pluck { double t, f0; };
+    const Pluck plucks[] = { { 0.5, 110.0 }, { 0.83, 146.83 }, { 1.4, 196.0 }, { 1.62, 164.81 },
+                             { 2.3, 220.0 }, { 2.95, 130.81 },
+                             { 8.0, 293.66 }, { 8.4, 246.94 },       // disarmed
+                             { 11.0, 174.61 }, { 11.7, 261.63 } };   // re-armed
+    for (const auto& pl : plucks)
+    {
+        const int start = (int) (pl.t * sr);
+        for (int i = 0; i < (int) (0.6 * sr) && start + i < total; ++i)
+        {
+            const double t = i / sr;
+            const double env = std::exp (-12.0 * t) * juce::jmin (1.0, t / 0.002);
+            double v = 0.0;
+            for (int h = 1; h <= 6; ++h)
+                v += std::sin (juce::MathConstants<double>::twoPi * pl.f0 * h * t + 0.3 * h) / (h * h);
+            in[(size_t) (start + i)] += (float) (0.5 * env * v);
+        }
+    }
+
+    BurstEngine engine;
+    engine.prepare (sr, 128);
+    BurstEngine::Params p;
+    p.thresholdDb = -30.0f;
+    p.stepMs = 180.0f;
+    p.maxSteps = 8;
+    p.mix01 = 0.8f;
+
+    juce::AudioBuffer<float> file (2, total);
+    juce::AudioBuffer<float> buffer (2, 128);
+    int pos = 0;
+    while (pos < total)
+    {
+        const int len = juce::jmin (128, total - pos);
+        const double t = pos / sr;
+        p.record = t < 7.0 || t >= 10.0;
+        for (int i = 0; i < len; ++i)
+        {
+            buffer.setSample (0, i, in[(size_t) (pos + i)]);
+            buffer.setSample (1, i, in[(size_t) (pos + i)]);
+        }
+        juce::AudioBuffer<float> view (buffer.getArrayOfWritePointers(), 2, len);
+        engine.process (view, p);
+        for (int ch = 0; ch < 2; ++ch)
+            file.copyFrom (ch, pos, buffer, ch, 0, len);
+        pos += len;
+    }
+
+    const juce::File out = juce::File::getCurrentWorkingDirectory().getChildFile ("dybbuk_burst.wav");
+    out.deleteFile();
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::OutputStream> stream = out.createOutputStream();
+    if (stream != nullptr)
+    {
+        const auto options = juce::AudioFormatWriterOptions().withSampleRate (sr).withNumChannels (2).withBitsPerSample (24);
+        if (auto writer = wav.createWriterFor (stream, options))
+            writer->writeFromAudioSampleBuffer (file, 0, total);
+    }
+    std::printf ("  wrote %s (peak %.3f, %d steps)\n", out.getFullPathName().toRawUTF8(),
+                 file.getMagnitude (0, total), engine.uiStepCount.load());
+}
+
 void render()
 {
     constexpr double sr = 48000.0;
@@ -1100,6 +1173,8 @@ void render()
         std::printf ("  wrote %s (peak %.3f)\n", out.getFullPathName().toRawUTF8(),
                      file.getMagnitude (0, total));
     }
+
+    renderBurst (sr);
 }
 
 
@@ -2557,6 +2632,289 @@ void spread()
                + juce::String (sumRef, 4));
 }
 
+
+// --- the Burst direction ---------------------------------------------------
+//
+// A gated step recorder driving a steady step sequencer (docs/BURST.md).
+// Distinct tone bursts go in, so every step can be identified by its pitch on
+// the way out, and the step clock can be measured to the sample.
+
+struct ToneBurst { double t0, dur, freq, amp; };
+
+std::vector<float> burstInput (double sr, double seconds, const std::vector<ToneBurst>& bursts)
+{
+    std::vector<float> x ((size_t) (seconds * sr), 0.0f);
+    const int fade = (int) (0.002 * sr);
+    for (const auto& b : bursts)
+    {
+        const int start = (int) (b.t0 * sr), len = (int) (b.dur * sr);
+        for (int i = 0; i < len && start + i < (int) x.size(); ++i)
+        {
+            float g = 1.0f;
+            if (i < fade)            g = (float) i / (float) fade;
+            if (len - i < fade)      g = juce::jmin (g, (float) (len - i) / (float) fade);
+            x[(size_t) (start + i)] += (float) (b.amp * g * std::sin (juce::MathConstants<double>::twoPi * b.freq * i / sr));
+        }
+    }
+    return x;
+}
+
+struct BurstRun
+{
+    std::vector<float> out;
+    int stepCount = 0;
+};
+
+// Drives the engine like a host. `atBlock` lets a scenario poke the engine
+// (clear, a parameter flip) at a given time.
+BurstRun runBurst (const std::vector<float>& input, BurstEngine::Params params, double sr, int blockSize,
+                   const std::function<void (BurstEngine&, BurstEngine::Params&, double)>& atBlock = {})
+{
+    BurstEngine engine;
+    engine.prepare (sr, blockSize);
+    juce::AudioBuffer<float> buf (2, blockSize);
+    BurstRun r;
+    r.out.resize (input.size());
+    for (size_t pos = 0; pos < input.size(); pos += (size_t) blockSize)
+    {
+        const int n = (int) juce::jmin ((size_t) blockSize, input.size() - pos);
+        if (atBlock)
+            atBlock (engine, params, (double) pos / sr);
+        for (int i = 0; i < n; ++i)
+        {
+            buf.setSample (0, i, input[pos + (size_t) i]);
+            buf.setSample (1, i, input[pos + (size_t) i]);
+        }
+        juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, n);
+        engine.process (view, params);
+        for (int i = 0; i < n; ++i)
+            r.out[pos + (size_t) i] = buf.getSample (0, i);
+    }
+    r.stepCount = engine.uiStepCount.load();
+    return r;
+}
+
+// Sample-accurate note onsets in the output: the first sample over the
+// level after at least 20 ms under it, plus the pitch of the 30 ms after.
+struct NoteOnset { int sample; double freq; int soundedFor; };
+
+std::vector<NoteOnset> onsetsOf (const std::vector<float>& x, double sr, int from = 0)
+{
+    std::vector<NoteOnset> v;
+    const int quiet = (int) (0.02 * sr);
+    int silentRun = from > 0 ? 0 : quiet;   // scanning from mid-stream, wait for real silence first
+    for (int i = from; i < (int) x.size(); ++i)
+    {
+        const float a = std::abs (x[(size_t) i]);
+        if (a > 0.02f)
+        {
+            if (silentRun >= quiet)
+            {
+                NoteOnset o;
+                o.sample = i;
+                const int win = juce::jmin ((int) (0.03 * sr), (int) x.size() - i);
+                o.freq = zeroCrossFreq (x, i, win, sr);
+                int last = i, gap = 0;
+                for (int j = i; j < (int) x.size() && gap < quiet; ++j)
+                {
+                    if (std::abs (x[(size_t) j]) > 0.02f) { last = j; gap = 0; }
+                    else                                    ++gap;
+                }
+                o.soundedFor = last - i;
+                v.push_back (o);
+            }
+            silentRun = 0;
+        }
+        else if (a < 0.002f)
+        {
+            ++silentRun;
+        }
+    }
+    return v;
+}
+
+bool near (double a, double b, double tol) { return std::abs (a - b) <= tol * b; }
+
+void burst()
+{
+    std::printf ("burst: a gated step recorder feeding a steady step sequencer\n");
+    const double sr = 48000.0;
+    const std::vector<ToneBurst> four = { { 0.10, 0.080, 220.0, 0.5 }, { 0.40, 0.120, 440.0, 0.5 },
+                                          { 0.75, 0.060, 660.0, 0.5 }, { 1.10, 0.100, 880.0, 0.5 } };
+    BurstEngine::Params p;
+    p.thresholdDb = -30.0f;
+    p.stepMs = 200.0f;
+    p.maxSteps = 8;
+    p.record = true;
+    p.mix01 = 1.0f;
+
+    const auto in = burstInput (sr, 3.4, four);
+    const auto r = runBurst (in, p, sr, 128);
+    if (std::getenv ("BURST_DEBUG") != nullptr)
+        for (const auto& o : onsetsOf (r.out, sr))
+            std::printf ("    onset %8d  %6.1f Hz  sounded %6.1f ms\n", o.sample, o.freq, o.soundedFor * 1000.0 / sr);
+    const int stepSamples = juce::roundToInt (0.2 * sr);
+
+    check ("nothing plays until the first step commits", rmsOf (r.out, 0, (int) (0.18 * sr)) == 0.0,
+           "rms over the first 180 ms is " + juce::String (rmsOf (r.out, 0, (int) (0.18 * sr)), 9));
+    check ("four bursts make four steps", r.stepCount == 4, juce::String (r.stepCount) + " steps");
+
+    const auto on = onsetsOf (r.out, sr, (int) (1.5 * sr));
+    bool spacingOk = on.size() >= 8, cyclicOk = on.size() >= 8;
+    int worstAdjacent = 0;
+    for (size_t k = 0; k + 1 < on.size(); ++k)
+        worstAdjacent = juce::jmax (worstAdjacent, std::abs (on[k + 1].sample - on[k].sample - stepSamples));
+    for (size_t k = 0; k + 4 < on.size(); ++k)
+        cyclicOk = cyclicOk && (on[k + 4].sample - on[k].sample == 4 * stepSamples);
+    spacingOk = spacingOk && worstAdjacent <= (int) (0.003 * sr);
+    check ("steps land on a 200 ms clock", spacingOk,
+           juce::String ((int) on.size()) + " onsets after 1.5 s, adjacent spacing within "
+               + juce::String (worstAdjacent) + " samples of " + juce::String (stepSamples));
+    check ("the same step recurs to the sample", cyclicOk, "every 4th onset is exactly 800 ms apart");
+
+    size_t first = 0;
+    while (first < on.size() && ! near (on[first].freq, 220.0, 0.08))
+        ++first;
+    const double expect[] = { 220.0, 440.0, 660.0, 880.0 };
+    bool orderOk = first + 8 <= on.size();
+    juce::String seq;
+    for (size_t k = first; k < on.size() && k < first + 8; ++k)
+    {
+        orderOk = orderOk && near (on[k].freq, expect[(k - first) % 4], 0.08);
+        seq += juce::String (juce::roundToInt (on[k].freq)) + " ";
+    }
+    check ("the pattern cycles in the order it was played", orderOk, seq.trim() + " Hz");
+
+    bool lengthOk = orderOk;
+    if (orderOk)
+    {
+        const double heard = on[first].soundedFor / sr;
+        lengthOk = std::abs (heard - 0.080) < 0.006;
+        check ("a step holds exactly what was gated", lengthOk,
+               "the 80 ms burst sounds for " + juce::String (heard * 1000.0, 1) + " ms");
+        const int gapStart = on[first + 2].sample + (int) (0.12 * sr);
+        const double gapRms = rmsOf (r.out, gapStart, (int) (0.07 * sr));
+        check ("a short step leaves a gap", gapRms == 0.0,
+               "rms 120..190 ms into the 60 ms step is " + juce::String (gapRms, 9));
+    }
+
+    // The clock must not care how the host chops the block, or what the rate is.
+    const auto r1 = runBurst (in, p, sr, 1);
+    const auto r512 = runBurst (in, p, sr, 512);
+    check ("block size does not change a sample", fnvHash (r.out) == fnvHash (r1.out) && fnvHash (r.out) == fnvHash (r512.out),
+           "hashes at 1 / 128 / 512: " + juce::String (fnvHash (r1.out)) + " / " + juce::String (fnvHash (r.out)) + " / "
+               + juce::String (fnvHash (r512.out)));
+    for (double rate : { 44100.0, 96000.0 })
+    {
+        const auto rr = runBurst (burstInput (rate, 3.4, four), p, rate, 128);
+        const auto onr = onsetsOf (rr.out, rate, (int) (1.5 * rate));
+        bool ok = onr.size() >= 8 && rr.stepCount == 4;
+        for (size_t k = 0; k + 4 < onr.size(); ++k)
+            ok = ok && onr[k + 4].sample - onr[k].sample == 4 * juce::roundToInt (0.2 * rate);
+        check (rate < 50000.0 ? "44.1 kHz keeps the same clock" : "96 kHz keeps the same clock", ok,
+               juce::String ((int) onr.size()) + " onsets, " + juce::String (rr.stepCount) + " steps");
+    }
+
+    // A fifth burst while the pattern runs is a fifth step while armed, and
+    // nothing at all once disarmed.
+    auto five = four;
+    five.push_back ({ 3.0, 0.090, 1100.0, 0.5 });
+    const auto in5 = burstInput (sr, 4.6, five);
+    {
+        const auto ro = runBurst (in5, p, sr, 128);
+        const auto ono = onsetsOf (ro.out, sr, (int) (3.3 * sr));
+        int hits = 0;
+        for (const auto& o : ono)
+            hits += near (o.freq, 1100.0, 0.08) ? 1 : 0;
+        check ("armed, a fifth burst is a fifth step", ro.stepCount == 5 && hits >= 1,
+               juce::String (ro.stepCount) + " steps, the new tone heard " + juce::String (hits) + " times");
+        // Disarm at 2 s, once the four are in.
+        const auto rf = runBurst (in5, p, sr, 128, [] (BurstEngine&, BurstEngine::Params& q, double t) {
+            if (t >= 2.0)
+                q.record = false;
+        });
+        const auto onf = onsetsOf (rf.out, sr, (int) (3.3 * sr));
+        int hitsOff = 0;
+        for (const auto& o : onf)
+            hitsOff += near (o.freq, 1100.0, 0.08) ? 1 : 0;
+        check ("disarmed, the pattern is left alone", rf.stepCount == 4 && hitsOff == 0,
+               juce::String (rf.stepCount) + " steps, the new tone heard " + juce::String (hitsOff) + " times");
+    }
+
+    // The ceiling: past it the oldest step goes, so the pattern is the last
+    // N things played.
+    {
+        BurstEngine::Params three = p;
+        three.maxSteps = 3;
+        const auto rc = runBurst (in, three, sr, 128);
+        const auto onc = onsetsOf (rc.out, sr, (int) (1.5 * sr));
+        int low = 0;
+        bool cyc = onc.size() >= 6;
+        for (const auto& o : onc)
+            low += near (o.freq, 220.0, 0.08) ? 1 : 0;
+        for (size_t k = 0; k + 3 < onc.size(); ++k)
+            cyc = cyc && onc[k + 3].sample - onc[k].sample == 3 * stepSamples;
+        check ("past the ceiling the oldest step is dropped", rc.stepCount == 3 && low == 0 && cyc,
+               juce::String (rc.stepCount) + " steps, 220 Hz heard " + juce::String (low) + " times, 3-cycle "
+                   + (cyc ? "holds" : "broken"));
+    }
+
+    // Start over: empties the pattern mid-flight, and the next thing played
+    // starts a fresh one.
+    {
+        auto again = four;
+        again.push_back ({ 2.8, 0.090, 1100.0, 0.5 });
+        const auto inA = burstInput (sr, 4.0, again);
+        int countAtClear = -1;
+        const auto rx = runBurst (inA, p, sr, 128, [&] (BurstEngine& e, BurstEngine::Params&, double t) {
+            if (t >= 2.0 && countAtClear < 0)
+            {
+                countAtClear = e.uiStepCount.load();
+                e.requestClear();
+            }
+        });
+        const double afterClear = rmsOf (rx.out, (int) (2.01 * sr), (int) (0.7 * sr));
+        const auto onx = onsetsOf (rx.out, sr, (int) (2.9 * sr));
+        bool fresh = onx.size() >= 3 && rx.stepCount == 1;
+        for (const auto& o : onx)
+            fresh = fresh && near (o.freq, 1100.0, 0.08);
+        check ("start over empties the pattern", countAtClear == 4 && afterClear == 0.0,
+               "rms for 700 ms after the clear is " + juce::String (afterClear, 9));
+        check ("the next thing played starts a fresh pattern", fresh,
+               juce::String (rx.stepCount) + " step, " + juce::String ((int) onx.size()) + " onsets of "
+                   + juce::String (onx.empty() ? 0.0 : onx[0].freq, 0) + " Hz");
+    }
+
+    // Material longer than the step is cut at the boundary, without a click.
+    {
+        BurstEngine::Params fast = p;
+        fast.stepMs = 150.0f;
+        const auto inL = burstInput (sr, 2.0, { { 0.1, 0.400, 330.0, 0.5 } });
+        const auto rl = runBurst (inL, fast, sr, 128);
+        double minWindowRms = 1.0, maxJump = 0.0;
+        const int w = (int) (0.02 * sr);
+        for (int s = (int) (0.7 * sr); s + w < (int) rl.out.size(); s += w)
+            minWindowRms = juce::jmin (minWindowRms, rmsOf (rl.out, s, w));
+        for (int s = (int) (0.7 * sr) + 1; s < (int) rl.out.size(); ++s)
+            maxJump = juce::jmax (maxJump, (double) std::abs (rl.out[(size_t) s] - rl.out[(size_t) s - 1]));
+        check ("a long step is cut at the boundary and keeps sounding", rl.stepCount == 1 && minWindowRms > 0.2,
+               "quietest 20 ms window is " + juce::String (dbfs (minWindowRms), 1) + " dBFS");
+        check ("no click at the cut", maxJump < 0.04, "largest sample step " + juce::String (maxJump, 4));
+    }
+
+    // A re-attack inside an open gate splits the step; a steady note does not.
+    {
+        const auto inS = burstInput (sr, 1.5, { { 0.1, 0.200, 220.0, 0.15 }, { 0.3, 0.200, 220.0, 0.5 } });
+        const auto rs = runBurst (inS, p, sr, 128);
+        const auto inH = burstInput (sr, 1.5, { { 0.1, 0.400, 220.0, 0.5 } });
+        const auto rh = runBurst (inH, p, sr, 128);
+        check ("a louder re-attack splits the step", rs.stepCount == 2, juce::String (rs.stepCount) + " steps");
+        check ("a held note stays one step", rh.stepCount == 1, juce::String (rh.stepCount) + " steps");
+    }
+
+    check ("output is finite", allFinite (r.out), "");
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -2572,7 +2930,7 @@ const Scenario kScenarios[] = {
     { "sustain", sustain },     { "resonance", resonance }, { "strength", strength },
     { "crust", crust },         { "timemod", timemod },     { "agitfm", agitfm },
     { "routes", routes },       { "voice", voice },         { "colour", colour },
-    { "chaosloop", chaosloop },
+    { "chaosloop", chaosloop }, { "burst", burst },
 };
 
 } // namespace
