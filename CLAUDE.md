@@ -81,8 +81,8 @@ found by the user rather than by the build.
   side effect of another change.
 
 ## Project-specific
-- Repo: local git only, no remote configured yet (commit to main; push once a
-  remote exists).
+- Repo: github.com/fxcircus/dybbuk (origin, SSH). Commit to main and push
+  after every commit.
 - Push directly to main unless told otherwise.
 - Breaking previously saved sessions/presets: allowed until the first tagged
   release. Nothing has been saved with this plugin yet, so parameter IDs and
