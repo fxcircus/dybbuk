@@ -36,9 +36,9 @@ private:
 };
 
 // A two-position slide: a rail with a travelling diamond and the two names
-// beneath it, so the state is readable without knowing which way is on. Used
-// for Full (Replace / Hold) and, with a caption over it and a red carriage
-// while armed, for Record, the main performance control beside Clear.
+// beneath it, so the state is readable without knowing which way is on. Not
+// on the plate at the moment (Record and Full became WordToggles, below), but
+// kept: it is the right control for a choice whose two ends are peers.
 class RailSwitch : public juce::Component
 {
 public:
@@ -64,6 +64,41 @@ private:
     bool hovering = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RailSwitch)
+};
+
+// A two-state button that says which state it is in: a caption over an
+// engraved rounded box with the CURRENT state's word inside. Off is paper
+// with an ink outline and an ink word; on is filled red with a paper word,
+// the plate's sign for "this is recording" (Record: FROZEN / ARMED) and for
+// a ceiling that holds (Full: REPLACE / HOLD). Replaces the rails for those
+// two, which read as a slider and made people drag them.
+class WordToggle : public juce::Component
+{
+public:
+    WordToggle (juce::RangedAudioParameter& parameterToUse, juce::String caption,
+                juce::String offWord, juce::String onWord);
+
+    // Layout, so the editor can place the box by its centre: the caption
+    // takes kCaptionH, then kGap, then the box takes the rest of the height.
+    static constexpr int kBoxW = 108, kBoxH = 30, kCaptionH = 14, kGap = 4;
+    static constexpr int kHeight = kCaptionH + kGap + kBoxH;
+    static juce::Rectangle<int> boundsFor (juce::Point<int> boxCentre);
+
+    bool isOn() const noexcept { return normValue >= 0.5f; }
+
+    void paint (juce::Graphics& g) override;
+    void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
+    void mouseExit (const juce::MouseEvent&) override { hovering = false; repaint(); }
+    void mouseDown (const juce::MouseEvent& e) override;
+
+private:
+    juce::RangedAudioParameter& param;
+    juce::ParameterAttachment attachment;
+    juce::String captionText, offText, onText;
+    float normValue = 0.0f;
+    bool hovering = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WordToggle)
 };
 
 // A ringed bin stamp. It lights on the engine's acknowledgement rather than on

@@ -13,17 +13,26 @@ namespace
     constexpr int kRuleY = 62;
     constexpr int kFaderW = 60;
 
-    constexpr int kHeroY = 174;   // face centres
-    constexpr int kMidY = 380;
-    constexpr int kBottomY = 535;
+    // Four bands under the header: the hero knobs, the dybbuk's row (the lamp
+    // in the middle of the plate with a trim on each side), the small knobs,
+    // and the record button on the bottom strip.
+    constexpr int kHeroY = 150;   // face centres
+    constexpr int kLampY = 310;
+    constexpr int kMidY = 430;
+    constexpr int kBottomY = 556; // the record button's box centre
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
     constexpr int kMidX[5] = { 151, 300, 450, 600, 749 };
 
-    // The dybbuk's box. Wider than the old lamp so sixteen pips fit around
-    // the ember with room to breathe; it sits between the trims (which end at
-    // y 318) and the clear stamp.
+    // The dybbuk's box, centred on the plate. Wide enough for sixteen pips
+    // around the ember with room to breathe; the export stamp sits on its top
+    // edge and the clear stamp on its bottom one.
     constexpr int kLampSize = 128;
+
+    // The trims flank the dybbuk with 50 px of paper between each rail's end
+    // and its box.
+    constexpr int kTrimW = 260;
+    constexpr int kTrimH = 34;
 
     juce::Image makeGrain (int w, int h, juce::Random& rng)
     {
@@ -196,7 +205,41 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     plate.addAndMakeVisible (*syncToggle);
     syncToggle->setBounds (kHeroX[0] + 46, kHeroY - 12, 40, 26);
 
-    // --- second row, around the dybbuk ---------------------------------------
+    // --- the dybbuk's row -----------------------------------------------------
+    // The lamp in the centre of the plate, the export stamp on its top edge
+    // and the clear stamp on its bottom one, and a trim on each side: LENGTH
+    // to its left, FADE to its right, their rails level with the ember.
+    plate.addAndMakeVisible (lamp);
+    lamp.setBounds (kMidX[2] - kLampSize / 2, kLampY - kLampSize / 2, kLampSize, kLampSize);
+
+    plate.addAndMakeVisible (exportStamp);
+    exportStamp.setBounds (kMidX[2] - 24, kLampY - kLampSize / 2 - 40, 48, 40);
+    exportStamp.onDragStart = [this] { dragPatternOut(); };
+    exportStamp.onClick = [this] { savePatternAs(); };
+    exportStamp.setEnabled (proc.canExportPattern());
+
+    plate.addAndMakeVisible (clearStamp);
+    clearStamp.setBounds (kMidX[2] - 24, kLampY + kLampSize / 2, 48, 40);
+    clearStamp.onClick = [this] { proc.requestClear(); };
+
+    lengthTrim = std::make_unique<EngravedTrim> (param (params::id::length), "LENGTH");
+    plate.addAndMakeVisible (*lengthTrim);
+    lengthTrim->setBounds (76, kLampY - kTrimH / 2, kTrimW, kTrimH);
+    lengthTrim->setValueTextProvider ([this]
+    {
+        return juce::String (juce::roundToInt (raw (params::id::length))) + " %";
+    });
+
+    fadeTrim = std::make_unique<EngravedTrim> (param (params::id::fade), "FADE");
+    plate.addAndMakeVisible (*fadeTrim);
+    fadeTrim->setBounds (canvasW - 76 - kTrimW, kLampY - kTrimH / 2, kTrimW, kTrimH);
+    fadeTrim->setValueTextProvider ([this]
+    {
+        const float v = raw (params::id::fade);
+        return v < 0.5f ? juce::String ("NEVER") : juce::String (juce::roundToInt (v)) + " %";
+    });
+
+    // --- the small knobs, under the dybbuk -----------------------------------
     addKnob (fillsKnob, params::id::fills, "FILLS", EngravedKnob::midSpec(),
              { kMidX[0], kMidY }, "OFF", "100");
     addKnob (chaosKnob, params::id::chaos, "CHAOS", EngravedKnob::midSpec(),
@@ -211,54 +254,18 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
         return d.getText (d.getValue(), 32);
     });
 
-    // Full: what an armed pattern does at its ceiling, in the last mid-row
-    // slot. A two-word choice reads better on a rail than as a knob with two
-    // detents.
-    fullSwitch = std::make_unique<RailSwitch> (param (params::id::full), "REPLACE", "HOLD", "FULL");
-    plate.addAndMakeVisible (*fullSwitch);
-    fullSwitch->setBounds (kMidX[4] - 48, kMidY - 25, 96, 50);
-
-    // The band between the hero boxes (which end at y 278) and the dybbuk
-    // (whose top is y 316) is empty across the full width. Two trims at
-    // y 284..318 flank the dybbuk: LENGTH to its left, FADE to its right.
-    lengthTrim = std::make_unique<EngravedTrim> (param (params::id::length), "LENGTH");
-    plate.addAndMakeVisible (*lengthTrim);
-    lengthTrim->setBounds (76, 284, 304, 34);
-    lengthTrim->setValueTextProvider ([this]
-    {
-        return juce::String (juce::roundToInt (raw (params::id::length))) + " %";
-    });
-
-    fadeTrim = std::make_unique<EngravedTrim> (param (params::id::fade), "FADE");
-    plate.addAndMakeVisible (*fadeTrim);
-    fadeTrim->setBounds (520, 284, 304, 34);
-    fadeTrim->setValueTextProvider ([this]
-    {
-        const float v = raw (params::id::fade);
-        return v < 0.5f ? juce::String ("NEVER") : juce::String (juce::roundToInt (v)) + " %";
-    });
-
-    plate.addAndMakeVisible (lamp);
-    lamp.setBounds (kMidX[2] - kLampSize / 2, kMidY - kLampSize / 2, kLampSize, kLampSize);
-
-    plate.addAndMakeVisible (clearStamp);
-    clearStamp.setBounds (kMidX[2] - 24, kMidY + kLampSize / 2, 48, 40);
-    clearStamp.onClick = [this] { proc.requestClear(); };
+    // Full: what an armed pattern does at its ceiling, in the last slot of
+    // the row with its box level with the knob faces. Choice 1 is Hold.
+    fullToggle = std::make_unique<WordToggle> (param (params::id::full), "FULL", "REPLACE", "HOLD");
+    plate.addAndMakeVisible (*fullToggle);
+    fullToggle->setBounds (WordToggle::boundsFor ({ kMidX[4], kMidY }));
 
     // --- bottom strip ---------------------------------------------------------
-    // Record and the export stamp, as one group under the dybbuk. The rest of
-    // the strip stays empty: these two and Clear are the whole performance.
-    recordSwitch = std::make_unique<RailSwitch> (param (params::id::record), "FROZEN", "ARMED", "RECORD");
-    recordSwitch->setRedAt (1);
-    plate.addAndMakeVisible (*recordSwitch);
-    recordSwitch->setBounds (canvasW / 2 - 104, kBottomY - 25, 140, 50);
-
-    plate.addAndMakeVisible (exportStamp);
-    // Above the dybbuk, the mirror of the clear stamp below it.
-    exportStamp.setBounds (kMidX[2] - 24, kMidY - kLampSize / 2 - 40, 48, 40);
-    exportStamp.onDragStart = [this] { dragPatternOut(); };
-    exportStamp.onClick = [this] { savePatternAs(); };
-    exportStamp.setEnabled (proc.canExportPattern());
+    // Record alone, dead centre under the dybbuk. The rest of the strip stays
+    // empty: it, Clear and Export are the whole performance.
+    recordToggle = std::make_unique<WordToggle> (param (params::id::record), "RECORD", "FROZEN", "ARMED");
+    plate.addAndMakeVisible (*recordToggle);
+    recordToggle->setBounds (WordToggle::boundsFor ({ canvasW / 2, kBottomY }));
 
     // The plate spells out every unit, because a bare number under a knob is
     // only readable if you already know what the knob is.

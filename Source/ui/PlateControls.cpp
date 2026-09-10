@@ -157,6 +157,61 @@ void RailSwitch::paint (juce::Graphics& g)
                         atRight ? p.ink : p.faded);
 }
 
+// --- WordToggle --------------------------------------------------------------
+
+WordToggle::WordToggle (juce::RangedAudioParameter& parameterToUse, juce::String caption,
+                        juce::String offWord, juce::String onWord)
+    : param (parameterToUse),
+      attachment (parameterToUse,
+                  [this] (float newValue)
+                  {
+                      normValue = param.convertTo0to1 (newValue);
+                      repaint();
+                  }),
+      captionText (std::move (caption)),
+      offText (std::move (offWord)),
+      onText (std::move (onWord))
+{
+    attachment.sendInitialUpdate();
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+juce::Rectangle<int> WordToggle::boundsFor (juce::Point<int> boxCentre)
+{
+    return { boxCentre.x - kBoxW / 2, boxCentre.y - kBoxH / 2 - kCaptionH - kGap, kBoxW, kHeight };
+}
+
+void WordToggle::mouseDown (const juce::MouseEvent&)
+{
+    // A complete gesture, so the host sees begin / value / end and records it.
+    attachment.setValueAsCompleteGesture (param.convertFrom0to1 (isOn() ? 0.0f : 1.0f));
+}
+
+void WordToggle::paint (juce::Graphics& g)
+{
+    const auto& p = theme::palette();
+    const float w = (float) getWidth();
+    const bool on = isOn();
+    const auto lineInk = hovering ? p.bright : p.ink;
+
+    theme::drawTracked (g, captionText, { 0.0f, 0.0f, w, (float) kCaptionH },
+                        juce::Justification::centred, theme::Face::semibold, 10.5f, 0.14f, lineInk);
+
+    const auto box = juce::Rectangle<float> (0.0f, (float) (kCaptionH + kGap), w, (float) kBoxH)
+                         .reduced (0.5f);
+    if (on)
+    {
+        g.setColour (p.red);
+        g.fillRoundedRectangle (box, 4.0f);
+    }
+    g.setColour (lineInk);
+    g.drawRoundedRectangle (box, 4.0f, 1.0f);
+
+    // The word is the state, so it is the one thing drawn at full weight.
+    theme::drawTracked (g, on ? onText : offText, box, juce::Justification::centred,
+                        theme::Face::semibold, 9.5f, 0.18f, on ? p.paper : lineInk);
+}
+
 // --- ClearStamp --------------------------------------------------------------
 
 ClearStamp::ClearStamp()

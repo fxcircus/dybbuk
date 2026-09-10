@@ -76,9 +76,12 @@ disagree with what is written here, this wins.
   crossfade with the engine deaf, WAV export (0 failures)
 - Five factory presets: Sixteenths, Stutter, Erosion, Pendulum, Deadpan
 - UI: the same plate, both sheets. Hero row Step (+Sync), Steps, Threshold,
-  Blend; trims Length and Fade; mid row Fills, Chaos, the dybbuk, Direction,
-  Full rail; Clear stamp under the dybbuk and the Export stamp above it,
-  mirrored; the Record rail on the bottom strip. The light sheet is the
+  Blend; the dybbuk at the plate's centre (450, 310) with the Export stamp
+  above and the Clear stamp below, the Length and Fade trims shortened to
+  flank it; a knob row of Fills, Chaos, Direction and the Full button
+  (Replace / Hold); the Record button (Armed / Frozen) centred on the bottom
+  strip. Record and Full are two-state word buttons, Roy's call after the
+  second look. The light sheet is the
   default since Roy's first look (2026-09-09). The dybbuk is the pattern, as a
   monster: one tentacle per step growing out of the housing (Roy's call
   after the first look: pips read as a DAW LED ring, tentacles read as a

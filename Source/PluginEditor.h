@@ -13,9 +13,9 @@
 // canvas coordinates; resized() only applies the scale.
 //
 // Values live under their own knobs rather than in a shared strip, so nothing
-// has to be hovered to be read. The red dot in the middle is the dybbuk: the
-// pattern drawn as a ring of pips around the ember, with the clear stamp
-// under it.
+// has to be hovered to be read. The red dot in the middle of the plate is the
+// dybbuk: the pattern drawn as a ring of pips around the ember, with the
+// export stamp over it, the clear stamp under it, and a trim on each side.
 //
 // A DragAndDropContainer so the export stamp can hand the rendered pattern to
 // the OS as a file drag, straight onto a DAW track.
@@ -87,12 +87,12 @@ private:
 
     std::unique_ptr<EngravedKnob> stepKnob, stepsKnob, thresholdKnob, blendKnob;
     std::unique_ptr<EngravedKnob> fillsKnob, chaosKnob, directionKnob;
-    // Aim-and-forget controls, in the free band between the hero row and the
-    // dybbuk: the choke and the fade are set, not ridden.
+    // Aim-and-forget controls, one on each side of the dybbuk: the choke and
+    // the fade are set, not ridden.
     std::unique_ptr<EngravedTrim> lengthTrim, fadeTrim;
     std::unique_ptr<VerticalFader> inFader, outFader;
     std::unique_ptr<DiamondToggle> bypassToggle, syncToggle;
-    std::unique_ptr<RailSwitch> fullSwitch, recordSwitch;
+    std::unique_ptr<WordToggle> fullToggle, recordToggle;
     ThemeFade themeFade;
     Lamp lamp;
     ClearStamp clearStamp;
