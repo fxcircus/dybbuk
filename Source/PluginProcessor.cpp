@@ -96,10 +96,15 @@ bool DybbukProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
     const auto in = layouts.getMainInputChannelSet();
     const auto out = layouts.getMainOutputChannelSet();
 
-    if (out != juce::AudioChannelSet::stereo())
-        return false;
-
-    return in == juce::AudioChannelSet::stereo() || in == juce::AudioChannelSet::mono();
+    // Stereo in or mono in to a stereo out (Live's effect chains are always
+    // stereo; a mono input is copied to both sides before the engine), and
+    // mono in to mono out for hosts that run mono tracks mono (Logic,
+    // GarageBand). The engine takes any channel count; Spread simply has
+    // nowhere to go on one channel.
+    const bool mono = in == juce::AudioChannelSet::mono();
+    if (out == juce::AudioChannelSet::stereo())
+        return in == juce::AudioChannelSet::stereo() || mono;
+    return out == juce::AudioChannelSet::mono() && mono;
 }
 
 void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)

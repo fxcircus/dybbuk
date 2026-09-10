@@ -386,6 +386,51 @@ void monoToStereo()
            "largest L minus R is " + juce::String (biggestDifference, 9));
 }
 
+// Mono in, mono out: what a Logic or GarageBand mono track asks for. One
+// channel end to end, and the same pattern the stereo layout would make.
+void monoToMono()
+{
+    std::printf ("mono to mono: one channel end to end\n");
+
+    DybbukProcessor p;
+    juce::AudioProcessor::BusesLayout layout;
+    layout.inputBuses.add (juce::AudioChannelSet::mono());
+    layout.outputBuses.add (juce::AudioChannelSet::mono());
+    check ("mono in, mono out is offered", p.checkBusesLayoutSupported (layout), "");
+    check ("and can be applied", p.setBusesLayout (layout), "");
+    p.prepareToPlay (kRate, kBlock);
+    setRaw (p, params::id::blend, 100.0f);
+    setRaw (p, params::id::spread, 100.0f);   // must be harmless on one channel
+
+    juce::AudioBuffer<float> buffer (1, kBlock);
+    juce::MidiBuffer midi;
+    const int blocks = (int) std::ceil (2.5 * kRate / kBlock);
+    float peak = 0.0f;
+    bool finite = true;
+    for (int b = 0; b < blocks; ++b)
+    {
+        const double t0 = b * kBlock / kRate;
+        for (int i = 0; i < kBlock; ++i)
+            buffer.setSample (0, i, burstSample (kPhrase, t0 + i / kRate));
+        p.processBlock (buffer, midi);
+        for (int i = 0; i < kBlock; ++i)
+        {
+            const float v = buffer.getSample (0, i);
+            finite = finite && std::isfinite (v);
+            if (t0 + i / kRate > 1.6)
+                peak = juce::jmax (peak, std::abs (v));
+        }
+    }
+    check ("the pattern is heard on the one channel", p.getStepCount() > 0 && peak > 0.05f,
+           juce::String (p.getStepCount()) + " steps, peak " + juce::String (peak, 3));
+    check ("and stays finite with Spread at full", finite, "");
+
+    juce::AudioProcessor::BusesLayout bad;
+    bad.inputBuses.add (juce::AudioChannelSet::stereo());
+    bad.outputBuses.add (juce::AudioChannelSet::mono());
+    check ("stereo in to mono out is refused", ! p.checkBusesLayoutSupported (bad), "");
+}
+
 // A stereo source must come out stereo. The pattern is mono (the gate hears a
 // sum, the steps are one channel), but there is no reason for the dry signal
 // to lose its image just by passing through the plugin.
@@ -935,6 +980,7 @@ int main (int argc, char* argv[])
     presetsMakeSound();
     diceIsMusical();
     monoToStereo();
+    monoToMono();
     stereoDry();
     bypassAndAudio();
     exportPattern();

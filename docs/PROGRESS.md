@@ -74,6 +74,10 @@ disagree with what is written here, this wins.
   Roy's question "why wouldn't we always replace": a full pattern always
   replaces its oldest step, Freeze is how you stop it taking more
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
+- Bus layouts: stereo in to stereo out, mono in to stereo out (the mono
+  input is copied to both sides before the engine), and mono in to mono out
+  for hosts that run mono tracks mono; stereo in to mono out is refused.
+  `ProcessorTest` covers all three
 - `EngineTest`: 16 scenarios plus `render` (65 checks, 0 failures, 0.1 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
   levels, cpu, hostile, pitch, glue, spread
