@@ -91,15 +91,15 @@ private:
     juce::Image grain;
 
     std::unique_ptr<EngravedKnob> stepKnob, stepsKnob, thresholdKnob, blendKnob;
-    std::unique_ptr<EngravedKnob> fillsKnob, chaosKnob, directionKnob, pitchKnob;
+    std::unique_ptr<EngravedKnob> glueKnob, fillsKnob, chaosKnob, directionKnob, pitchKnob, spreadKnob;
     // Aim-and-forget controls, one on each side of the dybbuk: the choke and
     // the fade are set, not ridden.
-    std::unique_ptr<EngravedTrim> lengthTrim, fadeTrim, glueTrim, spreadTrim;
+    std::unique_ptr<EngravedTrim> lengthTrim, fadeTrim;
     std::unique_ptr<VerticalFader> inFader, outFader;
     std::unique_ptr<DiamondToggle> bypassToggle, syncToggle, barToggle;
     std::unique_ptr<WordToggle> freezeToggle;
-    // Which player has the pattern: a segmented bar between the dybbuk and
-    // the knob row, the one control on the plate that changes what the
+    // Which player has the pattern: a segmented bar between the hero row
+    // and the dybbuk, the one control on the plate that changes what the
     // creature IS rather than how much of something it does.
     std::unique_ptr<ModeToggle> modeToggle;
     ThemeFade themeFade;

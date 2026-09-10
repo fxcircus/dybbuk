@@ -88,28 +88,15 @@ disagree with what is written here, this wins.
 - Five factory presets: Sixteenths, Stutter, Erosion, Pendulum, Deadpan
 - UI: the same plate, both sheets. The header is Shalal's, zone for zone
   and glyph for glyph: nameplate | bypass cap | preset station | RANDOM,
-  CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between
-  (Roy's third look; the die, wastebasket and export tray are Shalal's
-  drawings ported line for line). Hero row Threshold, Time (+Sync), Steps,
-  Blend (Threshold first because it is the first thing the signal meets,
-  Roy's call from the first playthrough; the step clock reads TIME on the plate and in the host, Roy's
-  call); the dybbuk at the plate's centre (450, 310) with the Length and
-  Fade trims shortened to flank it and nothing above or below it; the MODE
-  bar (Teder's segmented toggle, POSSESS / LINGER / LEGION / HAUNT / SEIZE,
-  440 x 28 centred under the dybbuk) and a BAR diamond under SYNC, dimmed
-  while unsynced; a knob
-  row of Fills, Chaos, the FREEZE button in its middle (no caption, lit
-  blue while it holds), Direction and Pitch; the dybbuk frosts with it, ember and tentacles going the same blue
-  and holding still (Roy: armed is the normal state and bypass is how audio stops, so
-  a Record arm read backwards). The rolled
-  dice character is printed over the dybbuk for three seconds. The light sheet is the
-  default since Roy's first look (2026-09-09). The dybbuk is the pattern, as a
-  monster: one tentacle per step growing out of the housing (Roy's call
-  after the first look: pips read as a DAW LED ring, tentacles read as a
-  virus), its reach the step's level, its red what is left of it, the
-  sounding one lit and lunging on the tick, all of them writhing slowly,
-  thrashing during a fill, a nub pushing out where the next step will land,
-  withered and hollow when faded, drawn back into the ember on a clear
+  CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between.
+  Four even bands under the rule (Roy, 2026-09-10): the hero row Threshold,
+  Time (+SYNC and BAR diamonds), Steps, Blend; the MODE bar (Teder's
+  segmented toggle, POSSESS / LINGER / LEGION / HAUNT / SEIZE) directly
+  under it; the dybbuk at (450, 392) with the Decay and Fade trims flanking
+  it; and a knob row of seven at equal spacing, Glue, Fills, Chaos, the
+  FREEZE button dead centre, Direction, Pitch, Spread, so Glue sits by the
+  IN fader and Spread by the OUT. The rolled dice character prints between
+  the bar and the dybbuk for three seconds.
 - Export: drag the stamp into a DAW for one cycle of the pattern as a
   32-bit float WAV (~/Music/Dybbuk), or click it for a save dialog
 - Not yet done: played in Ableton (Live only rescans at startup, so quit
