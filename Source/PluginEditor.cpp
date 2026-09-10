@@ -562,7 +562,7 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
     if (c == glueKnob.get())      return "Saturation on the pattern, level matched: colour and squash, not volume.";
     if (c == fillsKnob.get())
         return mode == Lamp::tremor ? "How many times the held step repeats within each step, 1 to 4."
-                                   : "Frozen, a note over the threshold scrambles the order for one cycle, this deeply.";
+                                   : "Frozen, a note over the threshold scrambles the order for one cycle, this deeply. Needs FREEZE.";
     if (c == freezeToggle.get())  return "Off, every note you play becomes a step. On, the pattern is held and you play over it.";
     if (c == chaosKnob.get())     return "Per step: skips, ratchets, reverses, jumps, intervals, offsets, chokes, accents. More is more at once.";
     if (c == spreadKnob.get())    return "Alternate steps left and right.";
@@ -690,6 +690,16 @@ void DybbukEditor::timerCallback()
         fillsKnob->setAccent (mode == (int) Lamp::tremor);
         for (auto* knob : { lengthKnob.get(), pitchKnob.get(), fillsKnob.get() })
             knob->repaint();
+    }
+
+    // Fills only acts on a frozen pattern (except in Tremor, where it is the
+    // ratchet's density whenever you play), so it dims while it can do
+    // nothing, the way the BAR diamond dims unsynced.
+    {
+        const bool fillsLive = raw (params::id::freeze) >= 0.5f || mode == (int) Lamp::tremor;
+        const float wantedAlpha = fillsLive ? 1.0f : 0.4f;
+        if (std::abs (fillsKnob->getAlpha() - wantedAlpha) > 0.01f)
+            fillsKnob->setAlpha (wantedAlpha);
     }
 
     // The hint line: the sentence fades out before it is swapped, so a

@@ -148,6 +148,13 @@ expected, three notes.
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
 
+## Fills dims while it can do nothing (2026-09-10)
+
+Roy: shouldn't Fills be greyed out when Freeze is off? Yes: it acts only
+on a frozen pattern, except in Tremor where it is the ratchet's density
+whenever you play. The knob now draws at 40 % while neither holds, the
+way the BAR diamond dims unsynced, and its hint says "Needs FREEZE".
+
 ## The creature grows in place (2026-09-10)
 
 Roy, from a screenshot: the tentacles' roots were a flat cut at the
