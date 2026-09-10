@@ -756,14 +756,22 @@ void chaos()
     const auto c = runBurst (in, wild, sr, 128, [] (BurstEngine& e, BurstEngine::Params&, double t) { if (t == 0.0) e.seedForTests (5); });
     const auto onA = onsetsOf (a.out, sr, (int) (1.5 * sr));
     const auto onC = onsetsOf (c.out, sr, (int) (1.5 * sr));
+    // Chaos may pitch a step by a musical interval, so what is heard must be
+    // one of the four notes or one of them transposed by such an interval.
     bool inSet = true;
     for (const auto& o : onC)
-        inSet = inSet && stepOf (o.freq) >= 0;
+    {
+        bool found = false;
+        for (const double base : { 220.0, 440.0, 660.0, 880.0 })
+            for (const int st : { -12, -7, -5, -3, -2, 0, 2, 3, 5, 7, 12 })
+                found = found || near (o.freq, base * std::pow (2.0, st / 12.0), 0.03);
+        inSet = inSet && found;
+    }
     // A reversed slice sounds late in its step (its silent tail plays first),
     // so onset phase is not a fair clock test here; the material is.
     check ("Chaos at full changes the output", fnvHash (a.out) != fnvHash (c.out) && allFinite (c.out),
            juce::String ((int) onA.size()) + " onsets still, " + juce::String ((int) onC.size()) + " wild");
-    check ("but only the pattern's own material is heard", inSet && c.stepCount == 4 && onC.size() >= 5,
+    check ("but only the pattern's own notes, or intervals of them", inSet && c.stepCount == 4 && onC.size() >= 5,
            stepsHeard (onC));
 }
 

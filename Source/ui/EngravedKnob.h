@@ -73,6 +73,7 @@ private:
     float normValue = 0.0f;
     float shownValue = -1.0f; // glides toward normValue, so a preset load sweeps
     float lastDragY = 0.0f;
+    float dragNorm = 0.0f;    // the drag's own, unquantised position: detents snap the value, not the hand
     bool hovering = false, dragging = false;
     float dangerFrom = -1.0f;
     int detents = 0;

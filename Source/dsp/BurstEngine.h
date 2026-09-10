@@ -116,8 +116,9 @@ private:
     // the floor leaves the pattern.
     static constexpr float kFadeMaxDb = 24.0f;
     static constexpr float kFadeFloorDb = -60.0f;
-    // Chaos at full depth: the chance per tick that something happens.
-    static constexpr float kChaosMaxChance = 0.6f;
+    // Chaos at full depth: the chance per tick that something happens, and
+    // past half depth a second and third thing can happen to the same step.
+    static constexpr float kChaosMaxChance = 0.9f;
 
     // One step playing: the voice both the live sequencer and the offline
     // render use, so an export sounds like the plugin did.
@@ -130,8 +131,10 @@ private:
         const float* data = nullptr;
         int len = 0;          // samples of material that will sound
         double pos = 0.0;     // fractional read position in the material
+        double start = 0.0;   // where the read began, for a ratchet's restart
         bool reverse = false;
         float gain = 1.0f;
+        float rateMul = 1.0f; // a per-step pitch on top of the global rate
         int fadeSamples = 1;
         bool active() const noexcept { return data != nullptr && pos < (double) len; }
         float next (float rate) noexcept;
@@ -146,7 +149,19 @@ private:
     int nextIndex() noexcept;
     int activeCount() const noexcept;
     int samplesToGrid() const noexcept;
-    void startStep (int index, int stepSamples, bool ratchet, bool reverse) noexcept;
+    // What chaos did to this step, rolled once per tick.
+    struct Deviation
+    {
+        bool skip = false, reverse = false, repeat = false, jump = false;
+        int ratchets = 1;         // 1 = none; 2..4 = the slice that many times in the step
+        float semitones = 0.0f;   // a per-step pitch
+        float offset01 = 0.0f;    // start this far into the material
+        float choke01 = 1.0f;     // a shorter choke than Length asks for
+        float gainMul = 1.0f;     // an accent or a ghost
+        float rateMulOr1() const noexcept { return semitones == 0.0f ? 1.0f : std::pow (2.0f, semitones / 12.0f); }
+    };
+    Deviation rollChaos() noexcept;
+    void startStep (int index, int stepSamples, const Deviation& d) noexcept;
     static float rateForSemitones (float st) noexcept { return std::pow (2.0f, st / 12.0f); }
     void beginFill() noexcept;
     void doClear() noexcept;
@@ -182,7 +197,7 @@ private:
     Voice voice;
     int playIndex = -1;
     int tickCounter = 0;
-    int ratchetCounter = 0;
+    int ratchetCounter = 0, ratchetPeriod = 0, ratchetsLeft = 0;
     int blockPos = 0;
     bool fillArmed = true;
     int pendulumDir = 1;

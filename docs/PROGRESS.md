@@ -64,8 +64,8 @@ disagree with what is written here, this wins.
 
 ## Current state (2026-09-09, after the Burst pivot)
 
-- Parameter count: 15, in Push bank order, all automatable: Time (id `step`), Steps,
-  Threshold, Blend, Freeze, Fills, Chaos, Direction (bank 1), then Length,
+- Parameter count: 15, in Push bank order, all automatable: Threshold, Time (id
+  `step`), Steps, Blend, Freeze, Fills, Chaos, Direction (bank 1), then Length,
   Fade, Pitch, Sync, In, Out, Bypass last. Pitch is B3's Clock under the
   name Roy chose: -12..+12 semitones on every step's material, the step
   clock untouched (a departure from the pedal, where CLOCK also slows the
@@ -85,8 +85,9 @@ disagree with what is written here, this wins.
   and glyph for glyph: nameplate | bypass cap | preset station | RANDOM,
   CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between
   (Roy's third look; the die, wastebasket and export tray are Shalal's
-  drawings ported line for line). Hero row Time (+Sync), Steps, Threshold,
-  Blend (the step clock reads TIME on the plate and in the host, Roy's
+  drawings ported line for line). Hero row Threshold, Time (+Sync), Steps,
+  Blend (Threshold first because it is the first thing the signal meets,
+  Roy's call from the first playthrough; the step clock reads TIME on the plate and in the host, Roy's
   call); the dybbuk at the plate's centre (450, 310) with the Length and
   Fade trims shortened to flank it and nothing above or below it; a knob
   row of Fills, Chaos, the FREEZE button in its middle (no caption, lit
@@ -106,6 +107,27 @@ disagree with what is written here, this wins.
 - Not yet done: played in Ableton (Live only rescans at startup, so quit
   and reopen), the drag itself exercised with a mouse, the listening pass
   on `dybbuk_burst.wav`, B3 and B4 from `docs/BURST.md`
+
+## First playthrough of the Burst build (2026-09-09, evening)
+
+Roy played it in Live: "really good direction", everything working as
+expected, three notes.
+
+1. **Chaos was too polite.** It rolled one of four things on 60 % of
+   ticks at full depth. Now nine things (skip, ratchet x2/x3/x4, reverse,
+   repeat, jump to a random step, a per-step interval, a start offset into
+   the material, a clipped choke, an accent or a ghost), on 90 % of ticks
+   at full depth, and past half depth a second and a third can land on the
+   same step. Intervals are fourths, fifths and octaves at low depth and
+   add seconds and thirds past half. Everything still starts on its tick.
+2. **Threshold is the leftmost hero knob** and the first parameter: the
+   signal meets it first. Time, Steps, Blend follow.
+3. **Direction could not be turned.** A detented knob rounded the value on
+   every mouse event, so each small move rounded straight back to the
+   detent it was on; with five detents a single event had to travel 25 px.
+   The drag now accumulates unquantised and only the sent value snaps, and
+   the wheel moves one detent per notch. Pitch (25 detents) was jerky for
+   the same reason.
 
 ## Before the pivot
 

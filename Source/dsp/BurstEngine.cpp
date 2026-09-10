@@ -15,13 +15,13 @@ float dbToGain (float db) noexcept { return juce::Decibels::decibelsToGain (db);
 float BurstEngine::Voice::next (float playRate) noexcept
 {
     const double p = pos;
-    pos += (double) juce::jmax (0.01f, playRate);
+    pos += (double) juce::jmax (0.01f, playRate * rateMul);
 
     // The fades are in material samples, so at a high rate they are short
     // in time: still enough to take the click off a cut.
     float g = gain;
-    if (p < (double) fadeSamples)
-        g *= (float) (p / (double) fadeSamples);
+    if (p - start < (double) fadeSamples)
+        g *= (float) ((p - start) / (double) fadeSamples);
     const double remaining = (double) len - p;
     if (remaining < (double) fadeSamples)
         g *= (float) (remaining / (double) fadeSamples);
@@ -95,6 +95,8 @@ void BurstEngine::doClear() noexcept
     playIndex = -1;
     tickCounter = 0;
     ratchetCounter = 0;
+    ratchetPeriod = 0;
+    ratchetsLeft = 0;
     pendulumDir = 1;
     fillTicksLeft = 0;
     uiFill.store (0.0f, std::memory_order_relaxed);
@@ -239,27 +241,74 @@ int BurstEngine::nextIndex() noexcept
     }
 }
 
-void BurstEngine::startStep (int index, int stepSamples, bool ratchet, bool reverse) noexcept
+void BurstEngine::startStep (int index, int stepSamples, const Deviation& d) noexcept
 {
     const int slot = pattern[(size_t) index];
-    // The choke is a fraction of the step in output time; at the current
-    // rate that is this much material.
+    const int material = sliceLen[(size_t) slot];
+    const float stepRate = currentRate * d.rateMulOr1();
+    // The choke is a fraction of the step in output time; at this step's
+    // rate that is this much material. A ratchet divides the step.
+    const int window = juce::jmax (1, stepSamples / juce::jmax (1, d.ratchets));
     const int choke = juce::jmax (fadeSamples * 2,
-                                  juce::roundToInt ((float) stepSamples * juce::jlimit (0.05f, 1.0f, cur.length01) * currentRate));
-    const int half = juce::roundToInt ((float) (stepSamples / 2) * currentRate);
+                                  juce::roundToInt ((float) window * juce::jlimit (0.05f, 1.0f, cur.length01 * d.choke01) * stepRate));
     voice = {};
     voice.data = slice (slot);
-    voice.len = juce::jmin (sliceLen[(size_t) slot], ratchet ? juce::jmin (choke, half) : choke);
-    voice.reverse = reverse;
-    voice.gain = stepGain[(size_t) index];
+    voice.start = (double) juce::jlimit (0, juce::jmax (0, material - fadeSamples * 4), juce::roundToInt ((float) material * d.offset01));
+    voice.pos = voice.start;
+    voice.len = juce::jmin (material, (int) voice.start + choke);
+    voice.reverse = d.reverse;
+    voice.gain = stepGain[(size_t) index] * d.gainMul;
+    voice.rateMul = d.rateMulOr1();
     voice.fadeSamples = fadeSamples;
-    ratchetCounter = ratchet ? stepSamples / 2 : 0;
+    ratchetPeriod = d.ratchets > 1 ? window : 0;
+    ratchetsLeft = d.ratchets > 1 ? d.ratchets - 1 : 0;
+    ratchetCounter = ratchetPeriod;
 
     // Fade is paid on the way in, so the play you hear is at the level the
     // step had, and the next one is quieter.
     if (cur.fade01 > 0.0f)
         stepGain[(size_t) index] *= dbToGain (-kFadeMaxDb * juce::jlimit (0.0f, 1.0f, cur.fade01));
     uiCurrentStep.store (index, std::memory_order_relaxed);
+}
+
+// Chaos: what happens to a step besides being played. At low depth one
+// mild thing now and then; at full depth most steps get something and
+// some get three things at once. Every event stays on the clock: a step
+// still starts on its tick, so it is never arrhythmic, only wrong.
+BurstEngine::Deviation BurstEngine::rollChaos() noexcept
+{
+    Deviation d;
+    const float c = juce::jlimit (0.0f, 1.0f, cur.chaos01);
+    if (c <= 0.0f || rng.unit() >= c * kChaosMaxChance)
+        return d;
+
+    int events = 1;
+    if (c > 0.5f && rng.unit() < (c - 0.5f) * 1.6f) ++events;
+    if (c > 0.75f && rng.unit() < (c - 0.75f) * 2.0f) ++events;
+
+    for (int e = 0; e < events; ++e)
+    {
+        switch ((int) (rng.unit() * 9.0f) % 9)
+        {
+            case 0: d.skip = true; break;
+            case 1: d.ratchets = 2 + (int) (rng.unit() * 3.0f) % 3; break;                 // 2, 3 or 4
+            case 2: d.reverse = true; break;
+            case 3: d.repeat = true; break;
+            case 4: d.jump = true; break;
+            case 5:
+            {
+                // Musical intervals at any depth; past half, seconds and thirds too.
+                static constexpr float mild[] = { -12.0f, -7.0f, -5.0f, 5.0f, 7.0f, 12.0f };
+                static constexpr float sour[] = { -12.0f, -7.0f, -5.0f, -3.0f, -2.0f, 2.0f, 3.0f, 5.0f, 7.0f, 12.0f };
+                d.semitones = c > 0.5f ? sour[(int) (rng.unit() * 10.0f) % 10] : mild[(int) (rng.unit() * 6.0f) % 6];
+                break;
+            }
+            case 6: d.offset01 = 0.15f + 0.6f * rng.unit(); break;                          // start mid-material
+            case 7: d.choke01 = 0.15f + 0.3f * rng.unit(); break;                           // a clipped note
+            default: d.gainMul = rng.unit() < 0.5f ? 1.5f : 0.35f; break;                   // accent or ghost
+        }
+    }
+    return d;
 }
 
 // Disarmed, an onset scrambles the order for one cycle: the hardware's
@@ -298,20 +347,11 @@ void BurstEngine::advance() noexcept
         return;
     }
 
-    bool skip = false, ratchet = false, reverse = false, repeat = false;
-    const float chance = juce::jlimit (0.0f, 1.0f, cur.chaos01) * kChaosMaxChance;
-    if (chance > 0.0f && rng.unit() < chance)
-    {
-        switch ((int) (rng.unit() * 4.0f) % 4)
-        {
-            case 0:  skip = true; break;
-            case 1:  ratchet = true; break;
-            case 2:  reverse = true; break;
-            default: repeat = true; break;
-        }
-    }
+    const Deviation d = rollChaos();
 
-    int index = repeat && playIndex >= 0 ? juce::jmin (playIndex, activeCount() - 1) : nextIndex();
+    int index = d.jump                       ? (int) (rng.unit() * (float) activeCount()) % activeCount()
+                : (d.repeat && playIndex >= 0) ? juce::jmin (playIndex, activeCount() - 1)
+                                               : nextIndex();
     playIndex = index;
     if (fillTicksLeft > 0)
     {
@@ -339,13 +379,13 @@ void BurstEngine::advance() noexcept
         playIndex = index;
     }
 
-    if (skip)
+    if (d.skip)
     {
         voice = {};
         uiCurrentStep.store (index, std::memory_order_relaxed);
         return;
     }
-    startStep (index, stepSamples, ratchet, reverse);
+    startStep (index, stepSamples, d);
     publishSteps();
 }
 
@@ -459,8 +499,13 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
         {
             if (--tickCounter <= 0)
                 advance();
-            else if (ratchetCounter > 0 && --ratchetCounter == 0)
-                voice.pos = 0.0;   // the ratchet: the same slice again, mid-step
+            else if (ratchetCounter > 0 && --ratchetCounter == 0 && ratchetsLeft > 0)
+            {
+                // The ratchet: the same slice again, from where it began.
+                voice.pos = voice.start;
+                --ratchetsLeft;
+                ratchetCounter = ratchetsLeft > 0 ? ratchetPeriod : 0;
+            }
 
             currentRate = rate.getNextValue();
             if (voice.active())

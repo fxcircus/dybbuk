@@ -110,12 +110,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // are owned by the same APVTS, so the pointer outlives the lambda.
     auto* syncRaw = stepSync.get();
 
-    // 1. Step. The knob is 0..1; what it means is a step time, and while Sync
+    // 1. Threshold: the gate's open level, the hardware's Sensitivity. It
+    // closes 6 dB under this, so a decaying tail cannot chatter it. First,
+    // because it is the first thing the signal meets (Roy, playing it).
+    layout.add (floatParam (1, id::threshold, "Threshold", { -60.0f, 0.0f }, -30.0f, "dB"));
+
+    // 2. Time. The knob is 0..1; what it means is a step time, and while Sync
     // is on it reads as a note division (Push shows the host's string, so a
     // synced Step must not read "0.31 s" there). The default is a quarter
     // second: a sixteenth at 60, an eighth at 120.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { id::step, 1 }, "Time",
+        juce::ParameterID { id::step, 2 }, "Time",
         juce::NormalisableRange<float> (0.0f, 1.0f), knob01ForStepSeconds (0.250),
         juce::AudioParameterFloatAttributes()
             .withLabel ("")
@@ -133,14 +138,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                 return knob01ForStepSeconds (sec);
             })));
 
-    // 2. Steps: the pattern ceiling. The hardware stops at 8; the engine
+    // 3. Steps: the pattern ceiling. The hardware stops at 8; the engine
     // allows 16, and the default is the hardware's.
     layout.add (std::make_unique<juce::AudioParameterInt> (
-        juce::ParameterID { id::steps, 2 }, "Steps", 1, BurstEngine::kMaxSteps, 8));
-
-    // 3. Threshold: the gate's open level, the hardware's Sensitivity. It
-    // closes 6 dB under this, so a decaying tail cannot chatter it.
-    layout.add (floatParam (3, id::threshold, "Threshold", { -60.0f, 0.0f }, -30.0f, "dB"));
+        juce::ParameterID { id::steps, 3 }, "Steps", 1, BurstEngine::kMaxSteps, 8));
 
     layout.add (floatParam (4, id::blend, "Blend", { 0.0f, 100.0f, 1.0f }, 50.0f, "%"));
 

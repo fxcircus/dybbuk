@@ -876,7 +876,7 @@ void ordering()
     std::printf ("parameter order: Push bank 1 is the eight that matter\n");
 
     DybbukProcessor p;
-    const char* wanted[] = { params::id::step, params::id::steps, params::id::threshold,
+    const char* wanted[] = { params::id::threshold, params::id::step, params::id::steps,
                              params::id::blend, params::id::freeze, params::id::fills,
                              params::id::chaos, params::id::direction };
 

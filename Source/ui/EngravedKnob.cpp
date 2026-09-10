@@ -284,6 +284,7 @@ void EngravedKnob::mouseExit (const juce::MouseEvent&)
 void EngravedKnob::mouseDown (const juce::MouseEvent& e)
 {
     lastDragY = e.position.y;
+    dragNorm = normValue;
     dragging = true;
     attachment.beginGesture();
     repaint();
@@ -293,10 +294,15 @@ void EngravedKnob::mouseDrag (const juce::MouseEvent& e)
 {
     // Incremental, never distance-from-start, so pressing or releasing shift
     // mid-drag cannot make the value jump.
+    // The hand's position accumulates on its own; a detented knob rounds
+    // that to a detent. Rounding the VALUE each event, as this once did,
+    // meant a knob with few detents never moved: each small move rounded
+    // straight back to where it was.
     const float pixels = e.mods.isShiftDown() ? kFinePixelsPerRange : kDragPixelsPerRange;
-    float norm = juce::jlimit (0.0f, 1.0f, normValue + (lastDragY - e.position.y) / pixels);
+    dragNorm = juce::jlimit (0.0f, 1.0f, dragNorm + (lastDragY - e.position.y) / pixels);
     lastDragY = e.position.y;
 
+    float norm = dragNorm;
     if (detents > 1)
         norm = std::round (norm * (float) (detents - 1)) / (float) (detents - 1);
 
@@ -330,9 +336,18 @@ void EngravedKnob::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseW
     if (dragging) // a nested gesture asserts in debug builds
         return;
 
-    const float step = kWheelPerNotch * wheel.deltaY * (e.mods.isShiftDown() ? 0.25f : 1.0f);
-    float norm = juce::jlimit (0.0f, 1.0f, normValue + step);
+    float norm;
     if (detents > 1)
-        norm = std::round (norm * (float) (detents - 1)) / (float) (detents - 1);
+    {
+        // One notch, one detent, whichever way the wheel went.
+        const float d = 1.0f / (float) (detents - 1);
+        const float current = std::round (normValue * (float) (detents - 1)) / (float) (detents - 1);
+        norm = juce::jlimit (0.0f, 1.0f, current + (wheel.deltaY > 0.0f ? d : (wheel.deltaY < 0.0f ? -d : 0.0f)));
+    }
+    else
+    {
+        const float step = kWheelPerNotch * wheel.deltaY * (e.mods.isShiftDown() ? 0.25f : 1.0f);
+        norm = juce::jlimit (0.0f, 1.0f, normValue + step);
+    }
     attachment.setValueAsCompleteGesture (param.convertFrom0to1 (norm));
 }

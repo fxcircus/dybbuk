@@ -205,12 +205,13 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     outFader->setBounds (canvasW - kFaderW - 8, kRuleY + 6, kFaderW, canvasH - kRuleY - 18);
 
     // --- hero row -------------------------------------------------------------
-    auto& step = addKnob (stepKnob, params::id::step, "TIME", EngravedKnob::heroSpec(),
-                          { kHeroX[0], kHeroY }, "20 MS", "2 S");
-    auto& steps = addKnob (stepsKnob, params::id::steps, "STEPS", EngravedKnob::heroSpec(),
-                           { kHeroX[1], kHeroY }, "1", "16");
+    // Threshold first: it is the first thing the signal meets.
     addKnob (thresholdKnob, params::id::threshold, "THRESHOLD", EngravedKnob::heroSpec(),
-             { kHeroX[2], kHeroY }, "-60", "0");
+             { kHeroX[0], kHeroY }, "-60", "0");
+    auto& step = addKnob (stepKnob, params::id::step, "TIME", EngravedKnob::heroSpec(),
+                          { kHeroX[1], kHeroY }, "20 MS", "2 S");
+    auto& steps = addKnob (stepsKnob, params::id::steps, "STEPS", EngravedKnob::heroSpec(),
+                           { kHeroX[2], kHeroY }, "1", "16");
     addKnob (blendKnob, params::id::blend, "BLEND", EngravedKnob::heroSpec(),
              { kHeroX[3], kHeroY }, "DRY", "WET");
 
@@ -236,7 +237,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     syncToggle = std::make_unique<DiamondToggle> (param (params::id::stepsync),
                                                   DiamondToggle::Style::bare, "SYNC", "SYNC");
     plate.addAndMakeVisible (*syncToggle);
-    syncToggle->setBounds (kHeroX[0] + 46, kHeroY - 12, 40, 26);
+    syncToggle->setBounds (kHeroX[1] + 46, kHeroY - 12, 40, 26);
 
     // --- the dybbuk's row -----------------------------------------------------
     // The lamp in the centre of the plate and a trim on each side: LENGTH to
