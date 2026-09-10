@@ -122,7 +122,6 @@ private:
     std::atomic<float>* pDirection;
     std::atomic<float>* pLength;
     std::atomic<float>* pFade;
-    std::atomic<float>* pFull;
     std::atomic<float>* pStepSync;
     std::atomic<float>* pInput;
     std::atomic<float>* pOut;

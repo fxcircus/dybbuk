@@ -167,9 +167,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     layout.add (percentWithWord (10, id::fade, "Fade", 0.0f, "Never"));
 
-    // 11. Full: what an armed pattern does at its ceiling.
-    layout.add (std::make_unique<juce::AudioParameterChoice> (
-        juce::ParameterID { id::full, 11 }, "Full", juce::StringArray { "Replace", "Hold" }, 0));
+    // (Hint 11 was Full, Replace / Hold at the ceiling. Removed: a full
+    // pattern always replaces its oldest step, and Freeze is how you stop it
+    // taking more. Hints are not renumbered, so nothing else moves in AU.)
 
     layout.add (std::move (stepSync)); // 12
 

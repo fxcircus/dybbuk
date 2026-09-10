@@ -64,9 +64,11 @@ disagree with what is written here, this wins.
 
 ## Current state (2026-09-09, after the Burst pivot)
 
-- Parameter count: 15, in Push bank order, all automatable: Time (id `step`), Steps,
+- Parameter count: 14, in Push bank order, all automatable: Time (id `step`), Steps,
   Threshold, Blend, Freeze, Fills, Chaos, Direction (bank 1), then Length,
-  Fade, Full, Sync, In, Out, Bypass last
+  Fade, Sync, In, Out, Bypass last. Full (Replace / Hold) was removed on
+  Roy's question "why wouldn't we always replace": a full pattern always
+  replaces its oldest step, Freeze is how you stop it taking more
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
 - `EngineTest`: 13 scenarios plus `render` (54 checks, 0 failures, 0.1 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
@@ -83,9 +85,8 @@ disagree with what is written here, this wins.
   Blend (the step clock reads TIME on the plate and in the host, Roy's
   call); the dybbuk at the plate's centre (450, 310) with the Length and
   Fade trims shortened to flank it and nothing above or below it; a knob
-  row of Fills, Chaos, Direction and the Full button (Replace / Hold); the
-  FREEZE button, no caption, lit blue while it holds, centred on the bottom
-  strip; the dybbuk frosts with it, ember and tentacles going the same blue
+  row of Fills, Chaos, the FREEZE button in its middle (no caption, lit
+  blue while it holds) and Direction; the dybbuk frosts with it, ember and tentacles going the same blue
   and holding still (Roy: armed is the normal state and bypass is how audio stops, so
   a Record arm read backwards). The rolled
   dice character is printed over the dybbuk for three seconds. The light sheet is the

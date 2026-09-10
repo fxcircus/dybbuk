@@ -25,7 +25,6 @@ namespace
         Span steps;         // integer, inclusive
         Span threshold, blend, fills, chaos, length, fade;
         float direction[BurstEngine::kDirectionCount]; // relative weights, Forward..Drunk
-        float holdChance;   // how often Full comes up Hold
     };
 
     const Character kCharacters[] = {
@@ -35,8 +34,7 @@ namespace
           { 0.120f, 0.500f }, { 4.0f, 8.0f },
           { -40.0f, -20.0f }, { 40.0f, 65.0f }, { 0.0f, 25.0f }, { 0.0f, 10.0f },
           { 70.0f, 100.0f },  { 0.0f, 10.0f },
-          { 0.70f, 0.10f, 0.20f, 0.00f, 0.00f },
-          0.20f },
+          { 0.70f, 0.10f, 0.20f, 0.00f, 0.00f } },
 
         // Short steps, choked, with chaos doing the ratchets: a stutter edit
         // played live.
@@ -44,8 +42,7 @@ namespace
           { 0.030f, 0.120f }, { 2.0f, 6.0f },
           { -40.0f, -20.0f }, { 50.0f, 80.0f }, { 20.0f, 50.0f }, { 20.0f, 55.0f },
           { 30.0f, 70.0f },   { 0.0f, 10.0f },
-          { 0.40f, 0.20f, 0.20f, 0.20f, 0.00f },
-          0.10f },
+          { 0.40f, 0.20f, 0.20f, 0.20f, 0.00f } },
 
         // A long pattern that forgets. Every step loses level each time round,
         // so it evolves like a delay instead of piling up, and the walk through
@@ -54,8 +51,7 @@ namespace
           { 0.150f, 0.600f }, { 10.0f, 16.0f },
           { -40.0f, -20.0f }, { 45.0f, 70.0f }, { 10.0f, 40.0f }, { 5.0f, 30.0f },
           { 60.0f, 100.0f },  { 15.0f, 45.0f },
-          { 0.20f, 0.10f, 0.10f, 0.20f, 0.40f },
-          0.00f },
+          { 0.20f, 0.10f, 0.10f, 0.20f, 0.40f } },
 
         // There and back. Pendulum or reverse, never forwards: the turnaround
         // is the rhythm.
@@ -63,8 +59,7 @@ namespace
           { 0.100f, 0.400f }, { 3.0f, 8.0f },
           { -40.0f, -20.0f }, { 40.0f, 65.0f }, { 10.0f, 35.0f }, { 0.0f, 20.0f },
           { 50.0f, 100.0f },  { 0.0f, 20.0f },
-          { 0.00f, 0.30f, 0.70f, 0.00f, 0.00f },
-          0.30f },
+          { 0.00f, 0.30f, 0.70f, 0.00f, 0.00f } },
 
         // Everything at once. Fills deep, chaos high, the order random or drunk,
         // and the length anywhere: the roll for when the pattern should not be
@@ -73,8 +68,7 @@ namespace
           { 0.040f, 0.300f }, { 6.0f, 16.0f },
           { -40.0f, -20.0f }, { 55.0f, 90.0f }, { 40.0f, 100.0f }, { 45.0f, 90.0f },
           { 20.0f, 100.0f },  { 0.0f, 30.0f },
-          { 0.10f, 0.10f, 0.10f, 0.40f, 0.30f },
-          0.10f },
+          { 0.10f, 0.10f, 0.10f, 0.40f, 0.30f } },
     };
 
     constexpr int kCharacterCount = (int) (sizeof (kCharacters) / sizeof (kCharacters[0]));
@@ -158,7 +152,6 @@ void Randomiser::randomiseCharacter (juce::AudioProcessorValueTreeState& apvts, 
     setParam (apvts, id::length, std::round (pick (c.length, rng)));
     setParam (apvts, id::fade, std::round (pick (c.fade, rng)));
     setParam (apvts, id::direction, (float) pickWeighted (c.direction, BurstEngine::kDirectionCount, rng));
-    setParam (apvts, id::full, rng.nextFloat() < c.holdChance ? 1.0f : 0.0f);
 
     // in, out, stepsync, freeze and bypass are deliberately untouched. See the header.
 }

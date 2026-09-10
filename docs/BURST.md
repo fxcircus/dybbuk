@@ -243,7 +243,10 @@ Tones, drift. Git keeps them.
 2. **Bypassed: listening or deaf?** The template guidance says silence
    for a looper (it collects nothing while out of circuit). Proposal: deaf.
 3. **Ceiling 8 like the hardware, or 16?** The engine allows 16.
-4. **Armed and full:** drop the oldest (as built) or stop adding.
+4. **Armed and full:** drop the oldest (as built) or stop adding. Roy
+   first asked for a switch, then (same day) for it to go: always drop
+   the oldest; Freeze is the way to stop adding. The engine keeps the
+   Hold path for the test, the plugin does not expose it.
 5. **Transport mode phase:** does step 1 realign to the bar, or does the
    pattern keep its own phase on the grid? Proposal: own phase, with a
    "reset on bar" as a later option.

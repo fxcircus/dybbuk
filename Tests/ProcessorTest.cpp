@@ -524,8 +524,6 @@ void readouts()
         { params::id::length, 5.0f, "5" },
         { params::id::fade, 0.0f, "Never" },
         { params::id::fade, 35.0f, "35 %" },
-        { params::id::full, 0.0f, "Replace" },
-        { params::id::full, 1.0f, "Hold" },
         { params::id::stepsync, 0.0f, "Free" },
         { params::id::stepsync, 1.0f, "Sync" },
         { params::id::input, 0.0f, "0.0" },
@@ -889,7 +887,7 @@ void ordering()
             ok = false;
     }
     check ("first eight parameters", ok, order.trim());
-    check ("fifteen parameters in all", all.size() == 15, juce::String (all.size()));
+    check ("fourteen parameters in all", all.size() == 14, juce::String (all.size()));
     check ("bypass is declared last", all.size() > 0 && all[all.size() - 1]->paramID == params::id::bypass,
            all.size() > 0 ? all[all.size() - 1]->paramID : juce::String ("none"));
     check ("bypass is the host bypass parameter", p.getBypassParameter() != nullptr

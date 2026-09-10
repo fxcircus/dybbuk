@@ -4,8 +4,8 @@
 
 #include "Theme.h"
 
-// The small marks on the plate: the bypass and sync diamonds, the Freeze and
-// Full rails, the header's three actions and the theme mark. Each is a
+// The small marks on the plate: the bypass and sync diamonds, the Freeze
+// button, the header's three actions and the theme mark. Each is a
 // handful of lines, so they share one file rather than seven.
 
 // A filled diamond means engaged. Used for Bypass in the header (where the
@@ -37,7 +37,7 @@ private:
 
 // A two-position slide: a rail with a travelling diamond and the two names
 // beneath it, so the state is readable without knowing which way is on. Not
-// on the plate at the moment (Freeze and Full became WordToggles, below), but
+// on the plate at the moment (Freeze became a WordToggle, below), but
 // kept: it is the right control for a choice whose two ends are peers.
 class RailSwitch : public juce::Component
 {
@@ -69,9 +69,8 @@ private:
 // A two-state button that says which state it is in: a caption over an
 // engraved rounded box with the CURRENT state's word inside. Off is paper
 // with an ink outline and an ink word; on is filled red with a paper word,
-// the plate's sign for "this is recording" (Freeze: lit while frozen) and for
-// a ceiling that holds (Full: REPLACE / HOLD). Replaces the rails for those
-// two, which read as a slider and made people drag them.
+// or blue for Freeze, lit while frozen. Replaced the rail switch, which
+// read as a slider and made people drag it.
 class WordToggle : public juce::Component
 {
 public:

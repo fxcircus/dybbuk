@@ -37,11 +37,10 @@ namespace
     // them reads as one rhythm from the rule to the foot of the faders.
     constexpr int kHeroY = 160;   // face centres
     constexpr int kLampY = 310;
-    constexpr int kMidY = 442;
-    constexpr int kBottomY = 564; // the freeze button's box centre
+    constexpr int kMidY = 462;    // the knob row, with FREEZE in its middle
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
-    constexpr int kMidX[5] = { 151, 300, 450, 600, 749 };
+    constexpr int kMidX[5] = { 151, 300, 450, 675, 749 }; // two knobs left of FREEZE, one right, balanced by mass
 
     // The dybbuk's box, centred on the plate. Wide enough for sixteen pips
     // around the ember with room to breathe.
@@ -277,19 +276,12 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
         return d.getText (d.getValue(), 32);
     });
 
-    // Full: what an armed pattern does at its ceiling, in the last slot of
-    // the row with its box level with the knob faces. Choice 1 is Hold.
-    fullToggle = std::make_unique<WordToggle> (param (params::id::full), "FULL", "REPLACE", "HOLD");
-    plate.addAndMakeVisible (*fullToggle);
-    fullToggle->setBounds (WordToggle::boundsFor ({ kMidX[4], kMidY }));
-
-    // --- bottom strip ---------------------------------------------------------
-    // Freeze alone, dead centre under the dybbuk, no caption: the word is
-    // the whole control, lit while it holds. The rest of the strip stays
-    // empty: it and the header's CLEAR are the whole performance.
+    // Freeze in the middle of the knob row, under the dybbuk, no caption:
+    // the word is the whole control, lit blue while it holds. It and the
+    // header's CLEAR are the whole performance.
     freezeToggle = std::make_unique<WordToggle> (param (params::id::freeze), juce::String(), "FREEZE", "FREEZE");
     plate.addAndMakeVisible (*freezeToggle);
-    freezeToggle->setBounds (WordToggle::boundsFor ({ canvasW / 2, kBottomY }));
+    freezeToggle->setBounds (WordToggle::boundsFor ({ kMidX[2], kMidY }));
     freezeToggle->setAccent (WordToggle::Accent::blue);
 
     // The plate spells out every unit, because a bare number under a knob is
@@ -406,7 +398,7 @@ void DybbukEditor::timerCallback()
     for (int i = 0; i < BurstEngine::kMaxSteps; ++i)
         lamp.setStep (i, proc.getStepLevel (i), proc.getStepGain (i));
     lamp.setPattern (count, proc.getCurrentStep(), proc.getTicks());
-    lamp.setCeiling (juce::roundToInt (raw (params::id::steps)), raw (params::id::full) >= 0.5f);
+    lamp.setCeiling (juce::roundToInt (raw (params::id::steps)), false);
     lamp.setGateOpen (proc.isGateOpen());
     lamp.setFillRunning (proc.isFillRunning());
     lamp.setBypassed (bypassed);
