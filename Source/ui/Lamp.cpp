@@ -344,6 +344,12 @@ void Lamp::paint (juce::Graphics& g)
             limb.lineTo (spine[k] - perp * (width[k] * 0.5f));
         limb.closeSubPath();
 
+        // The limb sits ON the housing, whatever its fade: an opaque paper
+        // underlay first, so a spent, translucent limb never shows the ring
+        // through itself.
+        g.setColour (p.paper.withAlpha (fade));
+        g.fillPath (limb);
+
         if (sounding)
         {
             g.setColour (red.withAlpha (0.3f * fade * dim));

@@ -128,6 +128,9 @@ expected, three notes.
    The drag now accumulates unquantised and only the sent value snaps, and
    the wheel moves one detent per notch. Pitch (25 detents) was jerky for
    the same reason.
+4. **Spent tentacles showed the housing ring through themselves.** Each
+   limb now has an opaque paper underlay, so however faded its red, it
+   sits on the ring rather than behind it.
 
 ## Before the pivot
 
