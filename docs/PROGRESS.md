@@ -170,6 +170,9 @@ Wraith stays second, beside the default.
 2. **The knob a mode reinterprets wears a red caption** while that mode is
    on: Decay in Linger and Haunt, Pitch in Legion, Fills in Tremor. The
    readout already said what; now the eye is led to it.
+4. **Legion at Pitch zero sings octaves.** The extra voices detuned by
+   8 cents there, a chorus Roy could not hear; now a voice an octave above
+   and one below, the readout saying "octaves".
 3. **Seize is Tremor.** Roy's rename; the enum, strings, toggle, lamp, dice
    and tests follow. He also asked for medical-condition names for the
    rest; recommendations were made and not applied.

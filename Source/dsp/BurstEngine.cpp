@@ -528,9 +528,10 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
         if (s.mode == Mode::legion)
         {
             // Pitch is the interval here: unison, up and down by it. At
-            // zero the two extra voices detune a few cents into a chorus.
+            // zero it is octaves, the classic many-voices sound; a few
+            // cents of chorus was not enough to hear (Roy).
             const float st = s.pitchSemitones;
-            const float interval = st == 0.0f ? 0.08f : st;
+            const float interval = st == 0.0f ? 12.0f : st;
             const float semis = k == 0 ? 0.0f : (k == 1 ? interval : -interval);
             v.rateMul *= std::pow (2.0f, semis / 12.0f);
             v.gain *= 0.6f;

@@ -432,7 +432,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
         const auto st = (v > 0 ? "+" : "") + juce::String (v) + " st";
         if (mode() != Lamp::legion)
             return st;
-        return v == 0 ? juce::String ("chorus") : st + " apart";
+        return v == 0 ? juce::String ("octaves") : st + " apart";
     });
     fillsKnob->setValueTextProvider ([this, mode]
     {
@@ -553,7 +553,7 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
     if (c == fadeKnob.get())      return "Level a step loses every play. A step that fades out leaves the pattern.";
     if (c == directionKnob.get()) return "The order the steps play: forward, reverse, pendulum, drunk, random.";
     if (c == pitchKnob.get())
-        return mode == Lamp::legion ? "The interval between the three voices, in semitones."
+        return mode == Lamp::legion ? "The interval between the three voices, in semitones; octaves at zero."
                                     : "Transposes every step's material, in semitones.";
     if (c == glueKnob.get())      return "Saturation on the pattern, level matched: colour and squash, not volume.";
     if (c == fillsKnob.get())

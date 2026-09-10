@@ -1237,7 +1237,10 @@ void legion()
     pz.mode = BurstEngine::Mode::legion;
     pz.stepSeconds = 0.2;
     const auto z = runBurst (in, pz, sr, 128);
-    check ("Pitch at zero is a chorus at the note", goertzelAmp (z.out, from, n, 220.0, sr) > 0.05 && allFinite (z.out), "");
+    check ("Pitch at zero is octaves", goertzelAmp (z.out, from, n, 220.0, sr) > 0.02 && goertzelAmp (z.out, from, n, 440.0, sr) > 0.01
+                                          && goertzelAmp (z.out, from, n, 110.0, sr) > 0.01 && allFinite (z.out),
+           "220 / 440 / 110 Hz at " + juce::String (goertzelAmp (z.out, from, n, 220.0, sr), 3) + " / "
+               + juce::String (goertzelAmp (z.out, from, n, 440.0, sr), 3) + " / " + juce::String (goertzelAmp (z.out, from, n, 110.0, sr), 3));
 }
 
 void wraith()
