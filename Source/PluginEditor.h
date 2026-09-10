@@ -15,8 +15,8 @@
 //
 // Values live under their own knobs rather than in a shared strip, so nothing
 // has to be hovered to be read. The red dot in the middle of the plate is the
-// dybbuk: the pattern drawn as a ring of pips around the ember, with a trim
-// on each side. Everything done TO the pattern (roll, clear, export) lives in
+// dybbuk: the pattern drawn as a ring of pips around the ember, with two
+// knobs on each side. Everything done TO the pattern (roll, clear, export) lives in
 // the header's actions zone, in Shalal's arrangement, so the middle of the
 // plate is the pattern and nothing else.
 //
@@ -91,10 +91,12 @@ private:
     juce::Image grain;
 
     std::unique_ptr<EngravedKnob> stepKnob, stepsKnob, thresholdKnob, blendKnob;
-    std::unique_ptr<EngravedKnob> glueKnob, fillsKnob, chaosKnob, directionKnob, pitchKnob, spreadKnob;
-    // Aim-and-forget controls, one on each side of the dybbuk: the choke and
-    // the fade are set, not ridden.
-    std::unique_ptr<EngravedTrim> lengthTrim, fadeTrim;
+    // The dybbuk's row, how the pattern plays: the choke and the fade on its
+    // left, the direction and the pitch on its right.
+    std::unique_ptr<EngravedKnob> lengthKnob, fadeKnob, directionKnob, pitchKnob;
+    // The bottom row, the hand and the output: FREEZE in the middle with
+    // Fills and Chaos either side, Glue by the IN fader, Spread by OUT.
+    std::unique_ptr<EngravedKnob> glueKnob, fillsKnob, chaosKnob, spreadKnob;
     std::unique_ptr<VerticalFader> inFader, outFader;
     std::unique_ptr<DiamondToggle> bypassToggle, syncToggle, barToggle;
     std::unique_ptr<WordToggle> freezeToggle;

@@ -92,11 +92,13 @@ disagree with what is written here, this wins.
   Four even bands under the rule (Roy, 2026-09-10): the hero row Threshold,
   Time (+SYNC and BAR diamonds), Steps, Blend; the MODE bar (Teder's
   segmented toggle, POSSESS / LINGER / LEGION / HAUNT / SEIZE) directly
-  under it; the dybbuk at (450, 392) with the Decay and Fade trims flanking
-  it; and a knob row of seven at equal spacing, Glue, Fills, Chaos, the
-  FREEZE button dead centre, Direction, Pitch, Spread, so Glue sits by the
-  IN fader and Spread by the OUT. The rolled dice character prints between
-  the bar and the dybbuk for three seconds.
+  under it; the dybbuk row, "how the pattern plays": Decay, Fade | the
+  dybbuk at (450, 392) | Direction, Pitch; and the bottom row, "the hand
+  and the output": Glue, Fills, the FREEZE button dead centre, Chaos,
+  Spread, so Fills and Chaos sit either side of the switch that gives
+  Fills its meaning and Glue and Spread sit by their faders. Every
+  continuous control is a knob now; the trims are gone. The rolled dice
+  character prints between the bar and the dybbuk for three seconds.
 - Export: drag the stamp into a DAW for one cycle of the pattern as a
   32-bit float WAV (~/Music/Dybbuk), or click it for a save dialog
 - Not yet done: played in Ableton (Live only rescans at startup, so quit

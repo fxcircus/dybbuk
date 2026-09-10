@@ -32,34 +32,43 @@ namespace
 
     // Four bands under the header, one even rhythm from the rule to the foot
     // of the faders: the hero knobs, the mode bar directly under their
-    // readouts, the dybbuk's row (the lamp in the middle of the plate with a
-    // trim on each side), and a seven-wide knob row across the whole content
-    // width with FREEZE in its middle. The bar sits between the hero row and
-    // the dybbuk because it is the one control that changes what the
-    // creature IS, and it reads as the heading of the dybbuk's band.
+    // readouts, the dybbuk's row (the lamp in the middle of the plate with
+    // two knobs on each side: how the pattern plays), and a knob row across
+    // the whole content width with FREEZE in its middle (the hand and the
+    // output). The bar sits between the hero row and the dybbuk because it
+    // is the one control that changes what the creature IS, and it reads as
+    // the heading of the dybbuk's band.
     constexpr int kHeroY = 160;   // face centres
     constexpr int kModeY = 290;   // the mode bar's centre line
-    constexpr int kLampY = 392;
-    constexpr int kMidY = 508;    // the knob row, with FREEZE in its middle
+    constexpr int kLampY = 392;   // the dybbuk and its four knobs
+    constexpr int kMidY = 516;    // the knob row, with FREEZE in its middle: its
+                                  // top ticks sit 20 px under the row above's readouts
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
 
-    // The knob row spans the content width between the faders (76..824),
-    // seven cells at equal pitch: GLUE nearest the IN fader, SPREAD nearest
-    // OUT, so the ends of the chain sit at the ends of the row.
+    // The two lower rows share one grid: five cells at equal pitch across the
+    // content width between the faders (76..824), the dybbuk and FREEZE on
+    // the centre cell. GLUE sits nearest the IN fader and SPREAD nearest
+    // OUT, so the ends of the chain sit at the ends of the row, and DECAY,
+    // FADE, DIRECTION and PITCH stand directly over them.
     constexpr int kContentL = 76, kContentR = 824;
-    constexpr int kMidCount = 7;
+    constexpr int kMidCount = 5;
     constexpr int midX (int k) // the centre of cell k, rounded from the exact pitch
     {
         return kContentL + ((2 * k + 1) * (kContentR - kContentL) + kMidCount) / (2 * kMidCount);
     }
-    constexpr int kMidX[kMidCount] = { midX (0), midX (1), midX (2), midX (3), midX (4), midX (5), midX (6) };
-    constexpr int kCentreX = kMidX[3];
+    constexpr int kMidX[kMidCount] = { midX (0), midX (1), midX (2), midX (3), midX (4) };
+    constexpr int kCentreX = kMidX[2];
     static_assert (kCentreX == DybbukEditor::canvasW / 2, "FREEZE sits on the plate's centre line");
 
     // The dybbuk's box, centred on the plate. Wide enough for sixteen limbs
-    // around the ember at Linger's stretch, with room to breathe.
+    // around the ember at Linger's stretch, with room to breathe. The knobs
+    // in its row are placed by the grid, and their 92 px boxes (a mid face
+    // plus its 30 px of legend room) stop about 32 px short of it each side.
     constexpr int kLampSize = 144;
+    constexpr int kMidKnobBoxW = 62 + 30;
+    static_assert (kMidX[1] + kMidKnobBoxW / 2 <= kCentreX - kLampSize / 2 - 30,
+                   "the dybbuk-row knobs clear the dybbuk's box");
 
     // The mode bar: five cells, sized so POSSESS sits comfortably in its
     // cell at the caption size.
@@ -74,11 +83,6 @@ namespace
     // of paper under the mode bar. Sixteen limbs at Linger's stretch can
     // brush its lower edge, but the caption is gone in three seconds.
     const juce::Rectangle<int> kRolledArea (kCentreX - 110, kLampY - kLampSize / 2 - 10, 220, 14);
-
-    // The trims flank the dybbuk with 50 px of paper between each rail's end
-    // and its box.
-    constexpr int kTrimW = 260;
-    constexpr int kTrimH = 34;
 
     juce::Image makeGrain (int w, int h, juce::Random& rng)
     {
@@ -283,61 +287,51 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     modeToggle->setBounds (kCentreX - kModeW / 2, kModeY - kModeH / 2, kModeW, kModeH);
 
     // --- the dybbuk's row -----------------------------------------------------
-    // The lamp in the centre of the plate and a trim on each side: LENGTH to
-    // its left, FADE to its right, their rails level with the ember.
+    // The lamp in the centre of the plate and how the pattern plays around
+    // it: DECAY and FADE on its left, DIRECTION and PITCH on its right, all
+    // on the grid the row below uses, their faces level with the ember.
     plate.addAndMakeVisible (lamp);
     lamp.setBounds (kCentreX - kLampSize / 2, kLampY - kLampSize / 2, kLampSize, kLampSize);
 
-    lengthTrim = std::make_unique<EngravedTrim> (param (params::id::length), "DECAY");
-    plate.addAndMakeVisible (*lengthTrim);
-    lengthTrim->setBounds (76, kLampY - kTrimH / 2, kTrimW, kTrimH);
-    lengthTrim->setValueTextProvider ([this]
-    {
-        return juce::String (juce::roundToInt (raw (params::id::length))) + " %";
-    });
-
-    fadeTrim = std::make_unique<EngravedTrim> (param (params::id::fade), "FADE");
-    plate.addAndMakeVisible (*fadeTrim);
-    fadeTrim->setBounds (canvasW - 76 - kTrimW, kLampY - kTrimH / 2, kTrimW, kTrimH);
-    fadeTrim->setValueTextProvider ([this]
-    {
-        const float v = raw (params::id::fade);
-        return v < 0.5f ? juce::String ("NEVER") : juce::String (juce::roundToInt (v)) + " %";
-    });
-
-    // --- the knob row, under the dybbuk --------------------------------------
-    // Seven at one pitch: the ends of the chain at the ends of the row
-    // (GLUE by the IN fader, SPREAD by the OUT fader), FREEZE dead centre.
-    addKnob (glueKnob, params::id::glue, "GLUE", EngravedKnob::midSpec(),
-             { kMidX[0], kMidY }, "CLEAN", "100");
-    addKnob (fillsKnob, params::id::fills, "FILLS", EngravedKnob::midSpec(),
-             { kMidX[1], kMidY }, "OFF", "100");
-    addKnob (chaosKnob, params::id::chaos, "CHAOS", EngravedKnob::midSpec(),
-             { kMidX[2], kMidY }, "STILL", "100");
+    addKnob (lengthKnob, params::id::length, "DECAY", EngravedKnob::midSpec(),
+             { kMidX[0], kLampY }, "5", "100");
+    addKnob (fadeKnob, params::id::fade, "FADE", EngravedKnob::midSpec(),
+             { kMidX[1], kLampY }, "NEVER", "100");
     auto& direction = addKnob (directionKnob, params::id::direction, "DIRECTION",
-                               EngravedKnob::midSpec(), { kMidX[4], kMidY }, "FWD", "RANDOM");
+                               EngravedKnob::midSpec(), { kMidX[3], kLampY }, "FWD", "RANDOM");
     // Five ways round the pattern: a detent for each, and the word under it.
     direction.setDetents (BurstEngine::kDirectionCount);
-
-    // Pitch: the hardware's CLOCK, the half that repitches. Detented at
-    // every semitone, an octave each way.
-    auto& pitch = addKnob (pitchKnob, params::id::pitch, "PITCH", EngravedKnob::midSpec(),
-                           { kMidX[5], kMidY }, "-12", "+12");
-    pitch.setDetents (25);
-    addKnob (spreadKnob, params::id::spread, "SPREAD", EngravedKnob::midSpec(),
-             { kMidX[6], kMidY }, "MONO", "100");
     direction.setValueTextProvider ([this]
     {
         auto& d = param (params::id::direction);
         return d.getText (d.getValue(), 32);
     });
 
+    // Pitch: the hardware's CLOCK, the half that repitches. Detented at
+    // every semitone, an octave each way.
+    auto& pitch = addKnob (pitchKnob, params::id::pitch, "PITCH", EngravedKnob::midSpec(),
+                           { kMidX[4], kLampY }, "-12", "+12");
+    pitch.setDetents (25);
+
+    // --- the knob row, under the dybbuk --------------------------------------
+    // The hand and the output, five at one pitch: FREEZE dead centre with
+    // FILLS and CHAOS either side of it, and the ends of the chain at the
+    // ends of the row (GLUE by the IN fader, SPREAD by the OUT fader).
+    addKnob (glueKnob, params::id::glue, "GLUE", EngravedKnob::midSpec(),
+             { kMidX[0], kMidY }, "CLEAN", "100");
+    addKnob (fillsKnob, params::id::fills, "FILLS", EngravedKnob::midSpec(),
+             { kMidX[1], kMidY }, "OFF", "100");
+    addKnob (chaosKnob, params::id::chaos, "CHAOS", EngravedKnob::midSpec(),
+             { kMidX[3], kMidY }, "STILL", "100");
+    addKnob (spreadKnob, params::id::spread, "SPREAD", EngravedKnob::midSpec(),
+             { kMidX[4], kMidY }, "MONO", "100");
+
     // Freeze in the middle of the knob row, under the dybbuk, no caption:
     // the word is the whole control, lit blue while it holds. It and the
     // header's CLEAR are the whole performance.
     freezeToggle = std::make_unique<WordToggle> (param (params::id::freeze), juce::String(), "FREEZE", "FREEZE");
     plate.addAndMakeVisible (*freezeToggle);
-    freezeToggle->setBounds (WordToggle::boundsFor ({ kMidX[3], kMidY }));
+    freezeToggle->setBounds (WordToggle::boundsFor ({ kMidX[2], kMidY }));
     freezeToggle->setAccent (WordToggle::Accent::blue);
 
     // The plate spells out every unit, because a bare number under a knob is
@@ -347,11 +341,12 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
         return [this, id] { return juce::String (juce::roundToInt (raw (id))) + " %"; };
     };
     blendKnob->setValueTextProvider (percent (params::id::blend));
+    lengthKnob->setValueTextProvider (percent (params::id::length));
 
-    // Fills, Chaos, Glue and Spread say a word at the bottom of their travel
-    // rather than "0 %", because "Off", "Still", "Clean" and "Mono" are what
-    // they mean. The words are the parameters' own, so the plate and the
-    // host agree.
+    // Fills, Chaos, Glue, Spread and Fade say a word at the bottom of their
+    // travel rather than "0 %", because "Off", "Still", "Clean", "Mono" and
+    // "Never" are what they mean. The words are the parameters' own, so the
+    // plate and the host agree.
     auto percentOrWord = [this] (const char* id, const char* word)
     {
         return [this, id, word]
@@ -364,6 +359,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     chaosKnob->setValueTextProvider (percentOrWord (params::id::chaos, "Still"));
     glueKnob->setValueTextProvider (percentOrWord (params::id::glue, "Clean"));
     spreadKnob->setValueTextProvider (percentOrWord (params::id::spread, "Mono"));
+    fadeKnob->setValueTextProvider (percentOrWord (params::id::fade, "Never"));
 
     plate.addChildComponent (themeFade);
     themeFade.setBounds (0, 0, canvasW, canvasH);
@@ -486,8 +482,8 @@ void DybbukEditor::timerCallback()
     modeToggle->tick();
 
     for (auto* knob : { stepKnob.get(), stepsKnob.get(), thresholdKnob.get(), blendKnob.get(),
-                        glueKnob.get(), fillsKnob.get(), chaosKnob.get(), directionKnob.get(),
-                        pitchKnob.get(), spreadKnob.get() })
+                        lengthKnob.get(), fadeKnob.get(), directionKnob.get(), pitchKnob.get(),
+                        glueKnob.get(), fillsKnob.get(), chaosKnob.get(), spreadKnob.get() })
         knob->tick();
 
     // CLEAR lights on the engine's acknowledgement, not on the click, so

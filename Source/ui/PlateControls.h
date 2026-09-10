@@ -106,41 +106,6 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WordToggle)
 };
 
-// A horizontal engraved trim: a caption, a hairline rail with a travelling
-// diamond, and the value right-aligned. Used for the two controls you aim and
-// then play against rather than ride -- Tones Fold and Colour -- which is why
-// they are not knobs: the plate's two knob rows are full, and a trim says
-// "set this and forget it" where a knob says "turn me".
-//
-// Same rail idiom as RailSwitch, so it reads as part of the same plate.
-class EngravedTrim : public juce::Component
-{
-public:
-    EngravedTrim (juce::RangedAudioParameter& parameterToUse, juce::String caption);
-
-    void setValueTextProvider (std::function<juce::String()> provider);
-
-    void paint (juce::Graphics& g) override;
-    void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
-    void mouseExit (const juce::MouseEvent&) override { hovering = false; repaint(); }
-    void mouseDown (const juce::MouseEvent& e) override;
-    void mouseDrag (const juce::MouseEvent& e) override;
-    void mouseUp (const juce::MouseEvent&) override;
-    void mouseDoubleClick (const juce::MouseEvent&) override;
-
-private:
-    float normFromX (float x) const noexcept;
-
-    juce::RangedAudioParameter& param;
-    juce::ParameterAttachment attachment;
-    juce::String captionText;
-    std::function<juce::String()> valueProvider;
-    float normValue = 0.0f;
-    bool hovering = false, dragging = false;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngravedTrim)
-};
-
 // The header's actions, in the house style shared with Shalal: a hairline
 // glyph over a tracked small-caps label. The glyph set, its proportions and
 // its stroke are that sheet's GlyphButton, so the two headers read as one
