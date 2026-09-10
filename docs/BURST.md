@@ -231,7 +231,30 @@ Tones, drift. Git keeps them.
 - Per-step chance, ratchet, reverse, and a swing amount, driven by a
   single Chaos macro so the dice has something to roll.
 
-### B5 — Radio: other players for the same pattern (proposal, 2026-09-09)
+### B5 — shipped 2026-09-09, as five modes
+
+Roy's names, in the plate's register, on Teder's segmented toggle:
+
+| Mode | What a step does with its material | Knobs it reads |
+|---|---|---|
+| **POSSESS** | the sequencer as it was: the material, choked by Decay | everything, as before |
+| **LINGER** (Ambient) | stretched to fill Decay's share of the step at its own pitch, two Hann grains with a phase-aligned respawn (the WSOLA idea) so a note keeps its pitch; material that outlasts the step plays as it is | Decay = how much of the step to fill; Pitch still pitch |
+| **LEGION** (Orchestral) | three voices: unison, up and down by Pitch's interval (a few cents of chorus at zero); the extra two come and go | Pitch = the interval, not a transpose |
+| **HAUNT** (Shoegaze) | the material plays whole, then its last moment is frozen as a held grain that keeps sounding under the steps that follow, up to four stacked, each fading 18 dB over Decay's share of eight ticks | Decay = how long a haunting lasts |
+| **SEIZE** (MKII Env) | while the input is over the threshold the current step is held and ratcheted, then the pattern carries on | Fills = how densely it ratchets (the scramble is off in this mode) |
+
+Also in this pass: **Bar**, a toggle beside Sync: synced, the pattern
+restarts from its first step on every bar line, even one that falls
+between grid ticks. Off, it keeps its own phase.
+
+Not built: Rotate (Dance), which is Pitch on a clock and better left to
+Chaos; the dial's static between stations (a later option).
+
+Proven: `EngineTest` bar, linger, legion, haunt, seize, modesexport (a
+step's material is trimmed to its audible length at commit, or Linger
+stretched the gate's silent release and Haunt froze it).
+
+### B5 — Radio: other players for the same pattern (the proposal, 2026-09-09)
 
 **What the hardware does.** Radio mode "contains five distinct loopers
 that take the same recording and interpret it into different genres

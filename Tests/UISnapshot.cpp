@@ -112,6 +112,31 @@ int main()
     report ("pattern");
     snap ("editor_snapshot_pattern.png");
 
+    // 2b. Each mode, with the four-step pattern playing. The dybbuk eases
+    // into each bearing over the editor's timer and Haunt's ghosts are laid
+    // down one per tick, so the feed and the dispatch loop are interleaved:
+    // the pattern has to be seen advancing, not just to have advanced.
+    {
+        auto playFor = [&processor] (double seconds)
+        {
+            for (double t = 0.0; t < seconds; t += 0.1)
+            {
+                push (processor, 0.1, 0.0f);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+            }
+        };
+        const char* modeNames[] = { "possess", "linger", "legion", "haunt", "seize" };
+        for (int m = 0; m < 5; ++m)
+        {
+            setParam (processor, params::id::mode, (float) m);
+            playFor (1.5);
+            report (modeNames[m]);
+            snapAfter ("editor_snapshot_mode_" + juce::String (modeNames[m]) + ".png", 30);
+        }
+        setParam (processor, params::id::mode, 0.0f);
+        playFor (1.0);
+    }
+
     // 3. Mid-burst: the gate is open and a fifth pip is being written. The
     // engine only updates its atomics inside processBlock, so stopping the
     // feed half way through a note holds the gate open for the picture.
@@ -148,13 +173,17 @@ int main()
     pushPhrase (processor, 5);
     push (processor, 0.3, 0.0f);
 
-    // 4. Synced Step: detents on the ring, a note value on the readout.
+    // 4. Synced Step: detents on the ring, a note value on the readout, and
+    // the Bar diamond at full strength and lit (every other frame has it
+    // dimmed, since it means nothing off the grid).
     setParam (processor, params::id::stepsync, 1.0f);
+    setParam (processor, params::id::barreset, 1.0f);
     setParam (processor, params::id::step, 0.5f);
     push (processor, 0.3, 0.0f);
     report ("synced");
     snap ("editor_snapshot_synced.png");
     setParam (processor, params::id::stepsync, 0.0f);
+    setParam (processor, params::id::barreset, 0.0f);
 
     // 5. A roll of the dice: the patch changes and the character's name is
     // printed over the dybbuk for a few seconds. This frame reviews that the

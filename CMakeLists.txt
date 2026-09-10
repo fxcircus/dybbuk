@@ -67,6 +67,7 @@ set(PLUGIN_SOURCES
     Source/ui/VerticalFader.cpp
     Source/ui/Lamp.cpp
     Source/ui/PlateControls.cpp
+    Source/ui/ModeToggle.cpp
     Source/ui/PresetHeader.cpp
     ${ENGINE_SOURCES})
 

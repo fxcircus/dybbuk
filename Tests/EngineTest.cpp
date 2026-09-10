@@ -1109,6 +1109,271 @@ void spreadTest()
     check ("and steps 2 and 4 are right only", rightOdd, stepsHeard (onR, 0, 6));
 }
 
+
+// Runs the engine with a transport: a grid of `div` samples and bars of
+// `bar` samples from `origin`, the per-block offsets resolved the way the
+// processor does it.
+BurstRun runWithTransport (const std::vector<float>& input, BurstEngine::Params p, double sr, int div, int bar, int origin,
+                           const std::function<void (BurstEngine&, BurstEngine::Params&, double)>& more = {})
+{
+    return runBurst (input, p, sr, 128, [&] (BurstEngine& e, BurstEngine::Params& q, double t) {
+        const int pos = (int) std::llround (t * sr);
+        int off = (origin - pos) % div;
+        if (off < 0) off += div;
+        q.gridOffsetSamples = off;
+        int toBar = (origin - pos) % bar;
+        if (toBar < 0) toBar += bar;
+        q.barOffsetSamples = toBar;
+        if (more) more (e, q, t);
+    });
+}
+
+void barreset()
+{
+    std::printf ("bar: synced, the pattern restarts from its first step on the bar line\n");
+    const double sr = 48000.0;
+    const int div = 6000, bar = 16 * div, origin = 1234;
+    // Three steps against sixteen ticks a bar: without the reset the bar
+    // line lands on a different step each time round.
+    const std::vector<ToneBurst> three = { { 0.10, 0.060, 220.0, 0.5 }, { 0.40, 0.060, 440.0, 0.5 }, { 0.75, 0.060, 660.0, 0.5 } };
+    const auto in = burstInput (sr, 6.5, three);
+    for (bool reset : { true, false })
+    {
+        auto p = wetParams();
+        p.stepSeconds = div / sr;
+        p.barReset = reset;
+        const auto r = runWithTransport (in, p, sr, div, bar, origin);
+        const auto on = onsetsOf (r.out, sr, (int) (1.5 * sr));
+        juce::String seen;
+        int firsts = 0, bars = 0;
+        for (int k = 1; k <= 3; ++k)
+        {
+            const int line = origin + k * bar;
+            for (const auto& o : on)
+                if (o.sample >= line && o.sample < line + 600)
+                {
+                    ++bars;
+                    firsts += stepOf (o.freq) == 0 ? 1 : 0;
+                    seen += juce::String (stepOf (o.freq) + 1) + " ";
+                    break;
+                }
+        }
+        if (reset)
+            check ("Bar on: every bar line starts on step 1", bars == 3 && firsts == 3, "steps on the bar lines: " + seen.trim());
+        else
+            check ("Bar off: the pattern keeps its own phase", bars == 3 && firsts < 3, "steps on the bar lines: " + seen.trim());
+    }
+}
+
+void linger()
+{
+    std::printf ("linger: the material stretched to fill its share of the step, at its own pitch\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 2.6, { { 0.1, 0.080, 220.0, 0.5 } });
+    struct Case { float decay; float pitch; double freq; double ms; const char* name; };
+    const Case cases[] = { { 1.0f, 0.0f, 220.0, 400.0, "Decay full: 80 ms of material fills a 400 ms step" },
+                           { 0.5f, 0.0f, 220.0, 200.0, "Decay half fills half of it" },
+                           { 1.0f, 12.0f, 440.0, 400.0, "Pitch and stretch are independent" } };
+    for (const auto& c : cases)
+    {
+        auto p = wetParams();
+        p.mode = BurstEngine::Mode::linger;
+        p.stepSeconds = 0.4;
+        p.length01 = c.decay;
+        p.pitchSemitones = c.pitch;
+        const auto r = runBurst (in, p, sr, 128);
+        // From the first play (silence before it), since a step that is
+        // filled leaves no gap for a later onset to be found in.
+        const auto on = onsetsOf (r.out, sr);
+        const int t0 = on.empty() ? 0 : on[0].sample;
+        // Still sounding late in its share of the step, and quiet after it.
+        const int lateFrom = t0 + (int) ((c.ms * 0.001 - 0.06) * sr), lateN = (int) (0.04 * sr);
+        const double late = rmsOf (r.out, lateFrom, lateN);
+        const double after = rmsOf (r.out, t0 + (int) ((c.ms * 0.001 + 0.03) * sr), (int) (0.05 * sr));
+        // Stretched grains beat against each other, so a crossing count is
+        // not a fair pitch estimate; the note's own bin against its
+        // whole-tone neighbours is.
+        const int n = (int) (juce::jmin (0.35, c.ms * 0.0009) * sr);
+        const double at = goertzelAmp (r.out, t0, n, c.freq, sr);
+        const double below = goertzelAmp (r.out, t0, n, c.freq / 1.122, sr);
+        const double above = goertzelAmp (r.out, t0, n, c.freq * 1.122, sr);
+        const bool fills = late > 0.08 && (c.ms >= 399.0 ? true : after < 0.01);
+        check (c.name, ! on.empty() && fills && at > below * 2.0 && at > above * 2.0,
+               "rms " + juce::String (late, 3) + " near the end of its share, " + juce::String (after, 3) + " after; the note "
+                   + juce::String (dbfs (at / juce::jmax (below, above)), 1) + " dB over its neighbours");
+    }
+    // Long material is not squeezed: it plays as it is and is cut by the step.
+    {
+        auto p = wetParams();
+        p.mode = BurstEngine::Mode::linger;
+        p.stepSeconds = 0.2;
+        const auto longIn = burstInput (sr, 2.0, { { 0.1, 0.400, 330.0, 0.5 } });
+        const auto r = runBurst (longIn, p, sr, 128);
+        const int from = (int) (1.0 * sr), n = (int) (0.8 * sr);
+        const double at = goertzelAmp (r.out, from, n, 330.0, sr);
+        const double up = goertzelAmp (r.out, from, n, 330.0 * 1.0595, sr), down = goertzelAmp (r.out, from, n, 330.0 / 1.0595, sr);
+        check ("material longer than the step is never sped up", at > 0.1 && at > up * 2.0 && at > down * 2.0,
+               "330 Hz at " + juce::String (at, 3) + ", neighbours " + juce::String (juce::jmax (up, down), 3));
+    }
+}
+
+void legion()
+{
+    std::printf ("legion: three voices, Pitch the interval between them\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 4.0, { { 0.1, 0.150, 220.0, 0.5 } });
+    auto p = wetParams();
+    p.mode = BurstEngine::Mode::legion;
+    p.stepSeconds = 0.2;
+    p.pitchSemitones = 7.0f;
+    const auto r = runBurst (in, p, sr, 128, [] (BurstEngine& e, BurstEngine::Params&, double t) { if (t == 0.0) e.seedForTests (3); });
+    const int from = (int) (1.0 * sr), n = (int) (2.5 * sr);
+    const double unison = goertzelAmp (r.out, from, n, 220.0, sr);
+    const double up = goertzelAmp (r.out, from, n, 220.0 * std::pow (2.0, 7.0 / 12.0), sr);
+    const double down = goertzelAmp (r.out, from, n, 220.0 * std::pow (2.0, -7.0 / 12.0), sr);
+    check ("unison, a fifth up and a fifth down all sound", unison > 0.02 && up > 0.01 && down > 0.01,
+           "amplitudes " + juce::String (unison, 3) + " / " + juce::String (up, 3) + " / " + juce::String (down, 3));
+    check ("the extra voices come and go", up < unison * 0.95 || down < unison * 0.95,
+           "the fifths average lower than the unison over 2.5 s");
+    check ("and it stays inside full scale", peakOf (r.out, 0, (int) r.out.size()) <= 1.0, juce::String (peakOf (r.out, 0, (int) r.out.size()), 3));
+
+    auto pz = wetParams();
+    pz.mode = BurstEngine::Mode::legion;
+    pz.stepSeconds = 0.2;
+    const auto z = runBurst (in, pz, sr, 128);
+    check ("Pitch at zero is a chorus at the note", goertzelAmp (z.out, from, n, 220.0, sr) > 0.05 && allFinite (z.out), "");
+}
+
+void haunt()
+{
+    std::printf ("haunt: each step leaves a frozen moment that sounds under the next ones\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 3.0, { { 0.1, 0.080, 220.0, 0.5 } });
+    auto possess = wetParams();
+    possess.stepSeconds = 0.3;
+    auto h = wetParams();
+    h.mode = BurstEngine::Mode::haunt;
+    h.stepSeconds = 0.3;
+    h.length01 = 1.0f;
+    const auto a = runBurst (in, possess, sr, 128);
+    const auto b = runBurst (in, h, sr, 128);
+    const auto on = onsetsOf (a.out, sr);
+    bool ok = on.size() >= 3;
+    double gapPossess = 0.0, gapHaunt = 0.0, hauntFreq = 0.0;
+    if (ok)
+    {
+        // The gap after the second step's 80 ms of material: silent in
+        // Possess, the first step's moment still sounding in Haunt.
+        const int gap = on[1].sample + (int) (0.15 * sr), gn = (int) (0.12 * sr);
+        gapPossess = rmsOf (a.out, gap, gn);
+        gapHaunt = rmsOf (b.out, gap, gn);
+        hauntFreq = goertzelAmp (b.out, gap, gn, 220.0, sr);
+    }
+    check ("the moment sounds through the gap", ok && gapPossess == 0.0 && gapHaunt > 0.02 && hauntFreq > 0.02,
+           "gap rms " + juce::String (gapPossess, 4) + " possessed, " + juce::String (gapHaunt, 4) + " haunted, at the note "
+               + juce::String (hauntFreq, 3));
+
+    auto brief = h;
+    brief.length01 = 0.05f;   // one tick
+    const auto c = runBurst (in, brief, sr, 128);
+    double lateHaunt = 0.0, lateBrief = 0.0;
+    if (ok && on.size() >= 6)
+    {
+        const int gap = on[5].sample + (int) (0.15 * sr), gn = (int) (0.12 * sr);
+        lateHaunt = rmsOf (b.out, gap, gn);
+        lateBrief = rmsOf (c.out, gap, gn);
+    }
+    // One step repeating spawns a fresh moment every tick, so at Decay full
+    // four of them stack; at Decay's floor each dies within a tick and only
+    // the newest sounds.
+    check ("Decay sets how long a haunting lasts, and they stack", lateHaunt > lateBrief * 1.3,
+           "six steps in: " + juce::String (dbfs (lateHaunt), 1) + " dBFS at Decay full, " + juce::String (dbfs (lateBrief), 1) + " at Decay's floor");
+    check ("finite", allFinite (b.out) && allFinite (c.out), "");
+}
+
+void seize()
+{
+    std::printf ("seize: a hand on the pattern holds and ratchets the current step\n");
+    const double sr = 48000.0;
+    std::vector<ToneBurst> phrase = { { 0.10, 0.040, 220.0, 0.5 }, { 0.40, 0.040, 440.0, 0.5 },
+                                      { 0.75, 0.040, 660.0, 0.5 }, { 1.10, 0.040, 880.0, 0.5 } };
+    phrase.push_back ({ 2.0, 1.0, 1100.0, 0.5 });   // the hand, frozen so it is not captured
+    const auto in = burstInput (sr, 4.6, phrase);
+    auto p = wetParams();
+    p.mode = BurstEngine::Mode::seize;
+    p.fills01 = 0.34f;   // one extra ratchet: 100 ms windows, so 80 ms of material still leaves a gap to count
+    const auto r = runBurst (in, p, sr, 128, [] (BurstEngine&, BurstEngine::Params& q, double t) { if (t >= 1.5) q.record = false; });
+    const auto held = onsetsOf (r.out, sr, (int) (2.1 * sr));
+    int during = 0, sameStep = 0, first = -1;
+    for (const auto& o : held)
+    {
+        if (o.sample >= (int) (2.95 * sr))
+            break;
+        ++during;
+        if (first < 0) first = stepOf (o.freq);
+        sameStep += stepOf (o.freq) == first ? 1 : 0;
+    }
+    check ("while the input is hot the step is held", during >= 4 && sameStep == during,
+           juce::String (during) + " onsets, " + juce::String (sameStep) + " on the same step");
+    check ("and ratcheted, Fills setting how densely", during >= 7,
+           juce::String (during) + " onsets in 850 ms of 200 ms steps (twice a step)");
+    const auto after = onsetsOf (r.out, sr, (int) (3.3 * sr));
+    bool cycles = after.size() >= 4;
+    for (size_t i = 1; cycles && i < after.size(); ++i)
+        cycles = stepOf (after[i].freq) == (stepOf (after[i - 1].freq) + 1) % 4;
+    check ("released, the pattern carries on", cycles && r.stepCount == 4, stepsHeard (after, 0, 6));
+}
+
+
+// Every mode exports: one cycle, the right length, finite, and sounding.
+void modesExport()
+{
+    std::printf ("modes export: each mode renders offline\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 3.4, kFour);
+    auto p = wetParams();
+    BurstEngine engine;
+    engine.prepare (sr, 128);
+    juce::AudioBuffer<float> buf (2, 128);
+    for (size_t pos = 0; pos < in.size(); pos += 128)
+    {
+        const int n = (int) juce::jmin ((size_t) 128, in.size() - pos);
+        for (int i = 0; i < n; ++i)
+        {
+            buf.setSample (0, i, in[pos + (size_t) i]);
+            buf.setSample (1, i, in[pos + (size_t) i]);
+        }
+        juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, n);
+        engine.process (view, p);
+    }
+    BurstEngine::PatternCopy copy;
+    check ("a four-step pattern to export", engine.copyPattern (copy) && copy.steps.size() == 4, juce::String ((int) copy.steps.size()));
+
+    const char* names[] = { "Possess", "Linger", "Legion", "Haunt", "Seize" };
+    for (int m = 0; m < BurstEngine::kModeCount; ++m)
+    {
+        BurstEngine::RenderSettings rs;
+        rs.stepSeconds = 0.2;
+        rs.mode = static_cast<BurstEngine::Mode> (m);
+        rs.pitchSemitones = 7.0f;
+        rs.spread01 = 0.5f;
+        rs.glue01 = 0.3f;
+        juce::AudioBuffer<float> out;
+        const int total = BurstEngine::renderPattern (copy, rs, out);
+        std::vector<float> l ((size_t) total), r ((size_t) total);
+        for (int i = 0; i < total; ++i)
+        {
+            l[(size_t) i] = out.getSample (0, i);
+            r[(size_t) i] = out.getSample (1, i);
+        }
+        const bool ok = total == 4 * juce::roundToInt (0.2 * sr) && allFinite (l) && allFinite (r)
+                        && rmsOf (l, 0, total) > 0.02 && rmsOf (r, 0, total) > 0.02
+                        && peakOf (l, 0, total) <= 1.0 && peakOf (r, 0, total) <= 1.0;
+        check (names[m], ok, juce::String (total) + " samples, rms " + juce::String (dbfs (rmsOf (l, 0, total)), 1) + " / "
+                                 + juce::String (dbfs (rmsOf (r, 0, total)), 1) + " dBFS");
+    }
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -1116,6 +1381,8 @@ const Scenario kScenarios[] = {
     { "fade", fade },         { "fills", fills },   { "chaos", chaos },         { "ceiling", ceiling },
     { "export", exportPattern }, { "deaf", deaf },  { "levels", levels },       { "cpu", cpu },
     { "hostile", hostile },   { "pitch", pitch },     { "glue", glueTest },       { "spread", spreadTest },
+    { "bar", barreset },      { "linger", linger },   { "legion", legion },       { "haunt", haunt },
+    { "seize", seize },       { "modesexport", modesExport },
 };
 
 } // namespace

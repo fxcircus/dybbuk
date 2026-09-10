@@ -34,6 +34,17 @@ namespace
     constexpr float kWritheRate = 0.055f;            // radians per tick at rest
     constexpr int kSpineSegments = 12;
 
+    // The bearings. A mode change eases over about half a second, slow
+    // enough that the limbs are seen to stretch or split rather than swap.
+    constexpr float kModeEase = 0.1f;
+    constexpr float kLingerStretch = 0.3f;           // Linger: reach, and the wobble's width
+    constexpr float kLingerSlow = 0.5f;              // ... and how much slower it writhes
+    constexpr float kLegionFan = 0.75f;              // Legion: the side bulbs' angle off the heading, radians
+    constexpr float kTrailAgePerTick = 0.6f;         // Haunt: a ghost is mostly gone four ticks on
+    constexpr float kTrailAgePerFrame = 0.985f;      // ... and fades on its own once the pattern stops
+    constexpr float kTrailDrift = 0.35f;             // ... drifting back a third of a slot as it goes
+    constexpr float kTremorPx = 2.2f;                // Seize: how far the ember shakes with the gate open
+
     juce::Point<float> rayDir (float slot, float slots) noexcept
     {
         const float a = juce::MathConstants<float>::twoPi * slot / juce::jmax (1.0f, slots);
@@ -85,6 +96,7 @@ void Lamp::setPattern (int stepCount, int currentStep, int ticks) noexcept
     {
         lastTicks = ticks;
         pulse = 1.0f;
+        ticked = true;
     }
 }
 
@@ -156,6 +168,70 @@ void Lamp::tick()
     const float lit = bypassed ? 0.0f : 0.4f * pulse + 0.45f * flare;
     live = juce::jlimit (0.03f, 1.0f, (envelope * (0.9f + flicker) + lit) * (1.0f - dip));
 
+    // The bearing crossfades; every weight moves, so the outgoing mode lets
+    // go at the same pace the incoming one takes hold.
+    for (int m = 0; m < kModeCount; ++m)
+    {
+        auto& mix = modeMix[(size_t) m];
+        const float wantedMix = m == modeWanted ? 1.0f : 0.0f;
+        if (mix == wantedMix)
+            continue;
+        mix += (wantedMix - mix) * kModeEase;
+        if (std::abs (mix - wantedMix) < 0.005f)
+            mix = wantedMix;
+        ringDirty = true;
+    }
+    const float lingerMix = modeMix[(size_t) linger];
+    const float hauntMix = modeMix[(size_t) haunt];
+    const float seizeMix = modeMix[(size_t) seize];
+
+    // Haunt: on every tick the limb that has just started sounding leaves a
+    // ghost of itself; the older ghosts step back a generation.
+    if (ticked)
+    {
+        ticked = false;
+        if (hauntMix > 0.01f && current >= 0 && current < count && ! bypassed)
+        {
+            for (auto& t : trails)
+                t.age *= kTrailAgePerTick;
+            auto& t = trails[(size_t) nextTrail];
+            t.slot = current;
+            t.slots = shownSlots;
+            t.level = level[(size_t) current];
+            t.gain = gain[(size_t) current];
+            t.writhe = writhe;
+            t.age = 1.0f;
+            nextTrail = (nextTrail + 1) % kTrails;
+            ringDirty = true;
+        }
+    }
+    for (auto& t : trails)
+    {
+        if (t.age <= 0.0f)
+            continue;
+        t.age = t.age * kTrailAgePerFrame - (hauntMix < 0.01f ? 0.05f : 0.0f);
+        if (t.age < 0.02f)
+            t.age = 0.0f;
+        ringDirty = true;
+    }
+
+    // Seize: a tight tremor, new every frame, hardest while the gate is open
+    // and a smaller one on every tick; the sounding limb twitches with it.
+    if (seizeMix > 0.01f && ! bypassed)
+    {
+        const float shake = seizeMix * (1.0f - frost) * juce::jmin (1.0f, flare + 0.5f * pulse);
+        tremorX = (rng.nextFloat() - 0.5f) * 2.0f * kTremorPx * shake;
+        tremorY = (rng.nextFloat() - 0.5f) * 2.0f * kTremorPx * shake;
+        twitch = (rng.nextFloat() - 0.5f) * 2.0f * seizeMix * (1.0f - frost);
+        if (count > 0 || shake > 0.01f)
+            ringDirty = true;
+    }
+    else if (tremorX != 0.0f || tremorY != 0.0f || twitch != 0.0f)
+    {
+        tremorX = tremorY = twitch = 0.0f;
+        ringDirty = true;
+    }
+
     // The ring's layout: one more slot while a step is being written, unless
     // the pattern is full and holding, in which case nothing will be added.
     const bool writing = gate && ! bypassed && (count < ceiling || ! hold);
@@ -183,7 +259,9 @@ void Lamp::tick()
     // the frost has set.
     if ((count > 0 || collapse > 0.0f || (gate && ! bypassed)) && frost < 1.0f)
     {
-        writhe += kWritheRate * (1.0f + 1.5f * pulse + 3.0f * warmth) * (1.0f - frost);
+        // Stretched (Linger), the limbs row slower as well as wider.
+        writhe += kWritheRate * (1.0f + 1.5f * pulse + 3.0f * warmth) * (1.0f - frost)
+                  * (1.0f - kLingerSlow * lingerMix);
         if (writhe > juce::MathConstants<float>::twoPi * 64.0f)
             writhe -= juce::MathConstants<float>::twoPi * 64.0f;
         ringDirty = true;
@@ -223,9 +301,15 @@ void Lamp::paint (juce::Graphics& g)
 {
     const auto& p = theme::palette();
     const auto b = getLocalBounds().toFloat();
-    const auto c = b.getCentre();
+    // The fixture is bolted down; the ember and its limbs shake with Seize.
+    const auto fixture = b.getCentre();
+    const auto c = fixture + juce::Point<float> (tremorX, tremorY);
     const float dim = bypassed ? 0.35f : 1.0f;
     const bool listening = count == 0 && collapse <= 0.0f;
+    const float lingerMix = modeMix[(size_t) linger];
+    const float legionMix = modeMix[(size_t) legion];
+    const float hauntMix = modeMix[(size_t) haunt];
+    const float seizeMix = modeMix[(size_t) seize];
 
     // The fixture: sixteen rays around the housing, fainter while there is
     // nothing to hold.
@@ -234,7 +318,7 @@ void Lamp::paint (juce::Graphics& g)
     {
         const float a = juce::degreesToRadians (22.5f * (float) i);
         const juce::Point<float> dir (std::sin (a), -std::cos (a));
-        g.drawLine ({ c + dir * kRayInnerR, c + dir * kRayOuterR }, 1.0f);
+        g.drawLine ({ fixture + dir * kRayInnerR, fixture + dir * kRayOuterR }, 1.0f);
     }
 
 
@@ -251,10 +335,11 @@ void Lamp::paint (juce::Graphics& g)
     }
 
     g.setColour (p.ink.withAlpha (dim));
-    g.drawEllipse (c.x - kHousingR, c.y - kHousingR, kHousingR * 2.0f, kHousingR * 2.0f, 1.5f);
+    g.drawEllipse (fixture.x - kHousingR, fixture.y - kHousingR, kHousingR * 2.0f, kHousingR * 2.0f, 1.5f);
 
-    // The glass itself: a hatched disc that swells and brightens.
-    const float scale = 0.72f + 0.42f * live;
+    // The glass itself: a hatched disc that swells and brightens. Seizing,
+    // it also clenches and lets go a little with every frame.
+    const float scale = 0.72f + 0.42f * live + 0.05f * seizeMix * twitch;
     const float r = 20.0f * scale;
     const float alpha = (0.55f + 0.45f * live) * dim;
     const juce::Rectangle<float> glass (c.x - r, c.y - r, r * 2.0f, r * 2.0f);
@@ -285,12 +370,18 @@ void Lamp::paint (juce::Graphics& g)
     // that lights up and lunges.
     const auto red = pipColour (p);
     auto drawTentacle = [&] (float slot, float slots, float lv, float gn, bool sounding, float fade,
-                             float lengthScale, int phaseIndex)
+                             float lengthScale, int phaseIndex, float writheAt)
     {
-        const auto dir = rayDir (slot, slots);
+        // Seizing, the sounding limb jerks off its heading a little every frame.
+        const float twist = sounding ? twitch * 0.12f * seizeMix : 0.0f;
+        const auto ray = rayDir (slot, slots);
+        const juce::Point<float> dir (ray.x * std::cos (twist) - ray.y * std::sin (twist),
+                                      ray.x * std::sin (twist) + ray.y * std::cos (twist));
         const juce::Point<float> perp (-dir.y, dir.x);
+        // Lingering, every limb is stretched: further out, and rowing wider.
+        const float stretch = 1.0f + kLingerStretch * lingerMix;
         const float reach = (kTentacleMin + (kTentacleMax - kTentacleMin) * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)))
-                                * (0.55f + 0.45f * gn) * lengthScale
+                                * (0.55f + 0.45f * gn) * lengthScale * stretch
                             + (sounding ? 4.0f * (0.6f + 0.4f * pulse) : 0.0f);
         if (reach < 2.0f)
             return;
@@ -298,12 +389,15 @@ void Lamp::paint (juce::Graphics& g)
         // Each limb has its own phase and pace, so they do not row in unison.
         const float phase = (float) phaseIndex * 2.399f;
         const float pace = 0.7f + 0.5f * std::fmod ((float) phaseIndex * 0.618f, 1.0f);
-        const float amp = kWaveAmp + std::abs (jitter[(size_t) (phaseIndex % kMaxPips)]) * 2.0f
-                          + (sounding ? 1.5f * pulse : 0.0f);
+        const float amp = (kWaveAmp + std::abs (jitter[(size_t) (phaseIndex % kMaxPips)]) * 2.0f
+                           + (sounding ? 1.5f * pulse + 3.0f * seizeMix * std::abs (twitch) : 0.0f))
+                          * (1.0f + 2.0f * kLingerStretch * lingerMix);
         // The bulb at the tip, and the neck that carries it: the neck is as
         // wide as the bulb's radius, so the limb swells into the ball rather
-        // than touching it with a hair, and the two are one outline.
-        const float tipR = 2.2f + 1.7f * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)) + (sounding ? 0.8f : 0.0f);
+        // than touching it with a hair, and the two are one outline. Legion
+        // shrinks the bulb, since it is about to be one of three.
+        const float tipR = (2.2f + 1.7f * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)) + (sounding ? 0.8f : 0.0f))
+                           * (1.0f - 0.3f * legionMix);
         const float wRoot = 4.4f + 1.8f * lv + (sounding ? 0.8f : 0.0f);
         const float wTip = tipR;
 
@@ -313,7 +407,7 @@ void Lamp::paint (juce::Graphics& g)
         {
             const float t = (float) k / (float) kSpineSegments;
             // The wave grows toward the tip so the root stays anchored.
-            const float wobble = amp * t * t * std::sin (juce::MathConstants<float>::twoPi * 1.15f * t + phase + writhe * pace);
+            const float wobble = amp * t * t * std::sin (juce::MathConstants<float>::twoPi * 1.15f * t + phase + writheAt * pace);
             spine[k] = c + dir * (kTentacleRoot + reach * t) + perp * wobble;
             width[k] = wRoot * (1.0f - t) + wTip * t;
         }
@@ -350,28 +444,65 @@ void Lamp::paint (juce::Graphics& g)
         g.setColour (p.paper.withAlpha (fade));
         g.fillPath (limb);
 
+        const auto fill = sounding ? red.withAlpha (fade * dim)
+                                   : red.withAlpha ((0.45f + 0.55f * lv) * gn * fade * dim);
         if (sounding)
         {
             g.setColour (red.withAlpha (0.3f * fade * dim));
             g.strokePath (limb, juce::PathStrokeType (3.0f));
-            g.setColour (red.withAlpha (fade * dim));
         }
-        else
-        {
-            g.setColour (red.withAlpha ((0.45f + 0.55f * lv) * gn * fade * dim));
-        }
+        g.setColour (fill);
         g.fillPath (limb);
 
         // The ink outline fades with the step but never below what a stroke
         // on the plate needs: a spent limb is a hollow, withered one.
-        g.setColour (p.ink.withAlpha ((0.45f + 0.55f * gn) * fade * dim));
+        const auto outline = p.ink.withAlpha ((0.45f + 0.55f * gn) * fade * dim);
+        g.setColour (outline);
         g.strokePath (limb, juce::PathStrokeType (sounding ? 1.1f : 0.9f));
+
+        // Legion: two more bulbs on short stalks either side of the tip, so
+        // the limb ends in a fan of three. They grow out of the bulb as the
+        // mode takes hold, so a switch is seen as a splitting.
+        if (legionMix > 0.01f)
+        {
+            const float bulbR = tipR * (0.6f + 0.4f * (1.0f - legionMix));
+            const float stalk = legionMix * tipR * 2.3f;
+            const auto base = tip - unitDir * (tipR * 0.35f);
+            for (const float sign : { -1.0f, 1.0f })
+            {
+                const float a = sign * kLegionFan;
+                const juce::Point<float> fan (unitDir.x * std::cos (a) - unitDir.y * std::sin (a),
+                                              unitDir.x * std::sin (a) + unitDir.y * std::cos (a));
+                const auto end = base + fan * stalk;
+                const juce::Rectangle<float> bulb (end.x - bulbR, end.y - bulbR, bulbR * 2.0f, bulbR * 2.0f);
+                g.setColour (outline);
+                g.drawLine ({ base, end }, bulbR + 1.6f);
+                g.setColour (p.paper.withAlpha (fade));
+                g.drawLine ({ base, end }, bulbR);
+                g.fillEllipse (bulb);
+                g.setColour (fill);
+                g.drawLine ({ base, end }, bulbR);
+                g.fillEllipse (bulb);
+                g.setColour (outline);
+                g.drawEllipse (bulb, sounding ? 1.1f : 0.9f);
+            }
+        }
     };
+
+    // Haunt: the ghosts go under the living limbs. Each is the limb as it
+    // lunged, a little further out than the limb now stands, drifting back
+    // against the clock and fading as it ages, its wobble stopped where it
+    // was: the sound left behind at the step.
+    if (hauntMix > 0.01f)
+        for (const auto& t : trails)
+            if (t.age > 0.0f && t.slot >= 0)
+                drawTentacle ((float) t.slot - kTrailDrift * (1.0f - t.age), t.slots, t.level, t.gain, false,
+                              0.55f * t.age * hauntMix, 1.2f + 0.1f * (1.0f - t.age), t.slot + 3, t.writhe);
 
     for (int i = 0; i < count; ++i)
     {
         const auto idx = (size_t) i;
-        drawTentacle ((float) i, shownSlots, level[idx], gain[idx], i == current, 1.0f, 1.0f, i);
+        drawTentacle ((float) i, shownSlots, level[idx], gain[idx], i == current, 1.0f, 1.0f, i, writhe);
     }
 
     // The limb being written: a nub pushing out of the housing at the slot
@@ -380,12 +511,13 @@ void Lamp::paint (juce::Graphics& g)
     if (writing)
     {
         const int slot = count < ceiling ? count : 0;
-        drawTentacle ((float) slot, shownSlots, 0.5f, 0.6f, false, 0.35f + 0.65f * flare, 0.25f + 0.55f * flare, slot + 7);
+        drawTentacle ((float) slot, shownSlots, 0.5f, 0.6f, false, 0.35f + 0.65f * flare, 0.25f + 0.55f * flare,
+                      slot + 7, writhe);
     }
 
     // The limbs as they were, drawn back into the ember after a clear.
     if (collapse > 0.0f && ghostCount > 0)
         for (int i = 0; i < ghostCount; ++i)
             drawTentacle ((float) i, (float) ghostCount, ghostLevel[(size_t) i], ghostGain[(size_t) i], false,
-                          collapse, collapse, i);
+                          collapse, collapse, i, writhe);
 }

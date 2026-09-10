@@ -195,6 +195,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.add (percentWithWord (15, id::glue, "Glue", 0.0f, "Clean"));
     layout.add (percentWithWord (16, id::spread, "Spread", 0.0f, "Mono"));
 
+    // 17. Mode: what a step does with its material. Possess is the sequencer
+    // as it is; the rest are other players for the same pattern (B5).
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { id::mode, 17 }, "Mode",
+        juce::StringArray { "Possess", "Linger", "Legion", "Haunt", "Seize" }, 0));
+
+    // 18. Bar: synced, the pattern restarts from its first step on every bar
+    // line. Off, it keeps its own phase on the grid.
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { id::barreset, 18 }, "Bar", false,
+        juce::AudioParameterBoolAttributes().withStringFromValueFunction (
+            [] (bool v, int) { return juce::String (v ? "On" : "Off"); })));
+
     // LAST, and hint 1000 so anything added later still sorts before it in AU
     // while staying declared last for VST3. 1 means bypassed, which is the
     // polarity the hosts expect.

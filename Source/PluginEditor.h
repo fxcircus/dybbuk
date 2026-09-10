@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "ui/EngravedKnob.h"
 #include "ui/Lamp.h"
+#include "ui/ModeToggle.h"
 #include "ui/PlateControls.h"
 #include "ui/PresetHeader.h"
 #include "ui/Theme.h"
@@ -95,8 +96,12 @@ private:
     // the fade are set, not ridden.
     std::unique_ptr<EngravedTrim> lengthTrim, fadeTrim, glueTrim, spreadTrim;
     std::unique_ptr<VerticalFader> inFader, outFader;
-    std::unique_ptr<DiamondToggle> bypassToggle, syncToggle;
+    std::unique_ptr<DiamondToggle> bypassToggle, syncToggle, barToggle;
     std::unique_ptr<WordToggle> freezeToggle;
+    // Which player has the pattern: a segmented bar between the dybbuk and
+    // the knob row, the one control on the plate that changes what the
+    // creature IS rather than how much of something it does.
+    std::unique_ptr<ModeToggle> modeToggle;
     ThemeFade themeFade;
     Lamp lamp;
     PresetHeader presetHeader { proc.presetManager };

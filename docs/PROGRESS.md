@@ -64,9 +64,9 @@ disagree with what is written here, this wins.
 
 ## Current state (2026-09-09, after the Burst pivot)
 
-- Parameter count: 17, in Push bank order, all automatable: Threshold, Time (id
+- Parameter count: 19, in Push bank order, all automatable: Threshold, Time (id
   `step`), Steps, Blend, Freeze, Fills, Chaos, Direction (bank 1), then Length,
-  Fade, Pitch, Sync, In, Out, Glue, Spread, Bypass last. Pitch is B3's Clock under the
+  Fade, Pitch, Sync, In, Out, Glue, Spread, Mode, Bar, Bypass last. Pitch is B3's Clock under the
   name Roy chose: -12..+12 semitones on every step's material, the step
   clock untouched (a departure from the pedal, where CLOCK also slows the
   pattern), a fractional read with linear interpolation so a decimated
@@ -78,9 +78,10 @@ disagree with what is written here, this wins.
   input is copied to both sides before the engine), and mono in to mono out
   for hosts that run mono tracks mono; stereo in to mono out is refused.
   `ProcessorTest` covers all three
-- `EngineTest`: 16 scenarios plus `render` (67 checks, 0 failures, 0.1 s):
+- `EngineTest`: 22 scenarios plus `render` (89 checks, 0 failures, 0.2 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
-  levels, cpu, hostile, pitch, glue, spread
+  levels, cpu, hostile, pitch, glue, spread, bar, linger, legion, haunt,
+  seize, modesexport
 - `ProcessorTest`: ordering, readouts, session and preset round-trips, five
   factory presets load and sound, dice, mono to stereo, stereo dry, bypass
   crossfade with the engine deaf, WAV export (0 failures)
@@ -93,7 +94,10 @@ disagree with what is written here, this wins.
   Blend (Threshold first because it is the first thing the signal meets,
   Roy's call from the first playthrough; the step clock reads TIME on the plate and in the host, Roy's
   call); the dybbuk at the plate's centre (450, 310) with the Length and
-  Fade trims shortened to flank it and nothing above or below it; a knob
+  Fade trims shortened to flank it and nothing above or below it; the MODE
+  bar (Teder's segmented toggle, POSSESS / LINGER / LEGION / HAUNT / SEIZE,
+  440 x 28 centred under the dybbuk) and a BAR diamond under SYNC, dimmed
+  while unsynced; a knob
   row of Fills, Chaos, the FREEZE button in its middle (no caption, lit
   blue while it holds), Direction and Pitch; the dybbuk frosts with it, ember and tentacles going the same blue
   and holding still (Roy: armed is the normal state and bypass is how audio stops, so
@@ -139,6 +143,43 @@ expected, three notes.
    instrument and the room, not the patch; the dice touches only what
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
+
+## B5 shipped: the modes (2026-09-09, late)
+
+Roy asked for the pedal's Radio stations under names of our own, on the
+segmented toggle from Teder, with today's sequencer as a mode of its own,
+and every mode reading the knobs that already exist rather than adding
+one. `docs/BURST.md` has the table. In short: **POSSESS** is the
+sequencer as it was; **LINGER** stretches each step's material to fill
+Decay's share of the step at its own pitch; **LEGION** sings each step
+three times over, Pitch the interval; **HAUNT** leaves each step's last
+moment behind as a held grain under the steps that follow, Decay how long
+it lasts; **SEIZE** holds and ratchets the current step while you play
+over the threshold, Fills how densely. Plus **Bar**, a toggle beside Sync
+that restarts the pattern from its first step on every bar line.
+
+Engine notes worth keeping:
+- A step's material is trimmed to its audible length at commit (-60 dB
+  under its peak, plus 5 ms). Before that the gate's silent release tail
+  was part of every slice; Possess never played it, but Linger stretched
+  it and Haunt froze it.
+- The grain player respawns each grain at the offset near the head that
+  best continues what the OTHER grain is reading (a short normalised
+  correlation, the WSOLA idea). Aligning each grain to its own past was
+  not enough: the two grains still combed, and a stretched 220 Hz note
+  sat 2 dB over its whole-tone neighbours. Aligned to each other it sits
+  49 dB over. At real time there is no search.
+- Haunt's layers fade 18 dB over Decay's share of eight ticks and drop at
+  20 dB down; one repeating step spawns a fresh moment every tick, so at
+  Decay full four stack and the gap is 3 dB louder than at Decay's floor.
+- The dice rolls Mode per character (Steady stays mostly in Possess,
+  Havoc goes anywhere); Bar is left alone like Sync.
+- The dybbuk shows the mode, eased over a second: Linger's limbs reach
+  further and row slower and wider; Legion's end in a fan of three bulbs;
+  Haunt leaves up to four ghost limbs drifting back and fading behind
+  the steps that sounded; Seize shakes the ember and glass with the
+  gate and twists the sounding limb. The lamp box grew to 144 px so
+  Linger's reach does not clip.
 
 ## B4 shipped (2026-09-09, night)
 

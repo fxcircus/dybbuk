@@ -30,22 +30,33 @@ namespace
     constexpr int kActionsW = 3 * kActionW + 2 * kActionGap;
     constexpr int kActionsX = kHairAfterStation + (kHairBeforeTheme - kHairAfterStation - kActionsW) / 2;
 
-    // Four bands under the header: the hero knobs, the dybbuk's row (the lamp
-    // in the middle of the plate with a trim on each side), the small knobs,
-    // and the freeze button on the bottom strip. With nothing stacked above
-    // or below the dybbuk any more, the bands are spread so the paper between
-    // them reads as one rhythm from the rule to the foot of the faders.
+    // Five bands under the header: the hero knobs, the dybbuk's row (the lamp
+    // in the middle of the plate with a trim on each side), the mode bar
+    // under the dybbuk, the small knobs, and a second trim band on the
+    // bottom strip. The knob row and the bottom trims sit 10 px lower than
+    // they did before the mode bar, which is what it cost to give the bar
+    // paper of its own; the hero row and the dybbuk did not move.
     constexpr int kHeroY = 160;   // face centres
     constexpr int kLampY = 310;
-    constexpr int kMidY = 452;    // the knob row, with FREEZE in its middle
-    constexpr int kBottomTrimY = 572; // GLUE and SPREAD, a second trim band
+    constexpr int kModeY = 398;   // the mode bar's centre line
+    constexpr int kMidY = 464;    // the knob row, with FREEZE in its middle
+    constexpr int kBottomTrimY = 582; // GLUE and SPREAD, a second trim band
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
     constexpr int kMidX[5] = { 151, 300, 450, 600, 749 };
 
-    // The dybbuk's box, centred on the plate. Wide enough for sixteen pips
-    // around the ember with room to breathe.
-    constexpr int kLampSize = 128;
+    // The dybbuk's box, centred on the plate. Wide enough for sixteen limbs
+    // around the ember at Linger's stretch, with room to breathe.
+    constexpr int kLampSize = 144;
+
+    // The mode bar: five cells, sized so POSSESS sits comfortably in its
+    // cell at the caption size.
+    constexpr int kModeW = 440, kModeH = 28;
+
+    // The Bar diamond hangs directly under the Sync diamond beside Time.
+    constexpr int kSyncX = kHeroX[1] + 46, kSyncY = kHeroY - 12;
+    constexpr int kBarY = kSyncY + 24;
+    constexpr float kBarDimAlpha = 0.4f; // the Bar diamond while Sync is off
 
     // What the dice last rolled is printed just over the dybbuk, in the paper
     // the export stamp used to occupy.
@@ -238,7 +249,15 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     syncToggle = std::make_unique<DiamondToggle> (param (params::id::stepsync),
                                                   DiamondToggle::Style::bare, "SYNC", "SYNC");
     plate.addAndMakeVisible (*syncToggle);
-    syncToggle->setBounds (kHeroX[1] + 46, kHeroY - 12, 40, 26);
+    syncToggle->setBounds (kSyncX, kSyncY, 40, 26);
+
+    // Bar: synced, the pattern restarts on every bar line. It only means
+    // something on the grid, so it is dimmed while Sync is off.
+    barToggle = std::make_unique<DiamondToggle> (param (params::id::barreset),
+                                                 DiamondToggle::Style::bare, "BAR", "BAR");
+    plate.addAndMakeVisible (*barToggle);
+    barToggle->setBounds (kSyncX, kBarY, 40, 26);
+    barToggle->setAlpha (proc.isSynced() ? 1.0f : kBarDimAlpha);
 
     // --- the dybbuk's row -----------------------------------------------------
     // The lamp in the centre of the plate and a trim on each side: LENGTH to
@@ -283,6 +302,14 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
         const float v = raw (params::id::spread);
         return v < 0.5f ? juce::String ("MONO") : juce::String (juce::roundToInt (v)) + " %";
     });
+
+    // --- the mode bar, under the dybbuk --------------------------------------
+    // No caption: the five names are the whole control. It is bound to the
+    // Mode choice, so the cells are the parameter's own options in order.
+    modeToggle = std::make_unique<ModeToggle> (param (params::id::mode),
+                                               juce::StringArray { "POSSESS", "LINGER", "LEGION", "HAUNT", "SEIZE" });
+    plate.addAndMakeVisible (*modeToggle);
+    modeToggle->setBounds (kMidX[2] - kModeW / 2, kModeY - kModeH / 2, kModeW, kModeH);
 
     // --- the small knobs, under the dybbuk -----------------------------------
     addKnob (fillsKnob, params::id::fills, "FILLS", EngravedKnob::midSpec(),
@@ -432,6 +459,7 @@ void DybbukEditor::timerCallback()
     lamp.setFillRunning (proc.isFillRunning());
     lamp.setBypassed (bypassed);
     lamp.setFrozen (raw (params::id::freeze) >= 0.5f);
+    lamp.setMode (juce::roundToInt (raw (params::id::mode)));
 
     // The rolled character's name fades out over about three seconds.
     if (rolledTicks > 0 && --rolledTicks >= 0)
@@ -450,7 +478,9 @@ void DybbukEditor::timerCallback()
         lastSynced = synced;
         stepKnob->setDetents (synced ? timemap::kDivisionCount : 0);
         stepKnob->setLegends (synced ? "1/32" : "50 MS", synced ? "1 BAR" : "2 S");
+        barToggle->setAlpha (synced ? 1.0f : kBarDimAlpha);
     }
+    modeToggle->tick();
 
     for (auto* knob : { stepKnob.get(), stepsKnob.get(), thresholdKnob.get(), blendKnob.get(),
                         fillsKnob.get(), chaosKnob.get(), directionKnob.get(), pitchKnob.get() })

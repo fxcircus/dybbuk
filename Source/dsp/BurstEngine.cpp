@@ -36,6 +36,202 @@ float BurstEngine::Voice::next (float playRate) noexcept
     return (a + (b - a) * frac) * g;
 }
 
+void BurstEngine::Grains::begin (const float* d, int n, double headStart, double adv, int grainSize, int outSamples, Rng& rng) noexcept
+{
+    data = d;
+    len = n;
+    head = juce::jlimit (0.0, (double) juce::jmax (0, n - 1), headStart);
+    advance = adv;
+    size = juce::jmax (2, grainSize);
+    left = outSamples;
+    // The second grain starts half a grain in, so the two windows always
+    // sum to one.
+    for (int k = 0; k < 2; ++k)
+    {
+        start[k] = head;
+        age[k] = k == 0 ? 0 : size / 2;
+    }
+    juce::ignoreUnused (rng);
+}
+
+float BurstEngine::Grains::next (float rate, Rng& rng) noexcept
+{
+    juce::ignoreUnused (rng);   // the search replaced the jitter; the signature stays for the callers
+    if (! active())
+        return 0.0f;
+    float out = 0.0f;
+    const double lastIndex = (double) (len - 1);
+    for (int k = 0; k < 2; ++k)
+    {
+        if (age[k] >= size)
+        {
+            // Respawn near the head, at the offset that best continues the
+            // waveform this grain was reading (the WSOLA idea): the samples
+            // just before each candidate are matched against the samples
+            // this grain just read, so a stretched or frozen note keeps its
+            // phase from grain to grain instead of smearing. At real time
+            // the head already continues it, so no search.
+            // The reference is what the OTHER grain is reading right now, so
+            // the two stay in phase with each other, not each with its own past.
+            const int other = k ^ 1;
+            const double continuing = start[other] + (double) age[other] * (double) (rate * rateMul);
+            double best = head;
+            const int win = juce::jmin (256, size / 2);
+            const int reach = size / 4;
+            const int cEnd = (int) continuing;            // the sample the other grain reads now
+            if (std::abs (advance) < 0.999 && len > size * 2 && cEnd - win >= 0 && cEnd <= len)
+            {
+                float bestScore = -1.0e30f;
+                for (int off = -reach; off <= reach; off += 2)
+                {
+                    const int hEnd = (int) head + off;      // candidate start; its history is the win before it
+                    if (hEnd - win < 0 || hEnd + size >= len)
+                        continue;
+                    float score = 0.0f, energy = 1.0e-9f;
+                    for (int i = 0; i < win; ++i)
+                    {
+                        const float a = data[cEnd - win + i], b = data[hEnd - win + i];
+                        score += a * b;
+                        energy += b * b;
+                    }
+                    score /= std::sqrt (energy);
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        best = (double) hEnd;
+                    }
+                }
+            }
+            start[k] = juce::jlimit (0.0, lastIndex, best);
+            age[k] = 0;
+        }
+        const float w = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::twoPi * (float) age[k] / (float) size);
+        double rp = start[k] + (double) age[k] * (double) (rate * rateMul);
+        if (rp > lastIndex)
+            rp = lastIndex;
+        const int i0 = (int) rp;
+        const float frac = (float) (rp - (double) i0);
+        const float a = data[i0];
+        const float b = i0 + 1 < len ? data[i0 + 1] : a;
+        out += (a + (b - a) * frac) * w;
+        ++age[k];
+    }
+    head = juce::jlimit (0.0, lastIndex, head + advance);
+    --left;
+    return out * gain;
+}
+
+bool BurstEngine::StepVoice::sounding() const noexcept
+{
+    if (stretch.active())
+        return true;
+    for (int k = 0; k < voices; ++k)
+        if (v[k].active())
+            return true;
+    return false;
+}
+
+void BurstEngine::StepVoice::restart() noexcept
+{
+    for (int k = 0; k < voices; ++k)
+        v[k].pos = v[k].start;
+    if (stretch.data != nullptr)
+    {
+        stretch.head = stretch.start[0];
+        stretch.age[0] = 0;
+        stretch.age[1] = stretch.size / 2;
+    }
+}
+
+void BurstEngine::StepVoice::stop() noexcept
+{
+    for (auto& x : v)
+        x = {};
+    voices = 0;
+    stretch = {};
+}
+
+float BurstEngine::StepVoice::next (float rate, Rng& rng) noexcept
+{
+    if (stretch.data != nullptr)
+        return stretch.next (rate, rng);
+    float out = 0.0f;
+    for (int k = 0; k < voices; ++k)
+        if (v[k].active())
+            out += v[k].next (rate);
+    return out;
+}
+
+const float* BurstEngine::StepVoice::material() const noexcept
+{
+    return stretch.data != nullptr ? stretch.data : (voices > 0 ? v[0].data : nullptr);
+}
+
+int BurstEngine::StepVoice::materialLen() const noexcept
+{
+    return stretch.data != nullptr ? stretch.len : (voices > 0 ? v[0].len : 0);
+}
+
+double BurstEngine::StepVoice::reached() const noexcept
+{
+    return stretch.data != nullptr ? stretch.head : (voices > 0 ? juce::jmin (v[0].pos, (double) v[0].len) : 0.0);
+}
+
+void BurstEngine::Haunts::clear() noexcept
+{
+    for (int k = 0; k < kMax; ++k)
+    {
+        layer[k] = {};
+        panL[k] = panR[k] = 1.0f;
+    }
+}
+
+// A new moment takes the quietest slot: the oldest haunting gives way.
+void BurstEngine::Haunts::spawn (const float* material, int len, double reached, int grainSize, float gain,
+                                 float pl, float pr, Rng& rng) noexcept
+{
+    if (material == nullptr || len < grainSize * 2 || gain <= 0.0f)
+        return;
+    int slot = -1;
+    for (int k = 0; k < kMax && slot < 0; ++k)
+        if (! layer[k].active())
+            slot = k;
+    if (slot < 0)
+    {
+        slot = 0;
+        for (int k = 1; k < kMax; ++k)
+            if (layer[k].gain < layer[slot].gain)
+                slot = k;
+    }
+    const double at = juce::jlimit (0.0, (double) (len - grainSize - 1), reached - (double) grainSize);
+    layer[slot].begin (material, len, at, 0.0, grainSize, 1 << 30, rng);
+    layer[slot].gain = gain;
+    panL[slot] = pl;
+    panR[slot] = pr;
+}
+
+void BurstEngine::Haunts::tick (float decayPerTick) noexcept
+{
+    for (int k = 0; k < kMax; ++k)
+    {
+        layer[k].gain *= decayPerTick;
+        if (layer[k].gain < kHauntGain * 0.1f)   // -20 dB down: gone
+            layer[k] = {};
+    }
+}
+
+void BurstEngine::Haunts::next (float rate, Rng& rng, float& l, float& r) noexcept
+{
+    for (int k = 0; k < kMax; ++k)
+    {
+        if (! layer[k].active())
+            continue;
+        const float s = layer[k].next (rate, rng);
+        l += s * panL[k];
+        r += s * panR[k];
+    }
+}
+
 // --- lifecycle ---------------------------------------------------------------
 
 void BurstEngine::prepare (double sampleRate, int maxBlockSize)
@@ -57,7 +253,8 @@ void BurstEngine::prepare (double sampleRate, int maxBlockSize)
 
     for (auto* s : { &inGain, &outGain, &wetMix, &dryMix, &rate, &glueAmount })
         s->reset (sr, 0.02);
-    glue.prepare (sr);
+    glueL.prepare (sr);
+    glueR.prepare (sr);
 
     reset();
 }
@@ -76,7 +273,8 @@ void BurstEngine::reset() noexcept
     rate.setCurrentAndTargetValue (1.0f);
     currentRate = 1.0f;
     glueAmount.setCurrentAndTargetValue (0.0f);
-    glue.reset();
+    glueL.reset();
+    glueR.reset();
     wetMix.setCurrentAndTargetValue (std::sin (juce::MathConstants<float>::halfPi * 0.5f));
     dryMix.setCurrentAndTargetValue (std::cos (juce::MathConstants<float>::halfPi * 0.5f));
 }
@@ -94,7 +292,9 @@ void BurstEngine::doClear() noexcept
     gateOpen = false;
     openedFor = 0;
     capWrite = 0;
-    voice = {};
+    voice.stop();
+    haunts.clear();
+    barCountdown = 0;
     playIndex = -1;
     tickCounter = 0;
     ratchetCounter = 0;
@@ -150,8 +350,8 @@ void BurstEngine::dropStep (int index) noexcept
     }
     --count;
     endMutation();
-    if (voice.data == slice (slot))
-        voice = {};
+    if (voice.material() == slice (slot))
+        voice.stop();
     if (index <= playIndex)
         --playIndex;
     if (! gateOpen)
@@ -165,7 +365,19 @@ void BurstEngine::commit() noexcept
 {
     gateOpen = false;
     uiGate.store (0.0f, std::memory_order_relaxed);
-    const int len = capWrite;
+    // The gate closes a release after the sound stops, so the slice ends in
+    // silence. Trim it to what was audible (plus a little), or Linger would
+    // stretch the silence and Haunt would freeze it.
+    int len = capWrite;
+    {
+        const float* src = slice (captureSlot);
+        const float floorLevel = slicePeak[(size_t) captureSlot] * 0.001f;   // -60 dB under the peak
+        int last = 0;
+        for (int i = 0; i < capWrite; ++i)
+            if (std::abs (src[i]) > floorLevel)
+                last = i;
+        len = juce::jmin (capWrite, last + juce::roundToInt (0.005 * sr));
+    }
     capWrite = 0;
 
     const int ceiling = juce::jlimit (1, kMaxSteps, cur.maxSteps);
@@ -244,26 +456,109 @@ int BurstEngine::nextIndex() noexcept
     }
 }
 
+int BurstEngine::grainSizeFor (double sampleRate, int materialLen) noexcept
+{
+    const int wanted = juce::roundToInt (kGrainMs * 0.001 * sampleRate);
+    return juce::jmax (juce::roundToInt (0.002 * sampleRate), juce::jmin (wanted, materialLen / 2));
+}
+
+float BurstEngine::hauntDecayPerTick (float length01) noexcept
+{
+    const int ticks = 1 + juce::roundToInt ((float) (kHauntMaxTicks - 1) * juce::jlimit (0.0f, 1.0f, length01));
+    return std::pow (10.0f, -0.9f / (float) ticks);   // -18 dB over `ticks` ticks, then it is dropped
+}
+
+// One step starting, in any mode. The choke is a fraction of the step in
+// output time; at this step's rate that is this much material. A ratchet
+// divides the step.
+void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len, float stepGain,
+                                  const StepSetup& s, const Deviation& d, Rng& rng) noexcept
+{
+    sv.stop();
+    panFor (s.index, s.spread01, sv.panL, sv.panR);
+    const int window = juce::jmax (1, s.stepSamples / juce::jmax (1, d.ratchets));
+    const float share = juce::jlimit (0.05f, 1.0f, s.length01 * d.choke01);
+    const int offset = juce::jlimit (0, juce::jmax (0, len - s.fadeSamples * 4), juce::roundToInt ((float) len * d.offset01));
+    const float gain = stepGain * d.gainMul;
+
+    if (s.mode == Mode::linger)
+    {
+        // Stretched to fill its share of the step: the head walks the
+        // material at M / T, never faster than real time.
+        const int outSamples = juce::jmax (s.fadeSamples * 2, juce::roundToInt ((float) window * share));
+        const int grain = grainSizeFor (s.sampleRate, len);
+        // The head has the material less one grain to cover, since the last
+        // grain reads a grain's worth past it.
+        const double remaining = (double) juce::jmax (1, len - offset - grain);
+        if (remaining + grain > (double) outSamples)
+        {
+            // Nothing to stretch: the material outlasts its share of the
+            // step and plays as it is, cut at the boundary like Possess.
+        }
+        else
+        {
+            const double advance = (remaining / (double) outSamples) * (d.reverse ? -1.0 : 1.0);
+            sv.stretch.begin (material, len, d.reverse ? (double) (len - 1 - grain) : (double) offset, advance,
+                              grain, outSamples, rng);
+            sv.stretch.gain = gain;
+            sv.stretch.rateMul = d.rateMulOr1();
+            return;
+        }
+    }
+
+    // Possess, Haunt and Seize play the material; Legion plays it three
+    // times over at intervals. Haunt is never choked: the whole moment is
+    // what will be left behind.
+    const float stepRate = s.rate * d.rateMulOr1();
+    const int choke = s.mode == Mode::haunt
+                          ? len
+                          : juce::jmax (s.fadeSamples * 2, juce::roundToInt ((float) window * share * (s.mode == Mode::linger ? 1.0f : stepRate)));
+    const int n = s.mode == Mode::legion ? 3 : 1;
+    sv.voices = n;
+    for (int k = 0; k < n; ++k)
+    {
+        Voice& v = sv.v[k];
+        v = {};
+        v.data = material;
+        v.start = (double) offset;
+        v.pos = v.start;
+        v.len = juce::jmin (len, offset + choke);
+        v.reverse = d.reverse;
+        v.fadeSamples = s.fadeSamples;
+        v.gain = gain;
+        v.rateMul = d.rateMulOr1();
+        if (s.mode == Mode::legion)
+        {
+            // Pitch is the interval here: unison, up and down by it. At
+            // zero the two extra voices detune a few cents into a chorus.
+            const float st = s.pitchSemitones;
+            const float interval = st == 0.0f ? 0.08f : st;
+            const float semis = k == 0 ? 0.0f : (k == 1 ? interval : -interval);
+            v.rateMul *= std::pow (2.0f, semis / 12.0f);
+            v.gain *= 0.6f;
+            // The extra voices come and go.
+            if (k > 0 && rng.unit() > 0.7f)
+                v.len = 0;
+        }
+    }
+}
+
 void BurstEngine::startStep (int index, int stepSamples, const Deviation& d) noexcept
 {
     const int slot = pattern[(size_t) index];
-    const int material = sliceLen[(size_t) slot];
-    const float stepRate = currentRate * d.rateMulOr1();
-    // The choke is a fraction of the step in output time; at this step's
-    // rate that is this much material. A ratchet divides the step.
+    StepSetup s;
+    s.mode = cur.mode;
+    s.length01 = cur.length01;
+    s.pitchSemitones = cur.pitchSemitones;
+    s.spread01 = cur.spread01;
+    s.index = index;
+    s.stepSamples = stepSamples;
+    s.rate = currentRate;
+    s.fadeSamples = fadeSamples;
+    s.sampleRate = sr;
+    startStepVoice (voice, slice (slot), sliceLen[(size_t) slot], stepGain[(size_t) index], s, d, rng);
+
     const int window = juce::jmax (1, stepSamples / juce::jmax (1, d.ratchets));
-    const int choke = juce::jmax (fadeSamples * 2,
-                                  juce::roundToInt ((float) window * juce::jlimit (0.05f, 1.0f, cur.length01 * d.choke01) * stepRate));
-    voice = {};
-    voice.data = slice (slot);
-    voice.start = (double) juce::jlimit (0, juce::jmax (0, material - fadeSamples * 4), juce::roundToInt ((float) material * d.offset01));
-    voice.pos = voice.start;
-    voice.len = juce::jmin (material, (int) voice.start + choke);
-    voice.reverse = d.reverse;
-    voice.gain = stepGain[(size_t) index] * d.gainMul;
-    voice.rateMul = d.rateMulOr1();
-    voice.fadeSamples = fadeSamples;
-    panFor (index, cur.spread01, voice.panL, voice.panR);
     ratchetPeriod = d.ratchets > 1 ? window : 0;
     ratchetsLeft = d.ratchets > 1 ? d.ratchets - 1 : 0;
     ratchetCounter = ratchetPeriod;
@@ -348,13 +643,34 @@ void BurstEngine::advance() noexcept
     uiTicks.fetch_add (1, std::memory_order_relaxed);
     ratchetCounter = 0;
 
+    // Haunt: the step that just ended leaves its moment behind, and every
+    // haunting already there fades a little.
+    if (cur.mode == Mode::haunt)
+    {
+        haunts.tick (hauntDecayPerTick (cur.length01));
+        if (voice.material() != nullptr)
+            haunts.spawn (voice.material(), voice.materialLen(), voice.reached(),
+                          grainSizeFor (sr, voice.materialLen()), kHauntGain, voice.panL, voice.panR, rng);
+    }
+
     if (count <= 0)
     {
-        voice = {};
+        voice.stop();
         return;
     }
 
-    const Deviation d = rollChaos();
+    Deviation d = rollChaos();
+
+    // Seize: a hand on the pattern. While the input is hot the current
+    // step is held and ratcheted, Fills setting how densely.
+    const bool seized = cur.mode == Mode::seize && inputHot && playIndex >= 0;
+    if (seized)
+    {
+        d.repeat = true;
+        d.jump = false;
+        d.skip = false;
+        d.ratchets = juce::jmax (d.ratchets, 1 + juce::roundToInt (3.0f * juce::jlimit (0.0f, 1.0f, cur.fills01)));
+    }
 
     int index = d.jump                       ? (int) (rng.unit() * (float) activeCount()) % activeCount()
                 : (d.repeat && playIndex >= 0) ? juce::jmin (playIndex, activeCount() - 1)
@@ -377,7 +693,7 @@ void BurstEngine::advance() noexcept
         publishSteps();
         if (count == 0)
         {
-            voice = {};
+            voice.stop();
             playIndex = -1;
             uiCurrentStep.store (-1, std::memory_order_relaxed);
             return;
@@ -388,7 +704,7 @@ void BurstEngine::advance() noexcept
 
     if (d.skip)
     {
-        voice = {};
+        voice.stop();
         uiCurrentStep.store (index, std::memory_order_relaxed);
         return;
     }
@@ -420,7 +736,9 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     inGain.setTargetValue (dbToGain (p.inputDb));
     outGain.setTargetValue (p.outDb <= kOutFloorDb ? 0.0f : dbToGain (p.outDb));
     wetMix.setTargetValue (std::sin (juce::MathConstants<float>::halfPi * blend));
-    rate.setTargetValue (rateForSemitones (juce::jlimit (-24.0f, 24.0f, p.pitchSemitones)));
+    // Legion reads Pitch as the interval between its voices, so the global
+    // rate goes to unity there.
+    rate.setTargetValue (p.mode == Mode::legion ? 1.0f : rateForSemitones (juce::jlimit (-24.0f, 24.0f, p.pitchSemitones)));
     glueAmount.setTargetValue (juce::jlimit (0.0f, 1.0f, p.glue01));
     dryMix.setTargetValue (blend >= 1.0f ? 0.0f : std::cos (juce::MathConstants<float>::halfPi * blend));   // cos (pi/2) is not 0 in float
 
@@ -429,6 +747,9 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     // relocate or a tempo change lands within one block.
     if (p.gridOffsetSamples >= 0 && count > 0)
         tickCounter = p.gridOffsetSamples + 1;
+    // Bar: the pattern restarts from its first step on the bar line, even
+    // if that line falls between grid ticks (a dotted or triplet division).
+    barCountdown = p.barReset && p.barOffsetSamples >= 0 && count > 0 ? p.barOffsetSamples + 1 : 0;
 
     float inPeak = 0.0f, outPeak = 0.0f;
 
@@ -449,6 +770,7 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
         // decaying release so the gate closes after the note, not during it.
         const float r = std::abs (x);
         env = juce::jmax (r, env + (r - env) * aRelease);
+        inputHot = env > openLevel;
 
         if (! gateOpen)
         {
@@ -463,7 +785,7 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
                 if (fillArmed && env > openLevel)
                 {
                     fillArmed = false;
-                    if (p.fills01 > 0.0f && fillTicksLeft == 0)
+                    if (p.fills01 > 0.0f && fillTicksLeft == 0 && p.mode != Mode::seize)
                         beginFill();
                 }
                 else if (env < closeLevel)
@@ -502,42 +824,52 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
         }
 
         // --- sequencer ----------------------------------------------------
-        float wet = 0.0f;
+        float wetL = 0.0f, wetR = 0.0f;
+        currentRate = rate.getNextValue();
         if (count > 0)
         {
+            if (barCountdown > 0 && --barCountdown == 0)
+            {
+                playIndex = -1;
+                pendulumDir = 1;
+                tickCounter = 1;
+            }
             if (--tickCounter <= 0)
                 advance();
             else if (ratchetCounter > 0 && --ratchetCounter == 0 && ratchetsLeft > 0)
             {
                 // The ratchet: the same slice again, from where it began.
-                voice.pos = voice.start;
+                voice.restart();
                 --ratchetsLeft;
                 ratchetCounter = ratchetsLeft > 0 ? ratchetPeriod : 0;
             }
 
-            currentRate = rate.getNextValue();
-            if (voice.active())
-                wet = voice.next (currentRate);
+            if (voice.sounding())
+            {
+                const float w = voice.next (currentRate, rng);
+                wetL = w * voice.panL;
+                wetR = w * voice.panR;
+            }
         }
-        else
-        {
-            currentRate = rate.getNextValue();
-        }
+        haunts.next (currentRate, rng, wetL, wetR);
+
         // Glue, end of the pattern's chain and before the blend: the old
-        // loop's saturator, level-matched (see GlueStage). At zero it is
-        // skipped entirely, so Glue off is bit-exact.
+        // loop's saturator, level-matched (see GlueStage), one per side. At
+        // zero it is skipped entirely, so Glue off is bit-exact.
         const float ga = glueAmount.getNextValue();
         if (ga > 0.0f)
-            wet = glue.process (wet, glueDrive (ga));
-        const float pl = voice.data != nullptr ? voice.panL : 1.0f;
-        const float pr = voice.data != nullptr ? voice.panR : 1.0f;
-        outPeak = juce::jmax (outPeak, std::abs (wet) * juce::jmax (pl, pr));
+        {
+            const float drive = glueDrive (ga);
+            wetL = glueL.process (wetL, drive);
+            wetR = glueR.process (wetR, drive);
+        }
+        outPeak = juce::jmax (outPeak, juce::jmax (std::abs (wetL), std::abs (wetR)));
 
         const float wg = wetMix.getNextValue(), dg = dryMix.getNextValue(), og = outGain.getNextValue();
         for (int ch = 0; ch < numCh; ++ch)
         {
-            const float pan = numCh < 2 ? 1.0f : (ch == 0 ? pl : (ch == 1 ? pr : 1.0f));
-            buffer.setSample (ch, i, (buffer.getSample (ch, i) * ig * dg + wet * pan * wg) * og);
+            const float w = numCh < 2 ? 0.5f * (wetL + wetR) : (ch == 0 ? wetL : (ch == 1 ? wetR : 0.5f * (wetL + wetR)));
+            buffer.setSample (ch, i, (buffer.getSample (ch, i) * ig * dg + w * wg) * og);
         }
     }
 
@@ -590,7 +922,6 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
     }
     const int stepSamples = juce::jmax (1, juce::roundToInt (st.stepSeconds * pattern.sampleRate));
     const int fade = juce::jmax (1, juce::roundToInt (kFadeMs * 0.001 * pattern.sampleRate));
-    const int choke = juce::jmax (fade * 2, juce::roundToInt ((float) stepSamples * juce::jlimit (0.05f, 1.0f, st.length01) * playRate));
 
     // One cycle in the direction's own order; random and drunk have no
     // cycle, so they export forward.
@@ -605,10 +936,29 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
     else
         for (int i = 0; i < n; ++i) order.push_back (i);
 
-    GlueStage sat;
-    sat.prepare (pattern.sampleRate);
+    // The same players as the live sequencer, fresh, seeded the same way
+    // every time so an export is repeatable. Legion, whose voices come and
+    // go, plays all three here; Seize has no input to seize with.
+    Rng rng;
+    rng.seed (7u);
+    StepVoice sv;
+    Haunts haunts;
+    haunts.clear();
+    GlueStage gl, gr;
+    gl.prepare (pattern.sampleRate);
+    gr.prepare (pattern.sampleRate);
     const float ga = juce::jlimit (0.0f, 1.0f, st.glue01);
     const float drive = glueDrive (ga);
+
+    StepSetup setup;
+    setup.mode = st.mode == Mode::seize ? Mode::possess : st.mode;
+    setup.length01 = st.length01;
+    setup.pitchSemitones = st.pitchSemitones;
+    setup.spread01 = st.spread01;
+    setup.stepSamples = stepSamples;
+    setup.rate = st.mode == Mode::legion ? 1.0f : playRate;
+    setup.fadeSamples = fade;
+    setup.sampleRate = pattern.sampleRate;
 
     const int total = (int) order.size() * stepSamples;
     out.setSize (2, total);
@@ -617,21 +967,38 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
     for (const int idx : order)
     {
         const auto& material = pattern.steps[(size_t) idx];
-        Voice v;
-        v.data = material.data();
-        v.len = juce::jmin ((int) material.size(), choke);
-        v.gain = pattern.gain[(size_t) idx];
-        v.fadeSamples = fade;
-        panFor (idx, st.spread01, v.panL, v.panR);
+        if (setup.mode == Mode::haunt)
+        {
+            haunts.tick (hauntDecayPerTick (st.length01));
+            if (sv.material() != nullptr)
+                haunts.spawn (sv.material(), sv.materialLen(), sv.reached(), grainSizeFor (pattern.sampleRate, sv.materialLen()),
+                              kHauntGain, sv.panL, sv.panR, rng);
+        }
+        setup.index = idx;
+        Deviation none;
+        startStepVoice (sv, material.data(), (int) material.size(), pattern.gain[(size_t) idx], setup, none, rng);
+        if (setup.mode == Mode::legion)
+            for (auto& v : sv.v)
+                if (v.data != nullptr && v.len == 0)
+                    v.len = sv.v[0].len;   // every voice sings in the export
+
         for (int i = 0; i < stepSamples; ++i)
         {
-            // The saturator runs through the gaps too, so its DC blocker
-            // settles exactly as it does live.
-            float s = v.active() ? v.next (playRate) : 0.0f;
+            float l = 0.0f, r = 0.0f;
+            if (sv.sounding())
+            {
+                const float w = sv.next (setup.rate, rng);
+                l = w * sv.panL;
+                r = w * sv.panR;
+            }
+            haunts.next (setup.rate, rng, l, r);
             if (ga > 0.0f)
-                s = sat.process (s, drive);
-            out.setSample (0, pos + i, s * v.panL);
-            out.setSample (1, pos + i, s * v.panR);
+            {
+                l = gl.process (l, drive);
+                r = gr.process (r, drive);
+            }
+            out.setSample (0, pos + i, l);
+            out.setSample (1, pos + i, r);
         }
         pos += stepSamples;
     }

@@ -41,6 +41,15 @@ public:
     void setBypassed (bool shouldBeBypassed) noexcept { bypassed = shouldBeBypassed; }
     void setFrozen (bool shouldBeFrozen) noexcept { frozen = shouldBeFrozen; }
     void flash() noexcept; // Clear: drop to the ember bed, collapse the ring, re-light
+
+    // Which player has the pattern (the Mode parameter's index). The creature
+    // changes its bearing to match, easing between bearings rather than
+    // snapping: Linger stretches the limbs, Legion splits every tip into a
+    // fan of bulbs, Haunt leaves a ghost of each limb that sounded, Seize
+    // gives the ember a tremor and the sounding limb a twitch.
+    enum Mode { possess = 0, linger, legion, haunt, seize, kModeCount };
+    void setMode (int mode) noexcept { modeWanted = juce::jlimit (0, kModeCount - 1, mode); }
+
     void tick();
     float liveLevel() const noexcept { return live; }
 
@@ -70,7 +79,28 @@ private:
     std::array<float, kMaxPips> ghostLevel {}, ghostGain {}, jitter {};
     float writhe = 0.0f;                        // the tentacles' slow motion, in radians
     bool ringDirty = true;
+    bool ticked = false;                        // a sequencer tick arrived since the last frame
     juce::Random rng;
+
+    // The bearing. One eased weight per mode so a change crossfades: the
+    // outgoing bearing lets go as the incoming one takes hold.
+    int modeWanted = 0;
+    std::array<float, kModeCount> modeMix {};
+
+    // Haunt: the sounding limb as it stood on each of the last few ticks,
+    // its wobble frozen at that moment, fading and drifting back as it ages.
+    struct Trail
+    {
+        int slot = -1;
+        float slots = 1.0f, level = 0.0f, gain = 0.0f, writhe = 0.0f, age = 0.0f;
+    };
+    static constexpr int kTrails = 4;
+    std::array<Trail, kTrails> trails {};
+    int nextTrail = 0;
+
+    // Seize: where the ember has shaken to this frame, and how hard the
+    // sounding limb is twitching.
+    float tremorX = 0.0f, tremorY = 0.0f, twitch = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Lamp)
 };

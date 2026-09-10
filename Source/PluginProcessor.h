@@ -108,6 +108,7 @@ public:
 
 private:
     BurstEngine::Direction directionParam() const noexcept;
+    BurstEngine::Mode modeParam() const noexcept;
 
     BurstEngine engine;
 
@@ -120,6 +121,8 @@ private:
     std::atomic<float>* pPitch;
     std::atomic<float>* pGlue;
     std::atomic<float>* pSpread;
+    std::atomic<float>* pMode;
+    std::atomic<float>* pBarReset;
     std::atomic<float>* pFills;
     std::atomic<float>* pChaos;
     std::atomic<float>* pDirection;

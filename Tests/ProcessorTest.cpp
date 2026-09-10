@@ -566,6 +566,11 @@ void readouts()
         { params::id::glue, 40.0f, "40 %" },
         { params::id::spread, 0.0f, "Mono" },
         { params::id::spread, 100.0f, "100 %" },
+        { params::id::mode, 0.0f, "Possess" },
+        { params::id::mode, 1.0f, "Linger" },
+        { params::id::mode, 4.0f, "Seize" },
+        { params::id::barreset, 1.0f, "On" },
+        { params::id::barreset, 0.0f, "Off" },
         { params::id::fills, 0.0f, "Off" },
         { params::id::fills, 30.0f, "30 %" },
         { params::id::chaos, 0.0f, "Still" },
@@ -951,7 +956,7 @@ void ordering()
             ok = false;
     }
     check ("first eight parameters", ok, order.trim());
-    check ("seventeen parameters in all", all.size() == 17, juce::String (all.size()));
+    check ("nineteen parameters in all", all.size() == 19, juce::String (all.size()));
     check ("bypass is declared last", all.size() > 0 && all[all.size() - 1]->paramID == params::id::bypass,
            all.size() > 0 ? all[all.size() - 1]->paramID : juce::String ("none"));
     check ("bypass is the host bypass parameter", p.getBypassParameter() != nullptr

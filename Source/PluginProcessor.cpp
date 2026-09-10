@@ -43,6 +43,8 @@ DybbukProcessor::DybbukProcessor()
     pPitch     = apvts.getRawParameterValue (params::id::pitch);
     pGlue      = apvts.getRawParameterValue (params::id::glue);
     pSpread    = apvts.getRawParameterValue (params::id::spread);
+    pMode      = apvts.getRawParameterValue (params::id::mode);
+    pBarReset  = apvts.getRawParameterValue (params::id::barreset);
     pFills     = apvts.getRawParameterValue (params::id::fills);
     pChaos     = apvts.getRawParameterValue (params::id::chaos);
     pDirection = apvts.getRawParameterValue (params::id::direction);
@@ -89,6 +91,12 @@ BurstEngine::Direction DybbukProcessor::directionParam() const noexcept
     const int index = juce::jlimit (0, BurstEngine::kDirectionCount - 1,
                                     juce::roundToInt (pDirection->load()));
     return static_cast<BurstEngine::Direction> (index);
+}
+
+BurstEngine::Mode DybbukProcessor::modeParam() const noexcept
+{
+    const int index = juce::jlimit (0, BurstEngine::kModeCount - 1, juce::roundToInt (pMode->load()));
+    return static_cast<BurstEngine::Mode> (index);
 }
 
 bool DybbukProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -156,6 +164,8 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     BurstEngine::Params p;
     const float stepKnob = pStep->load();
     p.gridOffsetSamples = -1;
+    p.barOffsetSamples = -1;
+    p.barReset = pBarReset->load() >= 0.5f;
 
     if (pStepSync->load() >= 0.5f)
     {
@@ -173,6 +183,9 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             const double k = std::ceil (rel / divBeats - 1.0e-6);
             const double offsetBeats = juce::jmax (0.0, k * divBeats - rel);
             p.gridOffsetSamples = juce::roundToInt (offsetBeats * 60.0 / bpm * currentSampleRate);
+            // The next bar line, for Bar: a block that starts on one gets 0.
+            const double toBar = rel < 1.0e-6 ? 0.0 : juce::jmax (0.0, barBeats - rel);
+            p.barOffsetSamples = juce::roundToInt (toBar * 60.0 / bpm * currentSampleRate);
         }
     }
     else
@@ -196,6 +209,7 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     p.pitchSemitones = pPitch->load();
     p.glue01 = pGlue->load() * 0.01f;
     p.spread01 = pSpread->load() * 0.01f;
+    p.mode = modeParam();
 
     // Bypassed the engine keeps running but hears silence: it collects
     // nothing you play while out of circuit, and the pattern keeps its place
@@ -272,6 +286,7 @@ bool DybbukProcessor::writePatternWav (const juce::File& dest) const
     settings.pitchSemitones = pPitch->load();
     settings.glue01 = pGlue->load() * 0.01f;
     settings.spread01 = pSpread->load() * 0.01f;
+    settings.mode = modeParam();
     const int samples = BurstEngine::renderPattern (pattern, settings, rendered);
     if (samples <= 0)
         return false;
