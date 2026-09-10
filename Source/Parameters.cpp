@@ -160,7 +160,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // is the enum.
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { id::direction, 8 }, "Direction",
-        juce::StringArray { "Forward", "Reverse", "Pendulum", "Random", "Drunk" }, 0));
+        juce::StringArray { "Forward", "Reverse", "Pendulum", "Drunk", "Random" }, 0));
 
     // 9. Length: the choke. The floor is 5 % rather than 0 so a fully
     // shortened step is still a click and not silence.

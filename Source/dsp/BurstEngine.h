@@ -28,7 +28,7 @@ public:
     // Ceiling on one step's material. A held note past this commits as-is.
     static constexpr double kMaxStepSeconds = 2.0;
 
-    enum class Direction { forward = 0, reverse, pendulum, random, drunk };
+    enum class Direction { forward = 0, reverse, pendulum, drunk, random };   // Random last: the far end of the knob
     static constexpr int kDirectionCount = 5;
 
     struct Params

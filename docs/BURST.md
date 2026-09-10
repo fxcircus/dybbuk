@@ -165,7 +165,7 @@ holding; the transport phase and the knob map were left to me.
 - **Steps 1..16** is the active length of the pattern, live: lowering it
   loops the first N steps, raising it brings the rest back. Only at a
   commit does the ceiling drop or refuse material (Replace / Hold).
-- **Direction:** forward, reverse, pendulum, random, drunk.
+- **Direction:** forward, reverse, pendulum, drunk, random (Random at the far end of the knob, Roy's call).
 - **Length:** a choke, the fraction of the step a slice may sound.
 - **Fade:** every play costs level (24 dB at full); a step under -60 dB
   leaves the pattern, so an armed pattern evolves like a delay instead of
@@ -217,7 +217,7 @@ Tones, drift. Git keeps them.
 - **Fills.** The hardware's one trick: gated input while disarmed scrambles
   the order for a cycle, then it settles back. A Fills depth from a
   two-step swap to a full shuffle.
-- **Direction:** forward, reverse, pendulum, random, drunk.
+- **Direction:** forward, reverse, pendulum, drunk, random (Random at the far end of the knob, Roy's call).
 - **Length:** choke every step to a fraction of the step time, or let the
   material run past the boundary into the next step.
 - **Fade:** the hardware's FADE, applied per cycle: older steps lose level

@@ -24,7 +24,7 @@ namespace
         Span stepSeconds;   // log-uniform
         Span steps;         // integer, inclusive
         Span threshold, blend, fills, chaos, length, fade;
-        float direction[BurstEngine::kDirectionCount]; // relative weights, Forward..Drunk
+        float direction[BurstEngine::kDirectionCount]; // relative weights, Forward, Reverse, Pendulum, Drunk, Random
         Span pitch;         // semitones, integer; half the rolls stay at 0
     };
 
@@ -44,7 +44,7 @@ namespace
           { 0.030f, 0.120f }, { 2.0f, 6.0f },
           { -40.0f, -20.0f }, { 50.0f, 80.0f }, { 20.0f, 50.0f }, { 20.0f, 55.0f },
           { 30.0f, 70.0f },   { 0.0f, 10.0f },
-          { 0.40f, 0.20f, 0.20f, 0.20f, 0.00f },
+          { 0.40f, 0.20f, 0.20f, 0.00f, 0.20f },
           { -12.0f, 12.0f } },
 
         // A long pattern that forgets. Every step loses level each time round,
@@ -54,7 +54,7 @@ namespace
           { 0.150f, 0.600f }, { 10.0f, 16.0f },
           { -40.0f, -20.0f }, { 45.0f, 70.0f }, { 10.0f, 40.0f }, { 5.0f, 30.0f },
           { 60.0f, 100.0f },  { 15.0f, 45.0f },
-          { 0.20f, 0.10f, 0.10f, 0.20f, 0.40f },
+          { 0.20f, 0.10f, 0.10f, 0.40f, 0.20f },
           { -12.0f, 0.0f } },
 
         // There and back. Pendulum or reverse, never forwards: the turnaround
@@ -73,7 +73,7 @@ namespace
           { 0.040f, 0.300f }, { 6.0f, 16.0f },
           { -40.0f, -20.0f }, { 55.0f, 90.0f }, { 40.0f, 100.0f }, { 45.0f, 90.0f },
           { 20.0f, 100.0f },  { 0.0f, 30.0f },
-          { 0.10f, 0.10f, 0.10f, 0.40f, 0.30f },
+          { 0.10f, 0.10f, 0.10f, 0.30f, 0.40f },
           { 0.0f, 12.0f } },
     };
 

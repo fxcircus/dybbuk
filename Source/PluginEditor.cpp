@@ -268,7 +268,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     addKnob (chaosKnob, params::id::chaos, "CHAOS", EngravedKnob::midSpec(),
              { kMidX[1], kMidY }, "STILL", "100");
     auto& direction = addKnob (directionKnob, params::id::direction, "DIRECTION",
-                               EngravedKnob::midSpec(), { kMidX[3], kMidY }, "FWD", "DRUNK");
+                               EngravedKnob::midSpec(), { kMidX[3], kMidY }, "FWD", "RANDOM");
     // Five ways round the pattern: a detent for each, and the word under it.
     direction.setDetents (BurstEngine::kDirectionCount);
 

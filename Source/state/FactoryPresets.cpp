@@ -37,7 +37,7 @@ namespace
     const PresetValue erosion[] = {
         { id::step, params::knob01ForStepSeconds (0.200) },
         { id::steps, 16.0f },         { id::blend, 55.0f },    { id::fills, 25.0f },
-        { id::chaos, 10.0f },         { id::direction, 4.0f }, { id::length, 100.0f },
+        { id::chaos, 10.0f },         { id::direction, 3.0f }, { id::length, 100.0f },   // Drunk
         { id::fade, 35.0f }
     };
 
