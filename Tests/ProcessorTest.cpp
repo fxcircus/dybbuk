@@ -957,6 +957,29 @@ void ordering()
     }
     check ("first eight parameters", ok, order.trim());
     check ("nineteen parameters in all", all.size() == 19, juce::String (all.size()));
+    // Every parameter must reach the DAW: automatable, and the stepped ones
+    // (Mode, Direction, Steps, Pitch, the switches) declared discrete so a
+    // host maps them to their steps rather than a continuous ramp.
+    {
+        juce::String notAutomatable, notDiscrete;
+        for (auto* prm : all)
+        {
+            if (! prm->isAutomatable())
+                notAutomatable += prm->paramID + " ";
+            const bool steppedId = prm->paramID == params::id::mode || prm->paramID == params::id::direction
+                                   || prm->paramID == params::id::steps || prm->paramID == params::id::pitch
+                                   || prm->paramID == params::id::freeze || prm->paramID == params::id::stepsync
+                                   || prm->paramID == params::id::barreset || prm->paramID == params::id::bypass;
+            if (steppedId && ! prm->isDiscrete())
+                notDiscrete += prm->paramID + " ";
+        }
+        check ("every parameter is automatable", notAutomatable.isEmpty(), notAutomatable.isEmpty() ? "all 19" : notAutomatable.trim());
+        check ("the stepped ones are discrete", notDiscrete.isEmpty(), notDiscrete.isEmpty() ? "mode, direction, steps, pitch, the switches" : notDiscrete.trim());
+        if (auto* mode = p.apvts.getParameter (params::id::mode))
+            check ("Mode reports its five steps", mode->getNumSteps() == 5 && mode->getAllValueStrings().size() == 5,
+                   juce::String (mode->getNumSteps()) + " steps: " + mode->getAllValueStrings().joinIntoString (", "));
+    }
+
     check ("bypass is declared last", all.size() > 0 && all[all.size() - 1]->paramID == params::id::bypass,
            all.size() > 0 ? all[all.size() - 1]->paramID : juce::String ("none"));
     check ("bypass is the host bypass parameter", p.getBypassParameter() != nullptr

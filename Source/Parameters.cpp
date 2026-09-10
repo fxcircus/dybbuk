@@ -7,6 +7,15 @@ namespace params
 {
 namespace
 {
+    // JUCE's integer parameter does not call itself discrete, so a host may
+    // show Steps or Pitch as a continuous ramp. This one does; getNumSteps
+    // already reports the range.
+    struct DiscreteInt : public juce::AudioParameterInt
+    {
+        using juce::AudioParameterInt::AudioParameterInt;
+        bool isDiscrete() const override { return true; }
+    };
+
     juce::NormalisableRange<float> skewedRange (float min, float max, float midpoint)
     {
         juce::NormalisableRange<float> range (min, max);
@@ -140,7 +149,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // 3. Steps: the pattern ceiling. The hardware stops at 8; the engine
     // allows 16, and the default is the hardware's.
-    layout.add (std::make_unique<juce::AudioParameterInt> (
+    layout.add (std::make_unique<DiscreteInt> (
         juce::ParameterID { id::steps, 3 }, "Steps", 1, BurstEngine::kMaxSteps, 8));
 
     layout.add (floatParam (4, id::blend, "Blend", { 0.0f, 100.0f, 1.0f }, 50.0f, "%"));
@@ -176,7 +185,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // Replace / Hold at the ceiling, removed the same day it shipped: a full
     // pattern always replaces its oldest step and Freeze stops it taking
     // more.)
-    layout.add (std::make_unique<juce::AudioParameterInt> (
+    layout.add (std::make_unique<DiscreteInt> (
         juce::ParameterID { id::pitch, 11 }, "Pitch", -12, 12, 0,
         juce::AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
         {
