@@ -110,7 +110,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // Sync is built first so Step's readout can see it, but added at its own
     // slot so declaration order still matches the hint order.
     auto stepSync = std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { id::stepsync, 12 }, "Sync", false,
+        juce::ParameterID { id::stepsync, 15 }, "Sync", false,
         juce::AudioParameterBoolAttributes().withStringFromValueFunction (
             [] (bool v, int) { return juce::String (v ? "Sync" : "Free"); }));
     // Captured by value into Step's readout below, NOT held in a file static:
@@ -122,14 +122,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // 1. Threshold: the gate's open level, the hardware's Sensitivity. It
     // closes 6 dB under this, so a decaying tail cannot chatter it. First,
     // because it is the first thing the signal meets (Roy, playing it).
-    layout.add (floatParam (1, id::threshold, "Threshold", { -60.0f, 0.0f }, -30.0f, "dB"));
+    auto pThreshold = floatParam (14, id::threshold, "Threshold", { -60.0f, 0.0f }, -30.0f, "dB");
 
     // 2. Time. The knob is 0..1; what it means is a step time, and while Sync
     // is on it reads as a note division (Push shows the host's string, so a
     // synced Step must not read "0.31 s" there). The default is a quarter
     // second: a sixteenth at 60, an eighth at 120.
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { id::step, 2 }, "Time",
+    auto pTime = std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { id::step, 3 }, "Time",
         juce::NormalisableRange<float> (0.0f, 1.0f), knob01ForStepSeconds (0.250),
         juce::AudioParameterFloatAttributes()
             .withLabel ("")
@@ -145,39 +145,39 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                 const double sec = text.containsIgnoreCase ("ms") ? n * 0.001
                                    : (text.containsIgnoreCase ("s") ? n : n * 0.001);
                 return knob01ForStepSeconds (sec);
-            })));
+            }));
 
     // 3. Steps: the pattern ceiling. The hardware stops at 8; the engine
     // allows 16, and the default is the hardware's.
-    layout.add (std::make_unique<DiscreteInt> (
-        juce::ParameterID { id::steps, 3 }, "Steps", 1, BurstEngine::kMaxSteps, 8));
+    auto pSteps = std::make_unique<DiscreteInt> (
+        juce::ParameterID { id::steps, 4 }, "Steps", 1, BurstEngine::kMaxSteps, 8);
 
-    layout.add (floatParam (4, id::blend, "Blend", { 0.0f, 100.0f, 1.0f }, 50.0f, "%"));
+    auto pBlend = floatParam (5, id::blend, "Blend", { 0.0f, 100.0f, 1.0f }, 50.0f, "%");
 
     // 5. Freeze. Off (the normal state), every gated event becomes a step;
     // on, the pattern is frozen and you play over it. Bypass is the way to
     // stop audio passing, so this is not an arm: armed is the default.
-    layout.add (std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { id::freeze, 5 }, "Freeze", false,
+    auto pFreeze = std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { id::freeze, 2 }, "Freeze", false,
         juce::AudioParameterBoolAttributes().withStringFromValueFunction (
-            [] (bool v, int) { return juce::String (v ? "Frozen" : "Off"); })));
+            [] (bool v, int) { return juce::String (v ? "Frozen" : "Off"); }));
 
-    layout.add (percentWithWord (6, id::fills, "Fills", 30.0f, "Off"));
-    layout.add (percentWithWord (7, id::chaos, "Chaos", 0.0f, "Still"));
+    auto pFills = percentWithWord (11, id::fills, "Fills", 30.0f, "Off");
+    auto pChaos = percentWithWord (6, id::chaos, "Chaos", 0.0f, "Still");
 
     // 8. Direction. The choice order is BurstEngine::Direction's, so the index
     // is the enum.
-    layout.add (std::make_unique<juce::AudioParameterChoice> (
-        juce::ParameterID { id::direction, 8 }, "Direction",
-        juce::StringArray { "Forward", "Reverse", "Pendulum", "Drunk", "Random" }, 0));
+    auto pDirection = std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { id::direction, 7 }, "Direction",
+        juce::StringArray { "Forward", "Reverse", "Pendulum", "Drunk", "Random" }, 0);
 
     // 9. Length: the choke. The floor is 5 % rather than 0 so a fully
     // shortened step is still a click and not silence.
     // 9. Decay: the choke, how much of each step its material may sound.
     // Was "Length", which read as the pattern's length beside Steps and Time.
-    layout.add (floatParam (9, id::length, "Decay", { 5.0f, 100.0f, 1.0f }, 100.0f, "%"));
+    auto pDecay = floatParam (9, id::length, "Decay", { 5.0f, 100.0f, 1.0f }, 100.0f, "%");
 
-    layout.add (percentWithWord (10, id::fade, "Fade", 0.0f, "Never"));
+    auto pFade = percentWithWord (10, id::fade, "Fade", 0.0f, "Never");
 
     // 11. Pitch: the hardware's CLOCK, but only the half of it that
     // repitches. Every step's material is resampled by this many semitones;
@@ -185,43 +185,59 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // Replace / Hold at the ceiling, removed the same day it shipped: a full
     // pattern always replaces its oldest step and Freeze stops it taking
     // more.)
-    layout.add (std::make_unique<DiscreteInt> (
-        juce::ParameterID { id::pitch, 11 }, "Pitch", -12, 12, 0,
+    auto pPitch = std::make_unique<DiscreteInt> (
+        juce::ParameterID { id::pitch, 8 }, "Pitch", -12, 12, 0,
         juce::AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
         {
             return (v > 0 ? "+" : "") + juce::String (v) + " st";
-        })));
+        }));
 
-    layout.add (std::move (stepSync)); // 12
+    auto pSync = std::move (stepSync); // 12
 
     // 13, 14. The trims, one on each edge of the window.
-    layout.add (trimParam (13, id::input, "In"));
-    layout.add (trimParam (14, id::out, "Out"));
+    auto pIn = trimParam (17, id::input, "In");
+    auto pOut = trimParam (18, id::out, "Out");
 
     // 15, 16. Glue and Spread, the end of the pattern's chain: the old loop's
     // saturator as a drive, and alternate steps sat left and right. Both off
     // by default, with a word at zero.
-    layout.add (percentWithWord (15, id::glue, "Glue", 0.0f, "Clean"));
-    layout.add (percentWithWord (16, id::spread, "Spread", 0.0f, "Mono"));
+    auto pGlue = percentWithWord (12, id::glue, "Glue", 0.0f, "Clean");
+    auto pSpread = percentWithWord (13, id::spread, "Spread", 0.0f, "Mono");
 
     // 17. Mode: what a step does with its material. Possess is the sequencer
     // as it is; the rest are other players for the same pattern (B5).
-    layout.add (std::make_unique<juce::AudioParameterChoice> (
-        juce::ParameterID { id::mode, 17 }, "Mode",
-        juce::StringArray { "Possess", "Linger", "Legion", "Haunt", "Seize" }, 0));
+    auto pMode = std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { id::mode, 1 }, "Mode",
+        juce::StringArray { "Possess", "Linger", "Legion", "Haunt", "Seize" }, 0);
 
     // 18. Bar: synced, the pattern restarts from its first step on every bar
     // line. Off, it keeps its own phase on the grid.
-    layout.add (std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { id::barreset, 18 }, "Bar", false,
+    auto pBar = std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { id::barreset, 16 }, "Bar", false,
         juce::AudioParameterBoolAttributes().withStringFromValueFunction (
-            [] (bool v, int) { return juce::String (v ? "On" : "Off"); })));
+            [] (bool v, int) { return juce::String (v ? "On" : "Off"); }));
 
     // LAST, and hint 1000 so anything added later still sorts before it in AU
     // while staying declared last for VST3. 1 means bypassed, which is the
     // polarity the hosts expect.
-    layout.add (std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { id::bypass, 1000 }, "Bypass", false));
+    auto pBypass = std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { id::bypass, 1000 }, "Bypass", false);
+
+    // Push 3 shows eight parameters a page, in this order; VST3 uses this
+    // order and AU sorts by the hints above, which count the same way. Page
+    // one is what you reach for while playing: the mode, the hand, the
+    // clock, the mix, the disorder, the way it runs and the pitch. Page two
+    // shapes the steps and the output and holds the setup switches. Page
+    // three is the trims and Bypass. The plate's own order is a different
+    // thing and stays as it is.
+    std::unique_ptr<juce::RangedAudioParameter> ordered[] = {
+        std::move (pMode),  std::move (pFreeze), std::move (pTime),      std::move (pSteps),
+        std::move (pBlend), std::move (pChaos),  std::move (pDirection), std::move (pPitch),
+        std::move (pDecay), std::move (pFade),   std::move (pFills),     std::move (pGlue),
+        std::move (pSpread), std::move (pThreshold), std::move (pSync),  std::move (pBar),
+        std::move (pIn),    std::move (pOut),    std::move (pBypass) };
+    for (auto& prm : ordered)
+        layout.add (std::move (prm));
 
     return layout;
 }

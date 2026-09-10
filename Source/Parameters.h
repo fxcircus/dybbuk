@@ -10,8 +10,9 @@
 // Order matters twice over. VST3 presents parameters in declaration order and
 // AU sorts them by (version hint, hash of id), so the two only agree if every
 // parameter carries its own ascending hint declared in the same order. The
-// first eight are the Push 3 bank 1: Threshold, Time, Steps, Blend, Freeze,
-// Fills, Chaos, Direction.
+// first eight are the Push 3 bank 1: Mode, Freeze, Time, Steps, Blend, Chaos,
+// Direction, Pitch; then Decay, Fade, Fills, Glue, Spread, Threshold, Sync,
+// Bar; then In, Out, Bypass. The plate's order is a different thing.
 namespace params
 {
 namespace id

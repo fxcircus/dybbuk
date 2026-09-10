@@ -64,9 +64,11 @@ disagree with what is written here, this wins.
 
 ## Current state (2026-09-09, after the Burst pivot)
 
-- Parameter count: 19, in Push bank order, all automatable: Threshold, Time (id
-  `step`), Steps, Blend, Freeze, Fills, Chaos, Direction (bank 1), then Length,
-  Fade, Pitch, Sync, In, Out, Glue, Spread, Mode, Bar, Bypass last. Pitch is B3's Clock under the
+- Parameter count: 19, in Push 3 page order (Roy, 2026-09-10: the most
+  useful eight on page one, which is not the plate's order): page one Mode,
+  Freeze, Time (id `step`), Steps, Blend, Chaos, Direction, Pitch; page two
+  Decay (id `length`), Fade, Fills, Glue, Spread, Threshold, Sync, Bar;
+  page three In, Out, Bypass last. Pitch is B3's Clock under the
   name Roy chose: -12..+12 semitones on every step's material, the step
   clock untouched (a departure from the pedal, where CLOCK also slows the
   pattern), a fractional read with linear interpolation so a decimated

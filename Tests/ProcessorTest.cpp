@@ -942,9 +942,9 @@ void ordering()
     std::printf ("parameter order: Push bank 1 is the eight that matter\n");
 
     DybbukProcessor p;
-    const char* wanted[] = { params::id::threshold, params::id::step, params::id::steps,
-                             params::id::blend, params::id::freeze, params::id::fills,
-                             params::id::chaos, params::id::direction };
+    const char* wanted[] = { params::id::mode, params::id::freeze, params::id::step,
+                             params::id::steps, params::id::blend, params::id::chaos,
+                             params::id::direction, params::id::pitch };
 
     const auto all = rangedParams (p);
     bool ok = all.size() >= 8;
