@@ -1165,9 +1165,9 @@ void barreset()
     }
 }
 
-void linger()
+void trance()
 {
-    std::printf ("linger: the material played slower from its start, Decay how much\n");
+    std::printf ("trance: the material played slower from its start, Decay how much\n");
     const double sr = 48000.0;
     const auto in = burstInput (sr, 2.6, { { 0.1, 0.080, 220.0, 0.5 } });
     // Decay's floor is 1x, its top 8x on a square; the step is 400 ms.
@@ -1179,7 +1179,7 @@ void linger()
     for (const auto& c : cases)
     {
         auto p = wetParams();
-        p.mode = BurstEngine::Mode::linger;
+        p.mode = BurstEngine::Mode::trance;
         p.stepSeconds = 0.4;
         p.length01 = c.decay;
         p.pitchSemitones = c.pitch;
@@ -1201,7 +1201,7 @@ void linger()
     // 200 ms step, still at its pitch.
     {
         auto p = wetParams();
-        p.mode = BurstEngine::Mode::linger;
+        p.mode = BurstEngine::Mode::trance;
         p.stepSeconds = 0.2;
         const auto longIn = burstInput (sr, 2.0, { { 0.1, 0.400, 330.0, 0.5 } });
         const auto r = runBurst (longIn, p, sr, 128);
@@ -1240,34 +1240,34 @@ void legion()
     check ("Pitch at zero is a chorus at the note", goertzelAmp (z.out, from, n, 220.0, sr) > 0.05 && allFinite (z.out), "");
 }
 
-void haunt()
+void wraith()
 {
-    std::printf ("haunt: each step leaves a frozen moment that sounds under the next ones\n");
+    std::printf ("wraith: each step leaves a frozen moment that sounds under the next ones\n");
     const double sr = 48000.0;
     const auto in = burstInput (sr, 3.0, { { 0.1, 0.080, 220.0, 0.5 } });
-    auto possess = wetParams();
-    possess.stepSeconds = 0.3;
+    auto golem = wetParams();
+    golem.stepSeconds = 0.3;
     auto h = wetParams();
-    h.mode = BurstEngine::Mode::haunt;
+    h.mode = BurstEngine::Mode::wraith;
     h.stepSeconds = 0.3;
     h.length01 = 1.0f;
-    const auto a = runBurst (in, possess, sr, 128);
+    const auto a = runBurst (in, golem, sr, 128);
     const auto b = runBurst (in, h, sr, 128);
     const auto on = onsetsOf (a.out, sr);
     bool ok = on.size() >= 3;
-    double gapPossess = 0.0, gapHaunt = 0.0, hauntFreq = 0.0;
+    double gapGolem = 0.0, gapWraith = 0.0, wraithFreq = 0.0;
     if (ok)
     {
         // The gap after the second step's 80 ms of material: silent in
-        // Possess, the first step's moment still sounding in Haunt.
+        // Golem, the first step's moment still sounding in Wraith.
         const int gap = on[1].sample + (int) (0.15 * sr), gn = (int) (0.12 * sr);
-        gapPossess = rmsOf (a.out, gap, gn);
-        gapHaunt = rmsOf (b.out, gap, gn);
-        hauntFreq = goertzelAmp (b.out, gap, gn, 220.0, sr);
+        gapGolem = rmsOf (a.out, gap, gn);
+        gapWraith = rmsOf (b.out, gap, gn);
+        wraithFreq = goertzelAmp (b.out, gap, gn, 220.0, sr);
     }
-    check ("the moment sounds through the gap", ok && gapPossess == 0.0 && gapHaunt > 0.02 && hauntFreq > 0.02,
-           "gap rms " + juce::String (gapPossess, 4) + " possessed, " + juce::String (gapHaunt, 4) + " haunted, at the note "
-               + juce::String (hauntFreq, 3));
+    check ("the moment sounds through the gap", ok && gapGolem == 0.0 && gapWraith > 0.02 && wraithFreq > 0.02,
+           "gap rms " + juce::String (gapGolem, 4) + " possessed, " + juce::String (gapWraith, 4) + " haunted, at the note "
+               + juce::String (wraithFreq, 3));
 
     auto brief = h;
     brief.length01 = 0.05f;   // one tick
@@ -1345,7 +1345,7 @@ void modesExport()
     BurstEngine::PatternCopy copy;
     check ("a four-step pattern to export", engine.copyPattern (copy) && copy.steps.size() == 4, juce::String ((int) copy.steps.size()));
 
-    const char* names[] = { "Possess", "Haunt", "Linger", "Legion", "Tremor" };
+    const char* names[] = { "Golem", "Wraith", "Trance", "Legion", "Tremor" };
     for (int m = 0; m < BurstEngine::kModeCount; ++m)
     {
         BurstEngine::RenderSettings rs;
@@ -1377,7 +1377,7 @@ const Scenario kScenarios[] = {
     { "fade", fade },         { "fills", fills },   { "chaos", chaos },         { "ceiling", ceiling },
     { "export", exportPattern }, { "deaf", deaf },  { "levels", levels },       { "cpu", cpu },
     { "hostile", hostile },   { "pitch", pitch },     { "glue", glueTest },       { "spread", spreadTest },
-    { "bar", barreset },      { "linger", linger },   { "legion", legion },       { "haunt", haunt },
+    { "bar", barreset },      { "trance", trance },   { "legion", legion },       { "wraith", wraith },
     { "tremor", tremor },       { "modesexport", modesExport },
 };
 

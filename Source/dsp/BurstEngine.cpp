@@ -215,7 +215,7 @@ void BurstEngine::Haunts::tick (float decayPerTick) noexcept
     for (int k = 0; k < kMax; ++k)
     {
         layer[k].gain *= decayPerTick;
-        if (layer[k].gain < kHauntGain * 0.1f)   // -20 dB down: gone
+        if (layer[k].gain < kWraithGain * 0.1f)   // -20 dB down: gone
             layer[k] = {};
     }
 }
@@ -293,7 +293,7 @@ void BurstEngine::doClear() noexcept
     openedFor = 0;
     capWrite = 0;
     voice.stop();
-    haunts.clear();
+    wraiths.clear();
     barCountdown = 0;
     playIndex = -1;
     tickCounter = 0;
@@ -366,8 +366,8 @@ void BurstEngine::commit() noexcept
     gateOpen = false;
     uiGate.store (0.0f, std::memory_order_relaxed);
     // The gate closes a release after the sound stops, so the slice ends in
-    // silence. Trim it to what was audible (plus a little), or Linger would
-    // stretch the silence and Haunt would freeze it.
+    // silence. Trim it to what was audible (plus a little), or Trance would
+    // stretch the silence and Wraith would freeze it.
     int len = capWrite;
     {
         const float* src = slice (captureSlot);
@@ -464,7 +464,7 @@ int BurstEngine::grainSizeFor (double sampleRate, int materialLen) noexcept
 
 float BurstEngine::hauntDecayPerTick (float length01) noexcept
 {
-    const int ticks = 1 + juce::roundToInt ((float) (kHauntMaxTicks - 1) * juce::jlimit (0.0f, 1.0f, length01));
+    const int ticks = 1 + juce::roundToInt ((float) (kWraithMaxTicks - 1) * juce::jlimit (0.0f, 1.0f, length01));
     return std::pow (10.0f, -0.9f / (float) ticks);   // -18 dB over `ticks` ticks, then it is dropped
 }
 
@@ -481,13 +481,13 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
     const int offset = juce::jlimit (0, juce::jmax (0, len - s.fadeSamples * 4), juce::roundToInt ((float) len * d.offset01));
     const float gain = stepGain * d.gainMul;
 
-    if (s.mode == Mode::linger)
+    if (s.mode == Mode::trance)
     {
         // A slowdown from the start of the material: Decay says how many
         // times slower (1x at its floor, 8x at the top, on a square so the
         // bottom half is subtle), and the step holds what fits. It used to
         // stretch material to fill the step, which left any note longer than
-        // the step untouched, so Linger seemed to do nothing until Pitch
+        // the step untouched, so Trance seemed to do nothing until Pitch
         // shortened the material (Roy, playing it).
         const float dec = juce::jlimit (0.0f, 1.0f, (s.length01 - 0.05f) / 0.95f);
         const double factor = 1.0 + 7.0 * (double) (dec * dec);
@@ -504,13 +504,13 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
         return;
     }
 
-    // Possess, Haunt and Tremor play the material; Legion plays it three
-    // times over at intervals. Haunt is never choked: the whole moment is
+    // Golem, Wraith and Tremor play the material; Legion plays it three
+    // times over at intervals. Wraith is never choked: the whole moment is
     // what will be left behind.
     const float stepRate = s.rate * d.rateMulOr1();
-    const int choke = s.mode == Mode::haunt
+    const int choke = s.mode == Mode::wraith
                           ? len
-                          : juce::jmax (s.fadeSamples * 2, juce::roundToInt ((float) window * share * (s.mode == Mode::linger ? 1.0f : stepRate)));
+                          : juce::jmax (s.fadeSamples * 2, juce::roundToInt ((float) window * share * (s.mode == Mode::trance ? 1.0f : stepRate)));
     const int n = s.mode == Mode::legion ? 3 : 1;
     sv.voices = n;
     for (int k = 0; k < n; ++k)
@@ -641,14 +641,14 @@ void BurstEngine::advance() noexcept
     uiTicks.fetch_add (1, std::memory_order_relaxed);
     ratchetCounter = 0;
 
-    // Haunt: the step that just ended leaves its moment behind, and every
+    // Wraith: the step that just ended leaves its moment behind, and every
     // haunting already there fades a little.
-    if (cur.mode == Mode::haunt)
+    if (cur.mode == Mode::wraith)
     {
-        haunts.tick (hauntDecayPerTick (cur.length01));
+        wraiths.tick (hauntDecayPerTick (cur.length01));
         if (voice.material() != nullptr)
-            haunts.spawn (voice.material(), voice.materialLen(), voice.reached(),
-                          grainSizeFor (sr, voice.materialLen()), kHauntGain, voice.panL, voice.panR, rng);
+            wraiths.spawn (voice.material(), voice.materialLen(), voice.reached(),
+                          grainSizeFor (sr, voice.materialLen()), kWraithGain, voice.panL, voice.panR, rng);
     }
 
     if (count <= 0)
@@ -849,7 +849,7 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
                 wetR = w * voice.panR;
             }
         }
-        haunts.next (currentRate, rng, wetL, wetR);
+        wraiths.next (currentRate, rng, wetL, wetR);
 
         // Glue, end of the pattern's chain and before the blend: the old
         // loop's saturator, level-matched (see GlueStage), one per side. At
@@ -940,8 +940,8 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
     Rng rng;
     rng.seed (7u);
     StepVoice sv;
-    Haunts haunts;
-    haunts.clear();
+    Haunts wraiths;
+    wraiths.clear();
     GlueStage gl, gr;
     gl.prepare (pattern.sampleRate);
     gr.prepare (pattern.sampleRate);
@@ -949,7 +949,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
     const float drive = glueDrive (ga);
 
     StepSetup setup;
-    setup.mode = st.mode == Mode::tremor ? Mode::possess : st.mode;
+    setup.mode = st.mode == Mode::tremor ? Mode::golem : st.mode;
     setup.length01 = st.length01;
     setup.pitchSemitones = st.pitchSemitones;
     setup.spread01 = st.spread01;
@@ -965,12 +965,12 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
     for (const int idx : order)
     {
         const auto& material = pattern.steps[(size_t) idx];
-        if (setup.mode == Mode::haunt)
+        if (setup.mode == Mode::wraith)
         {
-            haunts.tick (hauntDecayPerTick (st.length01));
+            wraiths.tick (hauntDecayPerTick (st.length01));
             if (sv.material() != nullptr)
-                haunts.spawn (sv.material(), sv.materialLen(), sv.reached(), grainSizeFor (pattern.sampleRate, sv.materialLen()),
-                              kHauntGain, sv.panL, sv.panR, rng);
+                wraiths.spawn (sv.material(), sv.materialLen(), sv.reached(), grainSizeFor (pattern.sampleRate, sv.materialLen()),
+                              kWraithGain, sv.panL, sv.panR, rng);
         }
         setup.index = idx;
         Deviation none;
@@ -989,7 +989,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
                 l = w * sv.panL;
                 r = w * sv.panR;
             }
-            haunts.next (setup.rate, rng, l, r);
+            wraiths.next (setup.rate, rng, l, r);
             if (ga > 0.0f)
             {
                 l = gl.process (l, drive);

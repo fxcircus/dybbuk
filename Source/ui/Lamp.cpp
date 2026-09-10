@@ -37,10 +37,10 @@ namespace
     // The bearings. A mode change eases over about half a second, slow
     // enough that the limbs are seen to stretch or split rather than swap.
     constexpr float kModeEase = 0.1f;
-    constexpr float kLingerStretch = 0.3f;           // Linger: reach, and the wobble's width
-    constexpr float kLingerSlow = 0.5f;              // ... and how much slower it writhes
+    constexpr float kTranceStretch = 0.3f;           // Trance: reach, and the wobble's width
+    constexpr float kTranceSlow = 0.5f;              // ... and how much slower it writhes
     constexpr float kLegionFan = 0.75f;              // Legion: the side bulbs' angle off the heading, radians
-    constexpr float kTrailAgePerTick = 0.6f;         // Haunt: a ghost is mostly gone four ticks on
+    constexpr float kTrailAgePerTick = 0.6f;         // Wraith: a ghost is mostly gone four ticks on
     constexpr float kTrailAgePerFrame = 0.985f;      // ... and fades on its own once the pattern stops
     constexpr float kTrailDrift = 0.35f;             // ... drifting back a third of a slot as it goes
     constexpr float kTremorPx = 2.2f;                // Tremor: how far the ember shakes with the gate open
@@ -181,16 +181,16 @@ void Lamp::tick()
             mix = wantedMix;
         ringDirty = true;
     }
-    const float lingerMix = modeMix[(size_t) linger];
-    const float hauntMix = modeMix[(size_t) haunt];
+    const float tranceMix = modeMix[(size_t) trance];
+    const float wraithMix = modeMix[(size_t) wraith];
     const float tremorMix = modeMix[(size_t) tremor];
 
-    // Haunt: on every tick the limb that has just started sounding leaves a
+    // Wraith: on every tick the limb that has just started sounding leaves a
     // ghost of itself; the older ghosts step back a generation.
     if (ticked)
     {
         ticked = false;
-        if (hauntMix > 0.01f && current >= 0 && current < count && ! bypassed)
+        if (wraithMix > 0.01f && current >= 0 && current < count && ! bypassed)
         {
             for (auto& t : trails)
                 t.age *= kTrailAgePerTick;
@@ -209,7 +209,7 @@ void Lamp::tick()
     {
         if (t.age <= 0.0f)
             continue;
-        t.age = t.age * kTrailAgePerFrame - (hauntMix < 0.01f ? 0.05f : 0.0f);
+        t.age = t.age * kTrailAgePerFrame - (wraithMix < 0.01f ? 0.05f : 0.0f);
         if (t.age < 0.02f)
             t.age = 0.0f;
         ringDirty = true;
@@ -259,9 +259,9 @@ void Lamp::tick()
     // the frost has set.
     if ((count > 0 || collapse > 0.0f || (gate && ! bypassed)) && frost < 1.0f)
     {
-        // Stretched (Linger), the limbs row slower as well as wider.
+        // Stretched (Trance), the limbs row slower as well as wider.
         writhe += kWritheRate * (1.0f + 1.5f * pulse + 3.0f * warmth) * (1.0f - frost)
-                  * (1.0f - kLingerSlow * lingerMix);
+                  * (1.0f - kTranceSlow * tranceMix);
         if (writhe > juce::MathConstants<float>::twoPi * 64.0f)
             writhe -= juce::MathConstants<float>::twoPi * 64.0f;
         ringDirty = true;
@@ -306,9 +306,9 @@ void Lamp::paint (juce::Graphics& g)
     const auto c = fixture + juce::Point<float> (tremorX, tremorY);
     const float dim = bypassed ? 0.35f : 1.0f;
     const bool listening = count == 0 && collapse <= 0.0f;
-    const float lingerMix = modeMix[(size_t) linger];
+    const float tranceMix = modeMix[(size_t) trance];
     const float legionMix = modeMix[(size_t) legion];
-    const float hauntMix = modeMix[(size_t) haunt];
+    const float wraithMix = modeMix[(size_t) wraith];
     const float tremorMix = modeMix[(size_t) tremor];
 
     // The fixture: sixteen rays around the housing, fainter while there is
@@ -378,8 +378,8 @@ void Lamp::paint (juce::Graphics& g)
         const juce::Point<float> dir (ray.x * std::cos (twist) - ray.y * std::sin (twist),
                                       ray.x * std::sin (twist) + ray.y * std::cos (twist));
         const juce::Point<float> perp (-dir.y, dir.x);
-        // Lingering, every limb is stretched: further out, and rowing wider.
-        const float stretch = 1.0f + kLingerStretch * lingerMix;
+        // In a trance, every limb is stretched: further out, and rowing wider.
+        const float stretch = 1.0f + kTranceStretch * tranceMix;
         const float reach = (kTentacleMin + (kTentacleMax - kTentacleMin) * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)))
                                 * (0.55f + 0.45f * gn) * lengthScale * stretch
                             + (sounding ? 4.0f * (0.6f + 0.4f * pulse) : 0.0f);
@@ -391,7 +391,7 @@ void Lamp::paint (juce::Graphics& g)
         const float pace = 0.7f + 0.5f * std::fmod ((float) phaseIndex * 0.618f, 1.0f);
         const float amp = (kWaveAmp + std::abs (jitter[(size_t) (phaseIndex % kMaxPips)]) * 2.0f
                            + (sounding ? 1.5f * pulse + 3.0f * tremorMix * std::abs (twitch) : 0.0f))
-                          * (1.0f + 2.0f * kLingerStretch * lingerMix);
+                          * (1.0f + 2.0f * kTranceStretch * tranceMix);
         // The bulb at the tip, and the neck that carries it: the neck is as
         // wide as the bulb's radius, so the limb swells into the ball rather
         // than touching it with a hair, and the two are one outline. Legion
@@ -489,15 +489,15 @@ void Lamp::paint (juce::Graphics& g)
         }
     };
 
-    // Haunt: the ghosts go under the living limbs. Each is the limb as it
+    // Wraith: the ghosts go under the living limbs. Each is the limb as it
     // lunged, a little further out than the limb now stands, drifting back
     // against the clock and fading as it ages, its wobble stopped where it
     // was: the sound left behind at the step.
-    if (hauntMix > 0.01f)
+    if (wraithMix > 0.01f)
         for (const auto& t : trails)
             if (t.age > 0.0f && t.slot >= 0)
                 drawTentacle ((float) t.slot - kTrailDrift * (1.0f - t.age), t.slots, t.level, t.gain, false,
-                              0.55f * t.age * hauntMix, 1.2f + 0.1f * (1.0f - t.age), t.slot + 3, t.writhe);
+                              0.55f * t.age * wraithMix, 1.2f + 0.1f * (1.0f - t.age), t.slot + 3, t.writhe);
 
     for (int i = 0; i < count; ++i)
     {

@@ -98,7 +98,7 @@ disagree with what is written here, this wins.
   CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between.
   Four even bands under the rule (Roy, 2026-09-10, after trying the bar
   in the middle and at the foot): the MODE bar (Teder's segmented toggle,
-  POSSESS / HAUNT / LINGER / LEGION / TREMOR, Haunt second because it is
+  GOLEM / WRAITH / TRANCE / LEGION / TREMOR, Haunt second because it is
   Roy's favourite) first, at y 100, with the hover hint and the rolled dice
   character on the strip directly under it; the hero
   row Threshold, Time (+SYNC and BAR diamonds), Steps, Blend at 202; the
@@ -148,6 +148,16 @@ expected, three notes.
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
 
+## The modes' names (2026-09-10)
+
+Roy chose them from a list drawn from the séance and the folklore rather
+than the clinic: **GOLEM** (the plain sequencer: the made thing that obeys
+orders exactly), **WRAITH** (the moment that keeps sounding), **TRANCE**
+(the slowdown), **LEGION** (the three voices, kept), **TREMOR** (the held,
+ratcheted step, kept). Formerly Possess, Haunt, Linger, Legion, Seize. The
+engine enum, choice strings, toggle, lamp, dice, tests and hints follow;
+Wraith stays second, beside the default.
+
 ## Playing the modes (2026-09-10)
 
 1. **Linger did nothing on a normal note.** It stretched material to fill
@@ -169,10 +179,10 @@ expected, three notes.
 Roy asked for the pedal's Radio stations under names of our own, on the
 segmented toggle from Teder, with today's sequencer as a mode of its own,
 and every mode reading the knobs that already exist rather than adding
-one. `docs/BURST.md` has the table. In short: **POSSESS** is the
-sequencer as it was; **LINGER** stretches each step's material to fill
+one. `docs/BURST.md` has the table. In short: **GOLEM** is the
+sequencer as it was; **TRANCE** stretches each step's material to fill
 Decay's share of the step at its own pitch; **LEGION** sings each step
-three times over, Pitch the interval; **HAUNT** leaves each step's last
+three times over, Pitch the interval; **WRAITH** leaves each step's last
 moment behind as a held grain under the steps that follow, Decay how long
 it lasts; **TREMOR** holds and ratchets the current step while you play
 over the threshold, Fills how densely. Plus **Bar**, a toggle beside Sync

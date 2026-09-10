@@ -237,10 +237,10 @@ Roy's names, in the plate's register, on Teder's segmented toggle:
 
 | Mode | What a step does with its material | Knobs it reads |
 |---|---|---|
-| **POSSESS** | the sequencer as it was: the material, choked by Decay | everything, as before |
-| **LINGER** (Ambient) | played slower from its start at its own pitch, 1x to 8x, two Hann grains with a phase-aligned respawn (the WSOLA idea) so a note keeps its pitch; the step holds what fits. (First shipped as "stretch to fill the step", which left any note longer than the step untouched; Roy: "Linger seems to need Pitch to do anything".) | Decay = how many times slower; Pitch still pitch |
+| **GOLEM** | the sequencer as it was: the material, choked by Decay | everything, as before |
+| **TRANCE** (Ambient) | played slower from its start at its own pitch, 1x to 8x, two Hann grains with a phase-aligned respawn (the WSOLA idea) so a note keeps its pitch; the step holds what fits. (First shipped as "stretch to fill the step", which left any note longer than the step untouched; Roy: "Linger seems to need Pitch to do anything".) | Decay = how many times slower; Pitch still pitch |
 | **LEGION** (Orchestral) | three voices: unison, up and down by Pitch's interval (a few cents of chorus at zero); the extra two come and go | Pitch = the interval, not a transpose |
-| **HAUNT** (Shoegaze) | the material plays whole, then its last moment is frozen as a held grain that keeps sounding under the steps that follow, up to four stacked, each fading 18 dB over Decay's share of eight ticks | Decay = how long a haunting lasts |
+| **WRAITH** (Shoegaze) | the material plays whole, then its last moment is frozen as a held grain that keeps sounding under the steps that follow, up to four stacked, each fading 18 dB over Decay's share of eight ticks | Decay = how long a haunting lasts |
 | **TREMOR** (MKII Env) | while the input is over the threshold the current step is held and ratcheted, then the pattern carries on | Fills = how densely it ratchets (the scramble is off in this mode) |
 
 Also in this pass: **Bar**, a toggle beside Sync: synced, the pattern

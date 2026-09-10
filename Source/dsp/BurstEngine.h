@@ -35,12 +35,12 @@ public:
     // What a step does with its material during its step: the hardware's
     // Radio stations, as other players for the same pattern. See
     // docs/BURST.md, B5.
-    //   possess  the sequencer as it is: the material, choked by Decay
-    //   linger   the material stretched to fill Decay's share of the step, at its own pitch
+    //   golem  the sequencer as it is: the material, choked by Decay
+    //   trance   the material stretched to fill Decay's share of the step, at its own pitch
     //   legion   three voices, Pitch the interval between them, coming and going
-    //   haunt    each step leaves a frozen moment that keeps sounding under the next ones
+    //   wraith    each step leaves a frozen moment that keeps sounding under the next ones
     //   seize    while the input is over the threshold, the current step is held and ratcheted
-    enum class Mode { possess = 0, haunt, linger, legion, tremor };   // Haunt second: Roy's favourite, beside the default
+    enum class Mode { golem = 0, wraith, trance, legion, tremor };   // Wraith second: Roy's favourite, beside the default
     static constexpr int kModeCount = 5;
 
     struct Params
@@ -66,7 +66,7 @@ public:
         float pitchSemitones = 0.0f;  // resamples every step's material; the step clock is untouched
         float glue01 = 0.0f;          // the end-of-chain saturator on the pattern: warmth to thrash
         float spread01 = 0.0f;        // alternate steps left and right, this far
-        Mode mode = Mode::possess;
+        Mode mode = Mode::golem;
         Direction direction = Direction::forward;
         bool bypass = false;          // deaf: the gate hears silence, the sequencer keeps its place
     };
@@ -101,7 +101,7 @@ public:
         float pitchSemitones = 0.0f;
         float glue01 = 0.0f;
         float spread01 = 0.0f;
-        Mode mode = Mode::possess;
+        Mode mode = Mode::golem;
     };
 
     // One pass through a pattern, offline, with the same voice as the live
@@ -141,13 +141,13 @@ private:
     // their front edge. Fades are applied on playback, never to the material.
     static constexpr float kPreRollMs = 4.0f;
     static constexpr float kFadeMs = 2.0f;
-    // Grains: the size Linger and Haunt read with, capped so short material
+    // Grains: the size Trance and Wraith read with, capped so short material
     // still gets two grains; the jitter that keeps two grains from combing.
     static constexpr float kGrainMs = 40.0f;
     static constexpr float kGrainJitterMs = 2.0f;
-    // Haunt: a moment lasts this many ticks at Decay full, one at Decay's floor.
-    static constexpr int kHauntMaxTicks = 8;
-    static constexpr float kHauntGain = 0.7f;
+    // Wraith: a moment lasts this many ticks at Decay full, one at Decay's floor.
+    static constexpr int kWraithMaxTicks = 8;
+    static constexpr float kWraithGain = 0.7f;
 
     // Fade: the level a step loses every play is kFadeMaxDb times the
     // square of the knob, so the bottom half of the travel is gentle (10 %
@@ -182,8 +182,8 @@ private:
     };
 
     // A grain player: two Hann grains half a grain apart, so their sum is
-    // flat. Linger walks its head through the material slower than real
-    // time; Haunt holds it still. Each grain is read at the pitch rate from
+    // flat. Trance walks its head through the material slower than real
+    // time; Wraith holds it still. Each grain is read at the pitch rate from
     // where it was spawned, with a little jitter so two grains never comb.
     struct Grains
     {
@@ -201,7 +201,7 @@ private:
     };
 
     // Everything that can sound for one step, in any mode: up to three
-    // voices (Legion), or the grain player (Linger). One pan for all of it.
+    // voices (Legion), or the grain player (Trance). One pan for all of it.
     struct StepVoice
     {
         Voice v[3];
@@ -212,13 +212,13 @@ private:
         void restart() noexcept;   // the ratchet: from the start again
         void stop() noexcept;
         float next (float rate, Rng& rng) noexcept;
-        // The material this step was playing and how far it got, for Haunt.
+        // The material this step was playing and how far it got, for Wraith.
         const float* material() const noexcept;
         int materialLen() const noexcept;
         double reached() const noexcept;
     };
 
-    // Haunt's frozen moments: up to four, each a held grain fading over the
+    // Wraith's frozen moments: up to four, each a held grain fading over the
     // ticks that follow, keeping the pan of the step it came from.
     struct Haunts
     {
@@ -248,7 +248,7 @@ private:
     // and the clock. Shared by the live sequencer and the offline render.
     struct StepSetup
     {
-        Mode mode = Mode::possess;
+        Mode mode = Mode::golem;
         float length01 = 1.0f;
         float pitchSemitones = 0.0f;
         float spread01 = 0.0f;
@@ -349,7 +349,7 @@ private:
 
     // Sequencer
     StepVoice voice;
-    Haunts haunts;
+    Haunts wraiths;
     int barCountdown = 0;
     bool inputHot = false;
     int playIndex = -1;

@@ -204,11 +204,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     auto pGlue = percentWithWord (12, id::glue, "Glue", 0.0f, "Clean");
     auto pSpread = percentWithWord (13, id::spread, "Spread", 0.0f, "Mono");
 
-    // 17. Mode: what a step does with its material. Possess is the sequencer
+    // 17. Mode: what a step does with its material. Golem is the sequencer
     // as it is; the rest are other players for the same pattern (B5).
     auto pMode = std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { id::mode, 1 }, "Mode",
-        juce::StringArray { "Possess", "Haunt", "Linger", "Legion", "Tremor" }, 0);
+        juce::StringArray { "Golem", "Wraith", "Trance", "Legion", "Tremor" }, 0);
 
     // 18. Bar: synced, the pattern restarts from its first step on every bar
     // line. Off, it keeps its own phase on the grid.

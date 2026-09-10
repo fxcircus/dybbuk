@@ -44,7 +44,7 @@ namespace
     // top ticks, the same between each row's readouts and the top ticks of
     // the row under it, and the same again between the knob row's readouts
     // and the foot of the faders. The dybbuk's longest limb (sixteen steps
-    // at Linger's stretch) reaches 60 px above its centre, which is what
+    // at Trance's stretch) reaches 60 px above its centre, which is what
     // sets its row's distance from the hero readouts.
     constexpr int kModeY = 100;   // the mode bar's centre line
     constexpr int kHeroY = 202;   // face centres
@@ -69,7 +69,7 @@ namespace
     static_assert (kCentreX == DybbukEditor::canvasW / 2, "FREEZE sits on the plate's centre line");
 
     // The dybbuk's box, centred on the plate. Wide enough for sixteen limbs
-    // around the ember at Linger's stretch, with room to breathe. The knobs
+    // around the ember at Trance's stretch, with room to breathe. The knobs
     // in its row are placed by the grid, and their 92 px boxes (a mid face
     // plus its 30 px of legend room) stop about 32 px short of it each side.
     constexpr int kLampSize = 144;
@@ -77,7 +77,7 @@ namespace
     static_assert (kMidX[1] + kMidKnobBoxW / 2 <= kCentreX - kLampSize / 2 - 30,
                    "the dybbuk-row knobs clear the dybbuk's box");
 
-    // The mode bar: five cells, sized so POSSESS sits comfortably in its
+    // The mode bar: five cells, sized so GOLEM sits comfortably in its
     // cell at the caption size.
     constexpr int kModeW = 440, kModeH = 28;
 
@@ -280,7 +280,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     // Centred between the rule and the hero row's top ticks, well inside
     // the faders' caps at either edge.
     modeToggle = std::make_unique<ModeToggle> (param (params::id::mode),
-                                               juce::StringArray { "POSSESS", "HAUNT", "LINGER", "LEGION", "TREMOR" });
+                                               juce::StringArray { "GOLEM", "WRAITH", "TRANCE", "LEGION", "TREMOR" });
     plate.addAndMakeVisible (*modeToggle);
     modeToggle->setBounds (kCentreX - kModeW / 2, kModeY - kModeH / 2, kModeW, kModeH);
 
@@ -412,14 +412,14 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
         const float v = raw (params::id::length);
         switch (mode())
         {
-            case Lamp::linger:
+            case Lamp::trance:
             {
                 const float dec = juce::jlimit (0.0f, 1.0f, (v * 0.01f - 0.05f) / 0.95f);
                 return juce::String (1.0f + 7.0f * dec * dec, 1) + "x slower";
             }
-            case Lamp::haunt:
+            case Lamp::wraith:
             {
-                // Mirrors BurstEngine::hauntDecayPerTick: one to kHauntMaxTicks (8) ticks.
+                // Mirrors BurstEngine::hauntDecayPerTick: one to kWraithMaxTicks (8) ticks.
                 const int kept = 1 + juce::roundToInt (7.0f * v * 0.01f);
                 return "lasts " + juce::String (kept) + (kept == 1 ? " step" : " steps");
             }
@@ -546,8 +546,8 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
     if (c == blendKnob.get())     return "Dry against the pattern, equal power.";
     if (c == lengthKnob.get())
     {
-        if (mode == Lamp::linger) return "How many times slower the material plays, from its start; the step holds what fits.";
-        if (mode == Lamp::haunt)  return "How many steps a frozen moment keeps sounding, 1 to 8.";
+        if (mode == Lamp::trance) return "How many times slower the material plays, from its start; the step holds what fits.";
+        if (mode == Lamp::wraith)  return "How many steps a frozen moment keeps sounding, 1 to 8.";
         return "How much of each step sounds before it is cut.";
     }
     if (c == fadeKnob.get())      return "Level a step loses every play. A step that fades out leaves the pattern.";
@@ -592,7 +592,7 @@ juce::String DybbukEditor::hintUnderMouse() const
     {
         // The test hook: the named control, probed at its centre, or a
         // mode cell probed in its cell.
-        static const juce::StringArray modeNames { "POSSESS", "HAUNT", "LINGER", "LEGION", "TREMOR" };
+        static const juce::StringArray modeNames { "GOLEM", "WRAITH", "TRANCE", "LEGION", "TREMOR" };
         if (const int cell = modeNames.indexOf (pinnedHint); cell >= 0)
         {
             const auto b = modeToggle->getBounds();
@@ -677,7 +677,7 @@ void DybbukEditor::timerCallback()
     {
         lastMode = mode;
         // The knob a mode reinterprets wears a red caption while it does.
-        lengthKnob->setAccent (mode == (int) Lamp::linger || mode == (int) Lamp::haunt);
+        lengthKnob->setAccent (mode == (int) Lamp::trance || mode == (int) Lamp::wraith);
         pitchKnob->setAccent (mode == (int) Lamp::legion);
         fillsKnob->setAccent (mode == (int) Lamp::tremor);
         for (auto* knob : { lengthKnob.get(), pitchKnob.get(), fillsKnob.get() })

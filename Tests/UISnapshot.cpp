@@ -113,7 +113,7 @@ int main()
     snap ("editor_snapshot_pattern.png");
 
     // 2b. Each mode, with the four-step pattern playing. The dybbuk eases
-    // into each bearing over the editor's timer and Haunt's ghosts are laid
+    // into each bearing over the editor's timer and Wraith's ghosts are laid
     // down one per tick, so the feed and the dispatch loop are interleaved:
     // the pattern has to be seen advancing, not just to have advanced.
     {
@@ -125,7 +125,7 @@ int main()
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
             }
         };
-        const char* modeNames[] = { "possess", "haunt", "linger", "legion", "tremor" };
+        const char* modeNames[] = { "golem", "wraith", "trance", "legion", "tremor" };
         for (int m = 0; m < 5; ++m)
         {
             setParam (processor, params::id::mode, (float) m);
@@ -134,8 +134,8 @@ int main()
             snapAfter ("editor_snapshot_mode_" + juce::String (modeNames[m]) + ".png", 30);
 
             // The hint line, pinned on the plate without a mouse: Decay's
-            // sentence in Haunt, where it means something else than in
-            // Possess, printed in the strip under the knob row. This frame
+            // sentence in Wraith, where it means something else than in
+            // Golem, printed in the strip under the knob row. This frame
             // reviews that it fits the strip and touches no readout.
             if (m == 3)
                 if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))

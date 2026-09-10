@@ -38,7 +38,7 @@ public:
     void rollDice();
 
     // The hint line without a mouse: pins the hint for the control whose
-    // caption this is ("DECAY", "HAUNT", "EXPORT", "DYBBUK"...), so a
+    // caption this is ("DECAY", "WRAITH", "EXPORT", "DYBBUK"...), so a
     // snapshot can review the line as it is drawn. An empty name unpins.
     void showHintForTests (const juce::String& controlName);
 
