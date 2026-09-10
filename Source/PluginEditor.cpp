@@ -40,7 +40,7 @@ namespace
     constexpr int kMidY = 462;    // the knob row, with FREEZE in its middle
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
-    constexpr int kMidX[5] = { 151, 300, 450, 675, 749 }; // two knobs left of FREEZE, one right, balanced by mass
+    constexpr int kMidX[5] = { 151, 300, 450, 600, 749 };
 
     // The dybbuk's box, centred on the plate. Wide enough for sixteen pips
     // around the ember with room to breathe.
@@ -270,6 +270,12 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
                                EngravedKnob::midSpec(), { kMidX[3], kMidY }, "FWD", "DRUNK");
     // Five ways round the pattern: a detent for each, and the word under it.
     direction.setDetents (BurstEngine::kDirectionCount);
+
+    // Pitch: the hardware's CLOCK, the half that repitches. Detented at
+    // every semitone, an octave each way.
+    auto& pitch = addKnob (pitchKnob, params::id::pitch, "PITCH", EngravedKnob::midSpec(),
+                           { kMidX[4], kMidY }, "-12", "+12");
+    pitch.setDetents (25);
     direction.setValueTextProvider ([this]
     {
         auto& d = param (params::id::direction);
@@ -424,7 +430,7 @@ void DybbukEditor::timerCallback()
     }
 
     for (auto* knob : { stepKnob.get(), stepsKnob.get(), thresholdKnob.get(), blendKnob.get(),
-                        fillsKnob.get(), chaosKnob.get(), directionKnob.get() })
+                        fillsKnob.get(), chaosKnob.get(), directionKnob.get(), pitchKnob.get() })
         knob->tick();
 
     // CLEAR lights on the engine's acknowledgement, not on the click, so

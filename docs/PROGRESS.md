@@ -64,15 +64,19 @@ disagree with what is written here, this wins.
 
 ## Current state (2026-09-09, after the Burst pivot)
 
-- Parameter count: 14, in Push bank order, all automatable: Time (id `step`), Steps,
+- Parameter count: 15, in Push bank order, all automatable: Time (id `step`), Steps,
   Threshold, Blend, Freeze, Fills, Chaos, Direction (bank 1), then Length,
-  Fade, Sync, In, Out, Bypass last. Full (Replace / Hold) was removed on
+  Fade, Pitch, Sync, In, Out, Bypass last. Pitch is B3's Clock under the
+  name Roy chose: -12..+12 semitones on every step's material, the step
+  clock untouched (a departure from the pedal, where CLOCK also slows the
+  pattern), a fractional read with linear interpolation so a decimated
+  read aliases the way the hardware's does. Full (Replace / Hold) was removed on
   Roy's question "why wouldn't we always replace": a full pattern always
   replaces its oldest step, Freeze is how you stop it taking more
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 13 scenarios plus `render` (54 checks, 0 failures, 0.1 s):
+- `EngineTest`: 14 scenarios plus `render` (58 checks, 0 failures, 0.1 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
-  levels, cpu, hostile
+  levels, cpu, hostile, pitch
 - `ProcessorTest`: ordering, readouts, session and preset round-trips, five
   factory presets load and sound, dice, mono to stereo, stereo dry, bypass
   crossfade with the engine deaf, WAV export (0 failures)
@@ -86,7 +90,7 @@ disagree with what is written here, this wins.
   call); the dybbuk at the plate's centre (450, 310) with the Length and
   Fade trims shortened to flank it and nothing above or below it; a knob
   row of Fills, Chaos, the FREEZE button in its middle (no caption, lit
-  blue while it holds) and Direction; the dybbuk frosts with it, ember and tentacles going the same blue
+  blue while it holds), Direction and Pitch; the dybbuk frosts with it, ember and tentacles going the same blue
   and holding still (Roy: armed is the normal state and bypass is how audio stops, so
   a Record arm read backwards). The rolled
   dice character is printed over the dybbuk for three seconds. The light sheet is the

@@ -167,9 +167,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     layout.add (percentWithWord (10, id::fade, "Fade", 0.0f, "Never"));
 
-    // (Hint 11 was Full, Replace / Hold at the ceiling. Removed: a full
-    // pattern always replaces its oldest step, and Freeze is how you stop it
-    // taking more. Hints are not renumbered, so nothing else moves in AU.)
+    // 11. Pitch: the hardware's CLOCK, but only the half of it that
+    // repitches. Every step's material is resampled by this many semitones;
+    // the step clock is Time's and does not move. (Hint 11 belonged to Full,
+    // Replace / Hold at the ceiling, removed the same day it shipped: a full
+    // pattern always replaces its oldest step and Freeze stops it taking
+    // more.)
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { id::pitch, 11 }, "Pitch", -12, 12, 0,
+        juce::AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
+        {
+            return (v > 0 ? "+" : "") + juce::String (v) + " st";
+        })));
 
     layout.add (std::move (stepSync)); // 12
 

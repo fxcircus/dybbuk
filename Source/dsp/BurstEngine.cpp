@@ -12,17 +12,28 @@ float dbToGain (float db) noexcept { return juce::Decibels::decibelsToGain (db);
 
 // --- voice -------------------------------------------------------------------
 
-float BurstEngine::Voice::next() noexcept
+float BurstEngine::Voice::next (float playRate) noexcept
 {
+    const double p = pos;
+    pos += (double) juce::jmax (0.01f, playRate);
+
+    // The fades are in material samples, so at a high rate they are short
+    // in time: still enough to take the click off a cut.
     float g = gain;
-    if (pos < fadeSamples)
-        g *= (float) pos / (float) fadeSamples;
-    const int remaining = len - pos;
-    if (remaining < fadeSamples)
-        g *= (float) remaining / (float) fadeSamples;
-    const int idx = reverse ? len - 1 - pos : pos;
-    ++pos;
-    return data[idx] * g;
+    if (p < (double) fadeSamples)
+        g *= (float) (p / (double) fadeSamples);
+    const double remaining = (double) len - p;
+    if (remaining < (double) fadeSamples)
+        g *= (float) (remaining / (double) fadeSamples);
+
+    double rp = reverse ? (double) (len - 1) - p : p;
+    if (rp < 0.0)
+        rp = 0.0;
+    const int i0 = juce::jmin (len - 1, (int) rp);
+    const float frac = (float) (rp - (double) i0);
+    const float a = data[i0];
+    const float b = i0 + 1 < len ? data[i0 + 1] : a;
+    return (a + (b - a) * frac) * g;
 }
 
 // --- lifecycle ---------------------------------------------------------------
@@ -44,7 +55,7 @@ void BurstEngine::prepare (double sampleRate, int maxBlockSize)
     aBaseRise = coeff (kBaselineRiseMs);
     aBaseFall = coeff (kBaselineFallMs);
 
-    for (auto* s : { &inGain, &outGain, &wetMix, &dryMix })
+    for (auto* s : { &inGain, &outGain, &wetMix, &dryMix, &rate })
         s->reset (sr, 0.02);
 
     reset();
@@ -61,6 +72,8 @@ void BurstEngine::reset() noexcept
     uiClearsServed.store (0, std::memory_order_relaxed);
     inGain.setCurrentAndTargetValue (1.0f);
     outGain.setCurrentAndTargetValue (1.0f);
+    rate.setCurrentAndTargetValue (1.0f);
+    currentRate = 1.0f;
     wetMix.setCurrentAndTargetValue (std::sin (juce::MathConstants<float>::halfPi * 0.5f));
     dryMix.setCurrentAndTargetValue (std::cos (juce::MathConstants<float>::halfPi * 0.5f));
 }
@@ -229,10 +242,14 @@ int BurstEngine::nextIndex() noexcept
 void BurstEngine::startStep (int index, int stepSamples, bool ratchet, bool reverse) noexcept
 {
     const int slot = pattern[(size_t) index];
-    const int choke = juce::jmax (fadeSamples * 2, juce::roundToInt ((float) stepSamples * juce::jlimit (0.05f, 1.0f, cur.length01)));
+    // The choke is a fraction of the step in output time; at the current
+    // rate that is this much material.
+    const int choke = juce::jmax (fadeSamples * 2,
+                                  juce::roundToInt ((float) stepSamples * juce::jlimit (0.05f, 1.0f, cur.length01) * currentRate));
+    const int half = juce::roundToInt ((float) (stepSamples / 2) * currentRate);
     voice = {};
     voice.data = slice (slot);
-    voice.len = juce::jmin (sliceLen[(size_t) slot], ratchet ? juce::jmin (choke, stepSamples / 2) : choke);
+    voice.len = juce::jmin (sliceLen[(size_t) slot], ratchet ? juce::jmin (choke, half) : choke);
     voice.reverse = reverse;
     voice.gain = stepGain[(size_t) index];
     voice.fadeSamples = fadeSamples;
@@ -356,6 +373,7 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     inGain.setTargetValue (dbToGain (p.inputDb));
     outGain.setTargetValue (p.outDb <= kOutFloorDb ? 0.0f : dbToGain (p.outDb));
     wetMix.setTargetValue (std::sin (juce::MathConstants<float>::halfPi * blend));
+    rate.setTargetValue (rateForSemitones (juce::jlimit (-24.0f, 24.0f, p.pitchSemitones)));
     dryMix.setTargetValue (blend >= 1.0f ? 0.0f : std::cos (juce::MathConstants<float>::halfPi * blend));   // cos (pi/2) is not 0 in float
 
     // Synced: the processor says where the next grid line falls in this
@@ -442,10 +460,15 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
             if (--tickCounter <= 0)
                 advance();
             else if (ratchetCounter > 0 && --ratchetCounter == 0)
-                voice.pos = 0;   // the ratchet: the same slice again, mid-step
+                voice.pos = 0.0;   // the ratchet: the same slice again, mid-step
 
+            currentRate = rate.getNextValue();
             if (voice.active())
-                wet = voice.next();
+                wet = voice.next (currentRate);
+        }
+        else
+        {
+            currentRate = rate.getNextValue();
         }
         outPeak = juce::jmax (outPeak, std::abs (wet));
 
@@ -493,8 +516,9 @@ bool BurstEngine::copyPattern (PatternCopy& out) const
 }
 
 int BurstEngine::renderPattern (const PatternCopy& pattern, double stepSeconds, float length01,
-                                Direction direction, juce::AudioBuffer<float>& out)
+                                Direction direction, float pitchSemitones, juce::AudioBuffer<float>& out)
 {
+    const float playRate = rateForSemitones (juce::jlimit (-24.0f, 24.0f, pitchSemitones));
     const int n = (int) pattern.steps.size();
     if (n == 0 || pattern.sampleRate <= 0.0)
     {
@@ -503,7 +527,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, double stepSeconds, 
     }
     const int stepSamples = juce::jmax (1, juce::roundToInt (stepSeconds * pattern.sampleRate));
     const int fade = juce::jmax (1, juce::roundToInt (kFadeMs * 0.001 * pattern.sampleRate));
-    const int choke = juce::jmax (fade * 2, juce::roundToInt ((float) stepSamples * juce::jlimit (0.05f, 1.0f, length01)));
+    const int choke = juce::jmax (fade * 2, juce::roundToInt ((float) stepSamples * juce::jlimit (0.05f, 1.0f, length01) * playRate));
 
     // One cycle in the direction's own order; random and drunk have no
     // cycle, so they export forward.
@@ -532,7 +556,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, double stepSeconds, 
         v.fadeSamples = fade;
         for (int i = 0; i < stepSamples && v.active(); ++i)
         {
-            const float s = v.next();
+            const float s = v.next (playRate);
             out.setSample (0, pos + i, s);
             out.setSample (1, pos + i, s);
         }

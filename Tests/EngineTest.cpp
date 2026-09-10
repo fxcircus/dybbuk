@@ -185,6 +185,26 @@ BurstRun runBurst (const std::vector<float>& input, BurstEngine::Params params, 
     return r;
 }
 
+// Pitch from the time between the first and last zero crossing in a window,
+// not from a crossing count over the window: a count is quantised to one
+// crossing, which at 110 Hz over 30 ms is a 9 % error.
+double cycleFreq (const std::vector<float>& x, int start, int n, double sr)
+{
+    int first = -1, last = -1, crossings = 0;
+    for (int i = 1; i < n; ++i)
+    {
+        if ((x[(size_t) (start + i)] > 0.0f) != (x[(size_t) (start + i - 1)] > 0.0f))
+        {
+            if (first < 0) first = i;
+            last = i;
+            ++crossings;
+        }
+    }
+    if (crossings < 3)
+        return zeroCrossFreq (x, start, n, sr);
+    return (double) (crossings - 1) / 2.0 / ((double) (last - first) / sr);
+}
+
 // Sample-accurate note onsets in the output: the first sample over the
 // level after at least 20 ms under it, plus the pitch of the 30 ms after.
 struct NoteOnset { int sample; double freq; int soundedFor; };
@@ -204,7 +224,7 @@ std::vector<NoteOnset> onsetsOf (const std::vector<float>& x, double sr, int fro
                 NoteOnset o;
                 o.sample = i;
                 const int win = juce::jmin ((int) (0.03 * sr), (int) x.size() - i);
-                o.freq = zeroCrossFreq (x, i, win, sr);
+                o.freq = cycleFreq (x, i, win, sr);
                 int last = i, gap = 0;
                 for (int j = i; j < (int) x.size() && gap < quiet; ++j)
                 {
@@ -813,7 +833,7 @@ void exportPattern()
            juce::String ((int) copy.steps.size()) + " steps, first " + juce::String (copy.steps.empty() ? 0 : (int) copy.steps[0].size()) + " samples");
 
     juce::AudioBuffer<float> rendered;
-    const int total = BurstEngine::renderPattern (copy, p.stepSeconds, p.length01, BurstEngine::Direction::forward, rendered);
+    const int total = BurstEngine::renderPattern (copy, p.stepSeconds, p.length01, BurstEngine::Direction::forward, 0.0f, rendered);
     check ("one cycle is steps times step", total == 4 * juce::roundToInt (0.2 * sr), juce::String (total) + " samples");
 
     std::vector<float> ren ((size_t) total);
@@ -921,13 +941,82 @@ void hostile()
     check ("a signal at +120 dB stays finite", allFinite (l.out) && l.stepCount == 1, juce::String (l.stepCount) + " step");
 }
 
+
+// Pitch resamples the material, not the clock: an octave up is twice the
+// frequency in half the time, the ticks stay 200 ms apart, and the export
+// agrees with the live sequencer.
+void pitch()
+{
+    std::printf ("pitch: semitones on the material, the step clock untouched\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 3.0, { { 0.1, 0.080, 220.0, 0.5 } });
+    struct Case { float st; double freq; double heardMs; const char* name; };
+    const Case cases[] = { { 12.0f, 440.0, 40.0, "+12 st is an octave up, twice as fast" },
+                           { 7.0f, 329.63, 53.5, "+7 st is a fifth" },
+                           { -12.0f, 110.0, 160.0, "-12 st is an octave down, cut by the step" } };
+    for (const auto& c : cases)
+    {
+        auto p = wetParams();
+        p.pitchSemitones = c.st;
+        const auto r = runBurst (in, p, sr, 128);
+        const auto on = onsetsOf (r.out, sr, (int) (1.0 * sr));
+        bool ok = on.size() >= 4;
+        double worstF = 0.0, heard = 0.0, worstGap = 0.0;
+        juce::String durations;
+        for (size_t k = 0; ok && k < on.size(); ++k)
+        {
+            worstF = juce::jmax (worstF, std::abs (on[k].freq - c.freq) / c.freq);
+            // The first, not the last: the last may be cut by the end of the render.
+            if (k == 0)
+                heard = on[k].soundedFor / sr * 1000.0;
+            durations += juce::String (on[k].soundedFor / sr * 1000.0, 0) + " ";
+            if (k > 0)
+                worstGap = juce::jmax (worstGap, std::abs ((double) (on[k].sample - on[k - 1].sample) - 0.2 * sr));
+        }
+        // -12 runs past the step, so the choke ends it: 200 ms less the 2 ms fade region.
+        ok = ok && worstF < 0.03 && std::abs (heard - c.heardMs) < 8.0 && worstGap <= 2.0;
+        check (c.name, ok, juce::String (on.empty() ? 0.0 : on[0].freq, 1) + " Hz for " + juce::String (heard, 1)
+                                + " ms, ticks within " + juce::String (worstGap, 0) + " samples [" + durations.trim() + "]");
+    }
+
+    // Export at a pitch is the same voice.
+    {
+        auto p = wetParams();
+        p.pitchSemitones = 5.0f;
+        BurstEngine engine;
+        engine.prepare (sr, 128);
+        juce::AudioBuffer<float> buf (2, 128);
+        for (size_t pos = 0; pos < in.size(); pos += 128)
+        {
+            const int n = (int) juce::jmin ((size_t) 128, in.size() - pos);
+            for (int i = 0; i < n; ++i)
+            {
+                buf.setSample (0, i, in[pos + (size_t) i]);
+                buf.setSample (1, i, in[pos + (size_t) i]);
+            }
+            juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, n);
+            engine.process (view, p);
+        }
+        BurstEngine::PatternCopy copy;
+        juce::AudioBuffer<float> rendered;
+        const bool copied = engine.copyPattern (copy);
+        BurstEngine::renderPattern (copy, p.stepSeconds, p.length01, BurstEngine::Direction::forward, p.pitchSemitones, rendered);
+        std::vector<float> ren ((size_t) rendered.getNumSamples());
+        for (int i = 0; i < rendered.getNumSamples(); ++i)
+            ren[(size_t) i] = rendered.getSample (0, i);
+        const auto on = onsetsOf (ren, sr);
+        check ("the export is pitched the same way", copied && on.size() == 1 && near (on[0].freq, 293.66, 0.03),
+               juce::String (on.empty() ? 0.0 : on[0].freq, 1) + " Hz");
+    }
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
     { "burst", burst },       { "sync", sync },     { "direction", direction }, { "length", length },
     { "fade", fade },         { "fills", fills },   { "chaos", chaos },         { "ceiling", ceiling },
     { "export", exportPattern }, { "deaf", deaf },  { "levels", levels },       { "cpu", cpu },
-    { "hostile", hostile },
+    { "hostile", hostile },   { "pitch", pitch },
 };
 
 } // namespace

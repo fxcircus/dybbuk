@@ -3,6 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 #include <array>
+#include <cmath>
 #include <atomic>
 #include <vector>
 
@@ -48,6 +49,7 @@ public:
         float chaos01 = 0.0f;         // per-tick chance of a skip, a ratchet, a reverse or a repeat
         float length01 = 1.0f;        // choke: the fraction of the step a slice may sound
         float fade01 = 0.0f;          // level lost every play; a step that fades out leaves the pattern
+        float pitchSemitones = 0.0f;  // resamples every step's material; the step clock is untouched
         Direction direction = Direction::forward;
         bool bypass = false;          // deaf: the gate hears silence, the sequencer keeps its place
     };
@@ -77,7 +79,7 @@ public:
     // sequencer: forward order, the choke and the fades, no chaos or fills.
     // Stereo out, sized by this call. Returns the number of samples.
     static int renderPattern (const PatternCopy& pattern, double stepSeconds, float length01,
-                              Direction direction, juce::AudioBuffer<float>& out);
+                              Direction direction, float pitchSemitones, juce::AudioBuffer<float>& out);
 
     // Polled by the editor; the lamp is the pattern.
     std::atomic<int> uiStepCount { 0 };
@@ -119,16 +121,20 @@ private:
 
     // One step playing: the voice both the live sequencer and the offline
     // render use, so an export sounds like the plugin did.
+    // Pitch is a playback rate: the read head moves `rate` material samples
+    // per output sample with linear interpolation, so an octave up plays the
+    // material twice as fast and the aliasing of a decimated read is part of
+    // the sound, as it is on the hardware's CLOCK.
     struct Voice
     {
         const float* data = nullptr;
         int len = 0;          // samples of material that will sound
-        int pos = 0;
+        double pos = 0.0;     // fractional read position in the material
         bool reverse = false;
         float gain = 1.0f;
         int fadeSamples = 1;
-        bool active() const noexcept { return data != nullptr && pos < len; }
-        float next() noexcept;
+        bool active() const noexcept { return data != nullptr && pos < (double) len; }
+        float next (float rate) noexcept;
     };
 
     float* slice (int slot) noexcept { return pool.data() + (size_t) slot * (size_t) capacity; }
@@ -141,6 +147,7 @@ private:
     int activeCount() const noexcept;
     int samplesToGrid() const noexcept;
     void startStep (int index, int stepSamples, bool ratchet, bool reverse) noexcept;
+    static float rateForSemitones (float st) noexcept { return std::pow (2.0f, st / 12.0f); }
     void beginFill() noexcept;
     void doClear() noexcept;
     void publishSteps() noexcept;
@@ -184,7 +191,8 @@ private:
     Params cur;                                 // this block's params, read at commit/tick time
     Rng rng;
 
-    juce::SmoothedValue<float> inGain, outGain, wetMix, dryMix;
+    juce::SmoothedValue<float> inGain, outGain, wetMix, dryMix, rate;
+    float currentRate = 1.0f;
 
     std::atomic<int> clearRequests { 0 };
     int clearsSeen = 0;

@@ -90,7 +90,7 @@ private:
     juce::Image grain;
 
     std::unique_ptr<EngravedKnob> stepKnob, stepsKnob, thresholdKnob, blendKnob;
-    std::unique_ptr<EngravedKnob> fillsKnob, chaosKnob, directionKnob;
+    std::unique_ptr<EngravedKnob> fillsKnob, chaosKnob, directionKnob, pitchKnob;
     // Aim-and-forget controls, one on each side of the dybbuk: the choke and
     // the fade are set, not ridden.
     std::unique_ptr<EngravedTrim> lengthTrim, fadeTrim;

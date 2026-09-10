@@ -224,8 +224,10 @@ Tones, drift. Git keeps them.
   each time round unless refreshed, so an armed pattern evolves like a
   delay instead of piling up.
 - **Clock:** the hardware's headline control, a global sample rate in
-  harmonised steps that repitches and slows every step together. The
-  variable-rate read from the PT core does exactly this.
+  harmonised steps that repitches and slows every step together.
+  **Shipped 2026-09-09 as Pitch**, Roy's name: semitones on the material
+  only, the step clock stays Time's. A fresh fractional read in the
+  voice, not the PT core's.
 - Per-step chance, ratchet, reverse, and a swing amount, driven by a
   single Chaos macro so the dice has something to roll.
 

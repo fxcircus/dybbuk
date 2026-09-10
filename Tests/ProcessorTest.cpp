@@ -514,6 +514,9 @@ void readouts()
         { params::id::blend, 50.0f, "50" },
         { params::id::freeze, 1.0f, "Frozen" },
         { params::id::freeze, 0.0f, "Off" },
+        { params::id::pitch, 7.0f, "+7 st" },
+        { params::id::pitch, -12.0f, "-12 st" },
+        { params::id::pitch, 0.0f, "0 st" },
         { params::id::fills, 0.0f, "Off" },
         { params::id::fills, 30.0f, "30 %" },
         { params::id::chaos, 0.0f, "Still" },
@@ -887,7 +890,7 @@ void ordering()
             ok = false;
     }
     check ("first eight parameters", ok, order.trim());
-    check ("fourteen parameters in all", all.size() == 14, juce::String (all.size()));
+    check ("fifteen parameters in all", all.size() == 15, juce::String (all.size()));
     check ("bypass is declared last", all.size() > 0 && all[all.size() - 1]->paramID == params::id::bypass,
            all.size() > 0 ? all[all.size() - 1]->paramID : juce::String ("none"));
     check ("bypass is the host bypass parameter", p.getBypassParameter() != nullptr
