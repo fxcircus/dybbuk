@@ -280,7 +280,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     // Centred between the rule and the hero row's top ticks, well inside
     // the faders' caps at either edge.
     modeToggle = std::make_unique<ModeToggle> (param (params::id::mode),
-                                               juce::StringArray { "POSSESS", "HAUNT", "LINGER", "LEGION", "SEIZE" });
+                                               juce::StringArray { "POSSESS", "HAUNT", "LINGER", "LEGION", "TREMOR" });
     plate.addAndMakeVisible (*modeToggle);
     modeToggle->setBounds (kCentreX - kModeW / 2, kModeY - kModeH / 2, kModeW, kModeH);
 
@@ -403,7 +403,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     // Mode changes what three of the knobs mean, and the captions stay put
     // (a caption that changes is a knob you cannot find again), so the
     // readout says it instead: Decay is how much of a step a haunting keeps
-    // sounding, in steps; Pitch is Legion's interval; Fills is Seize's
+    // sounding, in steps; Pitch is Legion's interval; Fills is Tremor's
     // ratchet count. The scales are the engine's own (raw / 100), so the
     // number printed is the number the engine uses.
     auto mode = [this] { return juce::roundToInt (raw (params::id::mode)); };
@@ -412,7 +412,11 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
         const float v = raw (params::id::length);
         switch (mode())
         {
-            case Lamp::linger: return "fills " + juce::String (juce::roundToInt (v)) + " %";
+            case Lamp::linger:
+            {
+                const float dec = juce::jlimit (0.0f, 1.0f, (v * 0.01f - 0.05f) / 0.95f);
+                return juce::String (1.0f + 7.0f * dec * dec, 1) + "x slower";
+            }
             case Lamp::haunt:
             {
                 // Mirrors BurstEngine::hauntDecayPerTick: one to kHauntMaxTicks (8) ticks.
@@ -433,7 +437,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     fillsKnob->setValueTextProvider ([this, mode]
     {
         const float v = raw (params::id::fills);
-        if (mode() == Lamp::seize)
+        if (mode() == Lamp::tremor)
             return "x" + juce::String (1 + juce::roundToInt (3.0f * v * 0.01f));
         return v < 0.5f ? juce::String ("Off") : juce::String (juce::roundToInt (v)) + " %";
     });
@@ -542,7 +546,7 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
     if (c == blendKnob.get())     return "Dry against the pattern, equal power.";
     if (c == lengthKnob.get())
     {
-        if (mode == Lamp::linger) return "How much of each step the stretched material fills.";
+        if (mode == Lamp::linger) return "How many times slower the material plays, from its start; the step holds what fits.";
         if (mode == Lamp::haunt)  return "How many steps a frozen moment keeps sounding, 1 to 8.";
         return "How much of each step sounds before it is cut.";
     }
@@ -553,7 +557,7 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
                                     : "Transposes every step's material, in semitones.";
     if (c == glueKnob.get())      return "Saturation on the pattern, level matched: colour and squash, not volume.";
     if (c == fillsKnob.get())
-        return mode == Lamp::seize ? "How many times the held step repeats within each step, 1 to 4."
+        return mode == Lamp::tremor ? "How many times the held step repeats within each step, 1 to 4."
                                    : "Frozen, a note over the threshold scrambles the order for one cycle, this deeply.";
     if (c == freezeToggle.get())  return "Off, every note you play becomes a step. On, the pattern is held and you play over it.";
     if (c == chaosKnob.get())     return "Per step: skips, ratchets, reverses, jumps, intervals, offsets, chokes, accents. More is more at once.";
@@ -563,7 +567,7 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
         static const char* const cells[] = {
             "The pattern as you played it.",
             "Every step leaves a frozen moment that keeps sounding under the next ones.",
-            "Every step stretched to fill its share of the step, at its own pitch.",
+            "Every step played slower from its start, at its own pitch; Decay how much.",
             "Every step sung three times over, Pitch the interval.",
             "Playing over the threshold holds and ratchets the current step.",
         };
@@ -588,7 +592,7 @@ juce::String DybbukEditor::hintUnderMouse() const
     {
         // The test hook: the named control, probed at its centre, or a
         // mode cell probed in its cell.
-        static const juce::StringArray modeNames { "POSSESS", "HAUNT", "LINGER", "LEGION", "SEIZE" };
+        static const juce::StringArray modeNames { "POSSESS", "HAUNT", "LINGER", "LEGION", "TREMOR" };
         if (const int cell = modeNames.indexOf (pinnedHint); cell >= 0)
         {
             const auto b = modeToggle->getBounds();
@@ -672,6 +676,10 @@ void DybbukEditor::timerCallback()
     if (mode != lastMode)
     {
         lastMode = mode;
+        // The knob a mode reinterprets wears a red caption while it does.
+        lengthKnob->setAccent (mode == (int) Lamp::linger || mode == (int) Lamp::haunt);
+        pitchKnob->setAccent (mode == (int) Lamp::legion);
+        fillsKnob->setAccent (mode == (int) Lamp::tremor);
         for (auto* knob : { lengthKnob.get(), pitchKnob.get(), fillsKnob.get() })
             knob->repaint();
     }

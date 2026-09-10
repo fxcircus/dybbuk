@@ -568,7 +568,7 @@ void readouts()
         { params::id::spread, 100.0f, "100 %" },
         { params::id::mode, 0.0f, "Possess" },
         { params::id::mode, 1.0f, "Haunt" },
-        { params::id::mode, 4.0f, "Seize" },
+        { params::id::mode, 4.0f, "Tremor" },
         { params::id::barreset, 1.0f, "On" },
         { params::id::barreset, 0.0f, "Off" },
         { params::id::fills, 0.0f, "Off" },

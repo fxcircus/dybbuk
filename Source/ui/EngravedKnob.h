@@ -39,6 +39,7 @@ public:
     void setLegends (juce::String minLabel, juce::String maxLabel);
     void setDangerFrom (float normStart) noexcept; // Decay: the red zone and red max legend
     void setDetents (int count) noexcept;          // Time in sync: quantise and mark the ring
+    void setAccent (bool on) noexcept;             // the caption in red: this mode gives the knob another meaning
     void setModulation (bool active, float liveNorm) noexcept;
     void setValueTextProvider (std::function<juce::String()> provider);
 
@@ -74,7 +75,7 @@ private:
     float shownValue = -1.0f; // glides toward normValue, so a preset load sweeps
     float lastDragY = 0.0f;
     float dragNorm = 0.0f;    // the drag's own, unquantised position: detents snap the value, not the hand
-    bool hovering = false, dragging = false;
+    bool hovering = false, dragging = false, accented = false;
     float dangerFrom = -1.0f;
     int detents = 0;
     bool modActive = false;

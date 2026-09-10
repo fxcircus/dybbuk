@@ -45,9 +45,9 @@ public:
     // Which player has the pattern (the Mode parameter's index). The creature
     // changes its bearing to match, easing between bearings rather than
     // snapping: Linger stretches the limbs, Legion splits every tip into a
-    // fan of bulbs, Haunt leaves a ghost of each limb that sounded, Seize
+    // fan of bulbs, Haunt leaves a ghost of each limb that sounded, Tremor
     // gives the ember a tremor and the sounding limb a twitch.
-    enum Mode { possess = 0, haunt, linger, legion, seize, kModeCount };   // mirrors BurstEngine::Mode
+    enum Mode { possess = 0, haunt, linger, legion, tremor, kModeCount };   // mirrors BurstEngine::Mode
     void setMode (int mode) noexcept { modeWanted = juce::jlimit (0, kModeCount - 1, mode); }
 
     void tick();
@@ -98,7 +98,7 @@ private:
     std::array<Trail, kTrails> trails {};
     int nextTrail = 0;
 
-    // Seize: where the ember has shaken to this frame, and how hard the
+    // Tremor: where the ember has shaken to this frame, and how hard the
     // sounding limb is twitching.
     float tremorX = 0.0f, tremorY = 0.0f, twitch = 0.0f;
 

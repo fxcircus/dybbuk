@@ -27,7 +27,7 @@ namespace
         float direction[BurstEngine::kDirectionCount]; // relative weights, Forward, Reverse, Pendulum, Drunk, Random
         Span pitch;         // semitones, integer; half the rolls stay at 0
         Span glue;          // the drive, percent
-        float mode[BurstEngine::kModeCount]; // relative weights, Possess, Haunt, Linger, Legion, Seize
+        float mode[BurstEngine::kModeCount]; // relative weights, Possess, Haunt, Linger, Legion, Tremor
     };
 
     const Character kCharacters[] = {

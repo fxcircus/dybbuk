@@ -116,7 +116,7 @@ float BurstEngine::Grains::next (float rate, Rng& rng) noexcept
         out += (a + (b - a) * frac) * w;
         ++age[k];
     }
-    head = juce::jlimit (0.0, lastIndex, head + advance);
+    head = juce::jlimit (0.0, juce::jmax (0.0, lastIndex - (double) size), head + advance);   // a grain always fits after the head
     --left;
     return out * gain;
 }
@@ -483,30 +483,28 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
 
     if (s.mode == Mode::linger)
     {
-        // Stretched to fill its share of the step: the head walks the
-        // material at M / T, never faster than real time.
-        const int outSamples = juce::jmax (s.fadeSamples * 2, juce::roundToInt ((float) window * share));
+        // A slowdown from the start of the material: Decay says how many
+        // times slower (1x at its floor, 8x at the top, on a square so the
+        // bottom half is subtle), and the step holds what fits. It used to
+        // stretch material to fill the step, which left any note longer than
+        // the step untouched, so Linger seemed to do nothing until Pitch
+        // shortened the material (Roy, playing it).
+        const float dec = juce::jlimit (0.0f, 1.0f, (s.length01 - 0.05f) / 0.95f);
+        const double factor = 1.0 + 7.0 * (double) (dec * dec);
         const int grain = grainSizeFor (s.sampleRate, len);
-        // The head has the material less one grain to cover, since the last
-        // grain reads a grain's worth past it.
-        const double remaining = (double) juce::jmax (1, len - offset - grain);
-        if (remaining + grain > (double) outSamples)
-        {
-            // Nothing to stretch: the material outlasts its share of the
-            // step and plays as it is, cut at the boundary like Possess.
-        }
-        else
-        {
-            const double advance = (remaining / (double) outSamples) * (d.reverse ? -1.0 : 1.0);
-            sv.stretch.begin (material, len, d.reverse ? (double) (len - 1 - grain) : (double) offset, advance,
-                              grain, outSamples, rng);
-            sv.stretch.gain = gain;
-            sv.stretch.rateMul = d.rateMulOr1();
-            return;
-        }
+        // The whole material, tail included, lasts factor times longer; the
+        // head stops a grain before the end and the last grain holds the tail.
+        const double remaining = (double) juce::jmax (1, len - offset);
+        const int outSamples = juce::jmax (s.fadeSamples * 2, juce::jmin (window, (int) (remaining * factor)));
+        const double advance = (1.0 / factor) * (d.reverse ? -1.0 : 1.0);
+        sv.stretch.begin (material, len, d.reverse ? (double) (len - 1 - grain) : (double) offset, advance,
+                          grain, outSamples, rng);
+        sv.stretch.gain = gain;
+        sv.stretch.rateMul = d.rateMulOr1();
+        return;
     }
 
-    // Possess, Haunt and Seize play the material; Legion plays it three
+    // Possess, Haunt and Tremor play the material; Legion plays it three
     // times over at intervals. Haunt is never choked: the whole moment is
     // what will be left behind.
     const float stepRate = s.rate * d.rateMulOr1();
@@ -661,9 +659,9 @@ void BurstEngine::advance() noexcept
 
     Deviation d = rollChaos();
 
-    // Seize: a hand on the pattern. While the input is hot the current
+    // Tremor: a hand on the pattern. While the input is hot the current
     // step is held and ratcheted, Fills setting how densely.
-    const bool seized = cur.mode == Mode::seize && inputHot && playIndex >= 0;
+    const bool seized = cur.mode == Mode::tremor && inputHot && playIndex >= 0;
     if (seized)
     {
         d.repeat = true;
@@ -785,7 +783,7 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
                 if (fillArmed && env > openLevel)
                 {
                     fillArmed = false;
-                    if (p.fills01 > 0.0f && fillTicksLeft == 0 && p.mode != Mode::seize)
+                    if (p.fills01 > 0.0f && fillTicksLeft == 0 && p.mode != Mode::tremor)
                         beginFill();
                 }
                 else if (env < closeLevel)
@@ -938,7 +936,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
 
     // The same players as the live sequencer, fresh, seeded the same way
     // every time so an export is repeatable. Legion, whose voices come and
-    // go, plays all three here; Seize has no input to seize with.
+    // go, plays all three here; Tremor has no input to seize with.
     Rng rng;
     rng.seed (7u);
     StepVoice sv;
@@ -951,7 +949,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
     const float drive = glueDrive (ga);
 
     StepSetup setup;
-    setup.mode = st.mode == Mode::seize ? Mode::possess : st.mode;
+    setup.mode = st.mode == Mode::tremor ? Mode::possess : st.mode;
     setup.length01 = st.length01;
     setup.pitchSemitones = st.pitchSemitones;
     setup.spread01 = st.spread01;

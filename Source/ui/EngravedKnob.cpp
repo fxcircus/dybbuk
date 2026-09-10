@@ -258,7 +258,7 @@ void EngravedKnob::paint (juce::Graphics& g)
     const float svg = S + kPad;
     theme::drawTracked (g, labelText, { 0.0f, svg + 1.0f, (float) getWidth(), spec.labelPx + 4.0f },
                         juce::Justification::centred, theme::Face::semibold, spec.labelPx, 0.14f,
-                        active ? p.bright : p.ink);
+                        accented ? p.red : (active ? p.bright : p.ink));
 
     g.setFont (theme::font (theme::Face::text, spec.valuePx));
     g.setColour (hot ? p.red : (active ? p.bright : p.faded));
@@ -266,6 +266,14 @@ void EngravedKnob::paint (juce::Graphics& g)
                 juce::Rectangle<float> (0.0f, svg + spec.labelPx + 4.0f, (float) getWidth(),
                                         spec.valuePx + 4.0f),
                 juce::Justification::centred, false);
+}
+
+void EngravedKnob::setAccent (bool on) noexcept
+{
+    if (accented == on)
+        return;
+    accented = on;
+    repaint();
 }
 
 void EngravedKnob::mouseEnter (const juce::MouseEvent&)

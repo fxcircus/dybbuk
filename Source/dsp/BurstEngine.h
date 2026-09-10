@@ -40,7 +40,7 @@ public:
     //   legion   three voices, Pitch the interval between them, coming and going
     //   haunt    each step leaves a frozen moment that keeps sounding under the next ones
     //   seize    while the input is over the threshold, the current step is held and ratcheted
-    enum class Mode { possess = 0, haunt, linger, legion, seize };   // Haunt second: Roy's favourite, beside the default
+    enum class Mode { possess = 0, haunt, linger, legion, tremor };   // Haunt second: Roy's favourite, beside the default
     static constexpr int kModeCount = 5;
 
     struct Params

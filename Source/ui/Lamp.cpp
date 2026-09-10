@@ -43,7 +43,7 @@ namespace
     constexpr float kTrailAgePerTick = 0.6f;         // Haunt: a ghost is mostly gone four ticks on
     constexpr float kTrailAgePerFrame = 0.985f;      // ... and fades on its own once the pattern stops
     constexpr float kTrailDrift = 0.35f;             // ... drifting back a third of a slot as it goes
-    constexpr float kTremorPx = 2.2f;                // Seize: how far the ember shakes with the gate open
+    constexpr float kTremorPx = 2.2f;                // Tremor: how far the ember shakes with the gate open
 
     juce::Point<float> rayDir (float slot, float slots) noexcept
     {
@@ -183,7 +183,7 @@ void Lamp::tick()
     }
     const float lingerMix = modeMix[(size_t) linger];
     const float hauntMix = modeMix[(size_t) haunt];
-    const float seizeMix = modeMix[(size_t) seize];
+    const float tremorMix = modeMix[(size_t) tremor];
 
     // Haunt: on every tick the limb that has just started sounding leaves a
     // ghost of itself; the older ghosts step back a generation.
@@ -215,14 +215,14 @@ void Lamp::tick()
         ringDirty = true;
     }
 
-    // Seize: a tight tremor, new every frame, hardest while the gate is open
+    // Tremor: a tight tremor, new every frame, hardest while the gate is open
     // and a smaller one on every tick; the sounding limb twitches with it.
-    if (seizeMix > 0.01f && ! bypassed)
+    if (tremorMix > 0.01f && ! bypassed)
     {
-        const float shake = seizeMix * (1.0f - frost) * juce::jmin (1.0f, flare + 0.5f * pulse);
+        const float shake = tremorMix * (1.0f - frost) * juce::jmin (1.0f, flare + 0.5f * pulse);
         tremorX = (rng.nextFloat() - 0.5f) * 2.0f * kTremorPx * shake;
         tremorY = (rng.nextFloat() - 0.5f) * 2.0f * kTremorPx * shake;
-        twitch = (rng.nextFloat() - 0.5f) * 2.0f * seizeMix * (1.0f - frost);
+        twitch = (rng.nextFloat() - 0.5f) * 2.0f * tremorMix * (1.0f - frost);
         if (count > 0 || shake > 0.01f)
             ringDirty = true;
     }
@@ -301,7 +301,7 @@ void Lamp::paint (juce::Graphics& g)
 {
     const auto& p = theme::palette();
     const auto b = getLocalBounds().toFloat();
-    // The fixture is bolted down; the ember and its limbs shake with Seize.
+    // The fixture is bolted down; the ember and its limbs shake with Tremor.
     const auto fixture = b.getCentre();
     const auto c = fixture + juce::Point<float> (tremorX, tremorY);
     const float dim = bypassed ? 0.35f : 1.0f;
@@ -309,7 +309,7 @@ void Lamp::paint (juce::Graphics& g)
     const float lingerMix = modeMix[(size_t) linger];
     const float legionMix = modeMix[(size_t) legion];
     const float hauntMix = modeMix[(size_t) haunt];
-    const float seizeMix = modeMix[(size_t) seize];
+    const float tremorMix = modeMix[(size_t) tremor];
 
     // The fixture: sixteen rays around the housing, fainter while there is
     // nothing to hold.
@@ -339,7 +339,7 @@ void Lamp::paint (juce::Graphics& g)
 
     // The glass itself: a hatched disc that swells and brightens. Seizing,
     // it also clenches and lets go a little with every frame.
-    const float scale = 0.72f + 0.42f * live + 0.05f * seizeMix * twitch;
+    const float scale = 0.72f + 0.42f * live + 0.05f * tremorMix * twitch;
     const float r = 20.0f * scale;
     const float alpha = (0.55f + 0.45f * live) * dim;
     const juce::Rectangle<float> glass (c.x - r, c.y - r, r * 2.0f, r * 2.0f);
@@ -373,7 +373,7 @@ void Lamp::paint (juce::Graphics& g)
                              float lengthScale, int phaseIndex, float writheAt)
     {
         // Seizing, the sounding limb jerks off its heading a little every frame.
-        const float twist = sounding ? twitch * 0.12f * seizeMix : 0.0f;
+        const float twist = sounding ? twitch * 0.12f * tremorMix : 0.0f;
         const auto ray = rayDir (slot, slots);
         const juce::Point<float> dir (ray.x * std::cos (twist) - ray.y * std::sin (twist),
                                       ray.x * std::sin (twist) + ray.y * std::cos (twist));
@@ -390,7 +390,7 @@ void Lamp::paint (juce::Graphics& g)
         const float phase = (float) phaseIndex * 2.399f;
         const float pace = 0.7f + 0.5f * std::fmod ((float) phaseIndex * 0.618f, 1.0f);
         const float amp = (kWaveAmp + std::abs (jitter[(size_t) (phaseIndex % kMaxPips)]) * 2.0f
-                           + (sounding ? 1.5f * pulse + 3.0f * seizeMix * std::abs (twitch) : 0.0f))
+                           + (sounding ? 1.5f * pulse + 3.0f * tremorMix * std::abs (twitch) : 0.0f))
                           * (1.0f + 2.0f * kLingerStretch * lingerMix);
         // The bulb at the tip, and the neck that carries it: the neck is as
         // wide as the bulb's radius, so the limb swells into the ball rather

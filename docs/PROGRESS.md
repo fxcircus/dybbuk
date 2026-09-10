@@ -88,7 +88,7 @@ disagree with what is written here, this wins.
 - `EngineTest`: 22 scenarios plus `render` (89 checks, 0 failures, 0.2 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
   levels, cpu, hostile, pitch, glue, spread, bar, linger, legion, haunt,
-  seize, modesexport
+  tremor, modesexport
 - `ProcessorTest`: ordering, readouts, session and preset round-trips, five
   factory presets load and sound, dice, mono to stereo, stereo dry, bypass
   crossfade with the engine deaf, WAV export (0 failures)
@@ -98,7 +98,7 @@ disagree with what is written here, this wins.
   CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between.
   Four even bands under the rule (Roy, 2026-09-10, after trying the bar
   in the middle and at the foot): the MODE bar (Teder's segmented toggle,
-  POSSESS / HAUNT / LINGER / LEGION / SEIZE, Haunt second because it is
+  POSSESS / HAUNT / LINGER / LEGION / TREMOR, Haunt second because it is
   Roy's favourite) first, at y 100, with the hover hint and the rolled dice
   character on the strip directly under it; the hero
   row Threshold, Time (+SYNC and BAR diamonds), Steps, Blend at 202; the
@@ -111,7 +111,7 @@ disagree with what is written here, this wins.
   mode bar for three seconds; the same strip carries a hover hint for
   every control, one line of tracked caps that fades in and out, worded
   for the current mode. Three knobs change meaning with the mode (Decay in
-  Linger and Haunt, Pitch in Legion, Fills in Seize); their captions stay
+  Linger and Haunt, Pitch in Legion, Fills in Tremor); their captions stay
   put and their readouts say so instead ("fills 50 %", "lasts 4 steps",
   "+7 st apart", "x3").
 - Export: drag the stamp into a DAW for one cycle of the pattern as a
@@ -148,6 +148,22 @@ expected, three notes.
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
 
+## Playing the modes (2026-09-10)
+
+1. **Linger did nothing on a normal note.** It stretched material to fill
+   the step, so any note longer than the step was left alone, and only
+   once Pitch had shortened the material did the stretch appear. Now it is
+   a slowdown from the start of the material, Decay setting how many times
+   slower (1x at its floor, 8x at the top, on a square), the step holding
+   what fits; the tail is given its factor's worth of time too. Audible on
+   every note.
+2. **The knob a mode reinterprets wears a red caption** while that mode is
+   on: Decay in Linger and Haunt, Pitch in Legion, Fills in Tremor. The
+   readout already said what; now the eye is led to it.
+3. **Seize is Tremor.** Roy's rename; the enum, strings, toggle, lamp, dice
+   and tests follow. He also asked for medical-condition names for the
+   rest; recommendations were made and not applied.
+
 ## B5 shipped: the modes (2026-09-09, late)
 
 Roy asked for the pedal's Radio stations under names of our own, on the
@@ -158,7 +174,7 @@ sequencer as it was; **LINGER** stretches each step's material to fill
 Decay's share of the step at its own pitch; **LEGION** sings each step
 three times over, Pitch the interval; **HAUNT** leaves each step's last
 moment behind as a held grain under the steps that follow, Decay how long
-it lasts; **SEIZE** holds and ratchets the current step while you play
+it lasts; **TREMOR** holds and ratchets the current step while you play
 over the threshold, Fills how densely. Plus **Bar**, a toggle beside Sync
 that restarts the pattern from its first step on every bar line.
 
@@ -181,7 +197,7 @@ Engine notes worth keeping:
 - The dybbuk shows the mode, eased over a second: Linger's limbs reach
   further and row slower and wider; Legion's end in a fan of three bulbs;
   Haunt leaves up to four ghost limbs drifting back and fading behind
-  the steps that sounded; Seize shakes the ember and glass with the
+  the steps that sounded; Tremor shakes the ember and glass with the
   gate and twists the sounding limb. The lamp box grew to 144 px so
   Linger's reach does not clip.
 
