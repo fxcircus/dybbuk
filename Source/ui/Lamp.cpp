@@ -279,8 +279,12 @@ void Lamp::paint (juce::Graphics& g)
         const float pace = 0.7f + 0.5f * std::fmod ((float) phaseIndex * 0.618f, 1.0f);
         const float amp = kWaveAmp + std::abs (jitter[(size_t) (phaseIndex % kMaxPips)]) * 2.0f
                           + (sounding ? 1.5f * pulse : 0.0f);
-        const float wRoot = 4.2f + 1.8f * lv + (sounding ? 0.8f : 0.0f);
-        const float wTip = 1.3f;
+        // The bulb at the tip, and the neck that carries it: the neck is as
+        // wide as the bulb's radius, so the limb swells into the ball rather
+        // than touching it with a hair, and the two are one outline.
+        const float tipR = 2.2f + 1.7f * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)) + (sounding ? 0.8f : 0.0f);
+        const float wRoot = 4.4f + 1.8f * lv + (sounding ? 0.8f : 0.0f);
+        const float wTip = tipR;
 
         juce::Point<float> spine[kSpineSegments + 1];
         float width[kSpineSegments + 1];
@@ -293,24 +297,36 @@ void Lamp::paint (juce::Graphics& g)
             width[k] = wRoot * (1.0f - t) + wTip * t;
         }
 
+        // Where the neck meets the ball: the sides land on the circle and the
+        // arc closes the front. Angles in JUCE's convention, clockwise from
+        // twelve, with the limb's own heading measured the same way.
+        const auto tip = spine[kSpineSegments];
+        const auto tipDir = (spine[kSpineSegments] - spine[kSpineSegments - 1]);
+        const float heading = std::atan2 (tipDir.x, -tipDir.y);
+        const float neckAngle = std::asin (juce::jlimit (0.0f, 0.95f, (wTip * 0.5f) / tipR));
+        const float back = juce::MathConstants<float>::pi - neckAngle;
+        const juce::Point<float> tipPerp (-tipDir.y, tipDir.x);
+        const float tipLen = juce::jmax (1.0e-3f, std::hypot (tipDir.x, tipDir.y));
+        const auto unitDir = tipDir / tipLen;
+        const auto unitPerp = tipPerp / tipLen;
+        const auto joinPlus = tip - unitDir * (tipR * std::cos (neckAngle)) + unitPerp * (tipR * std::sin (neckAngle));
+        const auto joinMinus = tip - unitDir * (tipR * std::cos (neckAngle)) - unitPerp * (tipR * std::sin (neckAngle));
+
         juce::Path limb;
         limb.startNewSubPath (spine[0] + perp * (width[0] * 0.5f));
-        for (int k = 1; k <= kSpineSegments; ++k)
+        for (int k = 1; k < kSpineSegments; ++k)
             limb.lineTo (spine[k] + perp * (width[k] * 0.5f));
-        for (int k = kSpineSegments; k >= 0; --k)
+        limb.lineTo (joinPlus);
+        limb.addCentredArc (tip.x, tip.y, tipR, tipR, 0.0f, heading + back, heading - back, false);
+        limb.lineTo (joinMinus);
+        for (int k = kSpineSegments - 1; k >= 0; --k)
             limb.lineTo (spine[k] - perp * (width[k] * 0.5f));
         limb.closeSubPath();
-
-        // The bulb at the tip: the virus's knob.
-        const float tipR = 2.0f + 1.6f * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)) + (sounding ? 0.8f : 0.0f);
-        const auto tip = spine[kSpineSegments];
-        const juce::Rectangle<float> bulb (tip.x - tipR, tip.y - tipR, tipR * 2.0f, tipR * 2.0f);
 
         if (sounding)
         {
             g.setColour (red.withAlpha (0.3f * fade * dim));
             g.strokePath (limb, juce::PathStrokeType (3.0f));
-            g.drawEllipse (bulb.expanded (2.5f), 1.0f);
             g.setColour (red.withAlpha (fade * dim));
         }
         else
@@ -318,13 +334,11 @@ void Lamp::paint (juce::Graphics& g)
             g.setColour (red.withAlpha ((0.45f + 0.55f * lv) * gn * fade * dim));
         }
         g.fillPath (limb);
-        g.fillEllipse (bulb);
 
         // The ink outline fades with the step but never below what a stroke
         // on the plate needs: a spent limb is a hollow, withered one.
         g.setColour (p.ink.withAlpha ((0.45f + 0.55f * gn) * fade * dim));
         g.strokePath (limb, juce::PathStrokeType (sounding ? 1.1f : 0.9f));
-        g.drawEllipse (bulb, sounding ? 1.1f : 0.9f);
     };
 
     for (int i = 0; i < count; ++i)
