@@ -159,7 +159,18 @@ int main()
     snap ("editor_snapshot_synced.png");
     setParam (processor, params::id::stepsync, 0.0f);
 
-    // 5. The theme cross-fade, caught in the middle. The dispatch loop runs the
+    // 5. A roll of the dice: the patch changes and the character's name is
+    // printed over the dybbuk for a few seconds. This frame reviews that the
+    // caption lands in its clearing and collides with nothing.
+    if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
+    {
+        d->rollDice();
+        push (processor, 0.3, 0.0f);
+        report ("rolled");
+        snap ("editor_snapshot_rolled.png");
+    }
+
+    // 6. The theme cross-fade, caught in the middle. The dispatch loop runs the
     // editor's timer, so a short wait after the toggle lands part way through
     // the 350 ms dissolve: this frame should show both sheets at once.
     if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
@@ -168,7 +179,7 @@ int main()
         snapAfter ("editor_snapshot_theme_fade.png", 110);
     }
 
-    // 6. The alternate sheet, settled, rebuilt through the real path, with
+    // 7. The alternate sheet, settled, rebuilt through the real path, with
     // the pattern still running.
     processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::Kind::dark, nullptr);
     rebuild (processor, editor);
@@ -176,7 +187,7 @@ int main()
     report ("dark");
     snap ("editor_snapshot_dark.png");
 
-    // 7. Every factory preset, which also reviews every readout in the tables.
+    // 8. Every factory preset, which also reviews every readout in the tables.
     // Each is played a phrase of its own so the ring shows its step count.
     processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::kDefaultTheme, nullptr);
     for (const auto& info : processor.presetManager.getPresets())

@@ -14,11 +14,13 @@
 //
 // Values live under their own knobs rather than in a shared strip, so nothing
 // has to be hovered to be read. The red dot in the middle of the plate is the
-// dybbuk: the pattern drawn as a ring of pips around the ember, with the
-// export stamp over it, the clear stamp under it, and a trim on each side.
+// dybbuk: the pattern drawn as a ring of pips around the ember, with a trim
+// on each side. Everything done TO the pattern (roll, clear, export) lives in
+// the header's actions zone, in Shalal's arrangement, so the middle of the
+// plate is the pattern and nothing else.
 //
-// A DragAndDropContainer so the export stamp can hand the rendered pattern to
-// the OS as a file drag, straight onto a DAW track.
+// A DragAndDropContainer so the EXPORT action can hand the rendered pattern
+// to the OS as a file drag, straight onto a DAW track.
 class DybbukEditor : public juce::AudioProcessorEditor,
                      public juce::DragAndDropContainer,
                      private juce::Timer
@@ -29,13 +31,15 @@ public:
 
     void resized() override;
 
-    // The action the theme mark performs. Public so UISnapshot can exercise
-    // the cross-fade without a mouse.
+    // The actions the theme mark and the dice perform. Public so UISnapshot
+    // can exercise the cross-fade and the rolled caption without a mouse.
     void toggleTheme();
+    void rollDice();
 
-private:
     static constexpr int canvasW = 900;
     static constexpr int canvasH = 620;
+
+private:
     static constexpr int kUiHz = 30;
 
     struct Plate : juce::Component
@@ -95,11 +99,11 @@ private:
     std::unique_ptr<WordToggle> fullToggle, recordToggle;
     ThemeFade themeFade;
     Lamp lamp;
-    ClearStamp clearStamp;
-    ExportStamp exportStamp;
     PresetHeader presetHeader { proc.presetManager };
+    HeaderAction diceAction { HeaderAction::Glyph::die, "DICE" };
+    HeaderAction clearAction { HeaderAction::Glyph::trash, "CLEAR" };
+    HeaderAction exportAction { HeaderAction::Glyph::wavOut, "EXPORT" };
     ThemeMark themeMark;
-    DiceButton dice;
     const char* rolledName = nullptr;
     int rolledTicks = 0;
 

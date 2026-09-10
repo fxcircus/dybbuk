@@ -212,119 +212,6 @@ void WordToggle::paint (juce::Graphics& g)
                         theme::Face::semibold, 9.5f, 0.18f, on ? p.paper : lineInk);
 }
 
-// --- ClearStamp --------------------------------------------------------------
-
-ClearStamp::ClearStamp()
-{
-    setMouseCursor (juce::MouseCursor::PointingHandCursor);
-}
-
-void ClearStamp::tick()
-{
-    if (flashTicks > 0)
-    {
-        --flashTicks;
-        repaint();
-    }
-}
-
-void ClearStamp::paint (juce::Graphics& g)
-{
-    const auto& p = theme::palette();
-    const auto b = getLocalBounds().toFloat();
-    const auto lineInk = flashTicks > 0 ? p.red : (hovering ? p.ink : p.faded);
-
-    const juce::Rectangle<float> ring (b.getCentreX() - 13.0f, b.getY(), 26.0f, 26.0f);
-    g.setColour (lineInk);
-    g.drawEllipse (ring, 1.0f);
-
-    // A bin, drawn at the canvas's proportions inside the ring.
-    const float cx = ring.getCentreX(), cy = ring.getCentreY();
-    g.drawLine (cx - 4.8f, cy - 3.6f, cx + 4.8f, cy - 3.6f, 1.1f);
-
-    juce::Path lid;
-    lid.startNewSubPath (cx - 1.6f, cy - 3.6f);
-    lid.lineTo (cx - 1.6f, cy - 5.0f);
-    lid.lineTo (cx + 1.6f, cy - 5.0f);
-    lid.lineTo (cx + 1.6f, cy - 3.6f);
-    g.strokePath (lid, juce::PathStrokeType (1.1f));
-
-    juce::Path body;
-    body.startNewSubPath (cx - 3.4f, cy - 1.6f);
-    body.lineTo (cx - 2.6f, cy + 5.2f);
-    body.lineTo (cx + 2.6f, cy + 5.2f);
-    body.lineTo (cx + 3.4f, cy - 1.6f);
-    g.strokePath (body, juce::PathStrokeType (1.1f));
-
-    g.drawLine (cx - 1.3f, cy, cx - 1.05f, cy + 3.6f, 0.9f);
-    g.drawLine (cx + 1.3f, cy, cx + 1.05f, cy + 3.6f, 0.9f);
-
-    theme::drawTracked (g, "CLEAR", { 0.0f, ring.getBottom() + 3.0f, b.getWidth(), 10.0f },
-                        juce::Justification::centred, theme::Face::semibold, 7.0f, 0.16f, lineInk);
-}
-
-// --- ExportStamp -------------------------------------------------------------
-
-ExportStamp::ExportStamp()
-{
-    setMouseCursor (juce::MouseCursor::DraggingHandCursor);
-}
-
-void ExportStamp::mouseDrag (const juce::MouseEvent& e)
-{
-    // A few pixels of travel turn a click into a drag, once per gesture. The
-    // editor starts the OS drag from here, so nothing after it in this
-    // gesture can be relied on to arrive.
-    if (dragged || e.getDistanceFromDragStart() < 5)
-        return;
-    dragged = true;
-    if (onDragStart)
-        onDragStart();
-}
-
-void ExportStamp::mouseUp (const juce::MouseEvent& e)
-{
-    if (! dragged && onClick && getLocalBounds().contains (e.getPosition()))
-        onClick();
-    dragged = false;
-}
-
-void ExportStamp::paint (juce::Graphics& g)
-{
-    const auto& p = theme::palette();
-    const auto b = getLocalBounds().toFloat();
-    const auto lineInk = ! isEnabled() ? p.faded.withAlpha (0.45f) : (hovering ? p.ink : p.faded);
-
-    // Mirrors the clear stamp across the dybbuk: legend at the top, ring
-    // nearest the lamp.
-    const juce::Rectangle<float> ring (b.getCentreX() - 13.0f, b.getBottom() - 26.0f, 26.0f, 26.0f);
-    g.setColour (lineInk);
-    g.drawEllipse (ring, 1.0f);
-
-    // A tray with a wave lifting out of it, at the clear stamp's proportions.
-    const float cx = ring.getCentreX(), cy = ring.getCentreY();
-    juce::Path tray;
-    tray.startNewSubPath (cx - 5.2f, cy + 1.6f);
-    tray.lineTo (cx - 5.2f, cy + 5.0f);
-    tray.lineTo (cx + 5.2f, cy + 5.0f);
-    tray.lineTo (cx + 5.2f, cy + 1.6f);
-    g.strokePath (tray, juce::PathStrokeType (1.1f));
-
-    juce::Path wave;
-    wave.startNewSubPath (cx - 5.0f, cy - 1.2f);
-    wave.lineTo (cx - 3.6f, cy - 4.2f);
-    wave.lineTo (cx - 2.2f, cy + 1.0f);
-    wave.lineTo (cx - 0.8f, cy - 5.6f);
-    wave.lineTo (cx + 0.8f, cy + 1.6f);
-    wave.lineTo (cx + 2.2f, cy - 3.4f);
-    wave.lineTo (cx + 3.6f, cy);
-    wave.lineTo (cx + 5.0f, cy - 1.8f);
-    g.strokePath (wave, juce::PathStrokeType (1.0f));
-
-    theme::drawTracked (g, "EXPORT", { -6.0f, ring.getY() - 13.0f, b.getWidth() + 12.0f, 10.0f },
-                        juce::Justification::centred, theme::Face::semibold, 7.0f, 0.16f, lineInk);
-}
-
 // --- EngravedTrim ------------------------------------------------------------
 
 EngravedTrim::EngravedTrim (juce::RangedAudioParameter& parameterToUse, juce::String caption)
@@ -426,71 +313,159 @@ void EngravedTrim::paint (juce::Graphics& g)
     g.fillPath (carriage);
 }
 
-// --- DiceButton --------------------------------------------------------------
+// --- HeaderAction ------------------------------------------------------------
 
-DiceButton::DiceButton()
+namespace
+{
+    // Shalal's numbers: the glyph box is 26 px in a 44 px button, the label
+    // 8.5 px small caps (which its sheet renders at 1.28x), and a disabled
+    // button fades whole to one alpha.
+    constexpr float kActionLabelPx = 8.5f * 1.28f;
+    constexpr float kActionDimAlpha = 0.35f;
+}
+
+HeaderAction::HeaderAction (Glyph glyphToDraw, juce::String labelText)
+    : glyph (glyphToDraw), label (std::move (labelText))
 {
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
 }
 
-void DiceButton::mouseDown (const juce::MouseEvent&)
+void HeaderAction::pulse()
 {
-    // Roll to a face that is not the one showing, so a click always looks like
-    // a click even if the patch it lands on is close to the last.
-    int next = face;
-    while (next == face)
-        next = 1 + rng.nextInt (6);
-    face = next;
+    pulseAnim = 1.0f;
     repaint();
-
-    if (onClick)
-        onClick();
 }
 
-void DiceButton::paint (juce::Graphics& g)
+void HeaderAction::flash()
+{
+    flashTicks = 6;
+    pulse();
+}
+
+void HeaderAction::tick()
+{
+    if (flashTicks > 0)
+    {
+        --flashTicks;
+        repaint();
+    }
+}
+
+void HeaderAction::drawGlyph (juce::Graphics& g, Glyph glyph, juce::Rectangle<float> box,
+                              juce::Colour colour, float strokeWidth)
+{
+    // Ported line for line from Shalal's GlyphButton::drawGlyph: the same
+    // shapes at the same fractions of the box, so the two headers match.
+    juce::Path p;
+    const auto c = box.getCentre();
+    const float s = juce::jmin (box.getWidth(), box.getHeight());
+    const juce::PathStrokeType stroke (strokeWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    g.setColour (colour);
+
+    switch (glyph)
+    {
+        case Glyph::die:
+        {
+            // Isometric cube: top rhombus and two side faces. Every pip is
+            // placed in its face's own coordinates (fractions along the
+            // face's two edges), so at any size the pips sit inside the face
+            // they belong to instead of at offsets guessed for one size.
+            const float h = s * 0.46f, wv = s * 0.4f, dy = s * 0.23f;
+            const juce::Point<float> top (c.x, c.y - h), left (c.x - wv, c.y - h + dy), right (c.x + wv, c.y - h + dy),
+                                     mid (c.x, c.y - h + 2.0f * dy), bl (c.x - wv, c.y + h - dy), br (c.x + wv, c.y + h - dy),
+                                     bottom (c.x, c.y + h);
+            p.startNewSubPath (top); p.lineTo (right); p.lineTo (br); p.lineTo (bottom); p.lineTo (bl); p.lineTo (left); p.closeSubPath();
+            p.startNewSubPath (left); p.lineTo (mid); p.lineTo (right);
+            p.startNewSubPath (mid); p.lineTo (bottom);
+            g.strokePath (p, stroke);
+            const float pipR = s * 0.055f;
+            auto pip = [&] (juce::Point<float> origin, juce::Point<float> e1, juce::Point<float> e2, float u, float v)
+            {
+                const auto at = origin + e1 * u + e2 * v;
+                g.fillEllipse (at.x - pipR, at.y - pipR, pipR * 2.0f, pipR * 2.0f);
+            };
+            pip (left, top - left, mid - left, 0.5f, 0.5f);                    // top face: 1
+            for (const float t : { 0.3f, 0.7f })                               // left face: 2, on the diagonal
+                pip (left, mid - left, bl - left, t, t);
+            // Right face: 3 pips, but in a triangle rather than a die's
+            // diagonal, which at glyph size read as a single stroke.
+            pip (mid, right - mid, bottom - mid, 0.3f, 0.28f);
+            pip (mid, right - mid, bottom - mid, 0.7f, 0.28f);
+            pip (mid, right - mid, bottom - mid, 0.5f, 0.72f);
+            break;
+        }
+        case Glyph::wavOut:
+        {
+            // A filing tray with an arrow dropping into it.
+            p.startNewSubPath (c.x, c.y - s * 0.42f); p.lineTo (c.x, c.y + s * 0.08f);
+            p.startNewSubPath (c.x - s * 0.16f, c.y - s * 0.1f); p.lineTo (c.x, c.y + s * 0.1f); p.lineTo (c.x + s * 0.16f, c.y - s * 0.1f);
+            p.startNewSubPath (c.x - s * 0.42f, c.y + s * 0.1f); p.lineTo (c.x - s * 0.42f, c.y + s * 0.4f);
+            p.lineTo (c.x + s * 0.42f, c.y + s * 0.4f); p.lineTo (c.x + s * 0.42f, c.y + s * 0.1f);
+            g.strokePath (p, stroke);
+            break;
+        }
+        case Glyph::trash:
+        {
+            p.startNewSubPath (c.x - s * 0.38f, c.y - s * 0.25f); p.lineTo (c.x + s * 0.38f, c.y - s * 0.25f);
+            p.startNewSubPath (c.x - s * 0.28f, c.y - s * 0.25f); p.lineTo (c.x - s * 0.2f, c.y + s * 0.42f);
+            p.lineTo (c.x + s * 0.2f, c.y + s * 0.42f); p.lineTo (c.x + s * 0.28f, c.y - s * 0.25f);
+            p.startNewSubPath (c.x - s * 0.12f, c.y - s * 0.25f); p.lineTo (c.x - s * 0.09f, c.y - s * 0.4f);
+            p.lineTo (c.x + s * 0.09f, c.y - s * 0.4f); p.lineTo (c.x + s * 0.12f, c.y - s * 0.25f);
+            p.startNewSubPath (c.x - s * 0.08f, c.y - s * 0.1f); p.lineTo (c.x - s * 0.05f, c.y + s * 0.28f);
+            p.startNewSubPath (c.x + s * 0.08f, c.y - s * 0.1f); p.lineTo (c.x + s * 0.05f, c.y + s * 0.28f);
+            g.strokePath (p, stroke);
+            break;
+        }
+    }
+}
+
+void HeaderAction::paint (juce::Graphics& g)
 {
     const auto& p = theme::palette();
-    const auto bounds = getLocalBounds().toFloat().reduced (1.0f);
-    const float side = juce::jmin (bounds.getWidth(), bounds.getHeight());
-    const auto body = juce::Rectangle<float> (side, side).withCentre (bounds.getCentre());
-    const auto ink = hovering ? p.bright : p.ink;
-
-    // Line art, like every other mark on the plate: an engraved outline, not a
-    // filled button.
-    g.setColour (ink);
-    g.drawRoundedRectangle (body, 3.5f, 1.2f);
-
-    // Pip positions on a 3x3 grid inside the face.
-    const float step = body.getWidth() * 0.28f;
-    const float cx = body.getCentreX(), cy = body.getCentreY();
-    const float r = juce::jmax (1.1f, body.getWidth() * 0.075f);
-
-    auto pip = [&g, r] (float x, float y)
+    const float w = (float) getWidth();
+    const float boxH = juce::jmin (26.0f, (float) getHeight() - 14.0f);
+    juce::Rectangle<float> box ((w - boxH) * 0.5f, 2.0f, boxH, boxH);
+    if (pulseAnim > 0.01f)
     {
-        g.fillEllipse (x - r, y - r, 2.0f * r, 2.0f * r);
-    };
-
-    const bool corners = face >= 2;
-    const bool middleRow = face >= 6;
-    const bool centre = (face % 2) == 1;
-
-    if (corners)
-    {
-        pip (cx - step, cy - step);
-        pip (cx + step, cy + step);
+        box = box.expanded (boxH * 0.12f * pulseAnim);
+        pulseAnim *= 0.75f;
+        repaint();
     }
-    if (face >= 4)
-    {
-        pip (cx + step, cy - step);
-        pip (cx - step, cy + step);
-    }
-    if (middleRow)
-    {
-        pip (cx - step, cy);
-        pip (cx + step, cy);
-    }
-    if (centre)
-        pip (cx, cy);
+
+    // Disabled fades whole (one transparency layer, so crossing strokes do
+    // not darken) to the one unavailable alpha.
+    const bool dimmed = ! isEnabled();
+    if (dimmed)
+        g.beginTransparencyLayer (kActionDimAlpha);
+
+    const float alpha = hovering ? 1.0f : 0.8f;
+    const auto ink = (flashTicks > 0 ? p.red : (hovering ? p.bright : p.ink)).withAlpha (alpha);
+    drawGlyph (g, glyph, box.reduced (1.0f), ink, 1.1f);
+    theme::drawTracked (g, label, { 0.0f, (float) getHeight() - 12.0f, w, 11.0f },
+                        juce::Justification::centred, theme::Face::semibold, kActionLabelPx, 0.14f, ink);
+
+    if (dimmed)
+        g.endTransparencyLayer();
+}
+
+void HeaderAction::mouseDrag (const juce::MouseEvent& e)
+{
+    // A few pixels of travel turn a click into a drag, once per gesture. The
+    // editor starts the OS drag from here, so nothing after it in this
+    // gesture can be relied on to arrive.
+    if (dragStarted || ! isEnabled() || onDragStart == nullptr || e.getDistanceFromDragStart() <= 5)
+        return;
+    dragStarted = true;
+    onDragStart();
+}
+
+void HeaderAction::mouseUp (const juce::MouseEvent& e)
+{
+    if (dragStarted || ! isEnabled() || ! getLocalBounds().contains (e.getPosition()))
+        return;
+    pulse();
+    if (onClick)
+        onClick();
 }
 
 // --- ThemeMark ---------------------------------------------------------------

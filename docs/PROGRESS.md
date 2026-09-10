@@ -75,13 +75,16 @@ disagree with what is written here, this wins.
   factory presets load and sound, dice, mono to stereo, stereo dry, bypass
   crossfade with the engine deaf, WAV export (0 failures)
 - Five factory presets: Sixteenths, Stutter, Erosion, Pendulum, Deadpan
-- UI: the same plate, both sheets. Hero row Step (+Sync), Steps, Threshold,
-  Blend; the dybbuk at the plate's centre (450, 310) with the Export stamp
-  above and the Clear stamp below, the Length and Fade trims shortened to
-  flank it; a knob row of Fills, Chaos, Direction and the Full button
-  (Replace / Hold); the Record button (Armed / Frozen) centred on the bottom
-  strip. Record and Full are two-state word buttons, Roy's call after the
-  second look. The light sheet is the
+- UI: the same plate, both sheets. The header is Shalal's, zone for zone
+  and glyph for glyph: nameplate | bypass cap | preset station | DICE,
+  CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between
+  (Roy's third look; the die, wastebasket and export tray are Shalal's
+  drawings ported line for line). Hero row Step (+Sync), Steps, Threshold,
+  Blend; the dybbuk at the plate's centre (450, 310) with the Length and
+  Fade trims shortened to flank it and nothing above or below it; a knob
+  row of Fills, Chaos, Direction and the Full button (Replace / Hold); the
+  Record button (Armed / Frozen) centred on the bottom strip. The rolled
+  dice character is printed over the dybbuk for three seconds. The light sheet is the
   default since Roy's first look (2026-09-09). The dybbuk is the pattern, as a
   monster: one tentacle per step growing out of the housing (Roy's call
   after the first look: pips read as a DAW LED ring, tentacles read as a

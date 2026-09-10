@@ -5,8 +5,8 @@
 #include "Theme.h"
 
 // The small marks on the plate: the bypass and sync diamonds, the Record and
-// Full rails, the clear and export stamps, the dice and the theme mark. Each
-// is a handful of lines, so they share one file rather than seven.
+// Full rails, the header's three actions and the theme mark. Each is a
+// handful of lines, so they share one file rather than seven.
 
 // A filled diamond means engaged. Used for Bypass in the header (where the
 // label reads IN or BYPASS) and for Sync beside the Time knob.
@@ -101,55 +101,6 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WordToggle)
 };
 
-// A ringed bin stamp. It lights on the engine's acknowledgement rather than on
-// the click, so what flashes is the loop actually being emptied.
-class ClearStamp : public juce::Component
-{
-public:
-    ClearStamp();
-
-    std::function<void()> onClick;
-    void flash() noexcept { flashTicks = 6; }
-    void tick();
-
-    void paint (juce::Graphics& g) override;
-    void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
-    void mouseExit (const juce::MouseEvent&) override { hovering = false; repaint(); }
-    void mouseDown (const juce::MouseEvent&) override { if (onClick) onClick(); }
-
-private:
-    bool hovering = false;
-    int flashTicks = 0;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ClearStamp)
-};
-
-// The export stamp beside Record: a ringed tray with a wave on it. Drag it
-// and the pattern leaves as a WAV (onDragStart fires once, a few pixels into
-// the gesture, and the editor hands the file to the OS); click it for a save
-// dialog. Disabled while there is nothing to export, and drawn faded then.
-class ExportStamp : public juce::Component
-{
-public:
-    ExportStamp();
-
-    std::function<void()> onClick;
-    std::function<void()> onDragStart;
-
-    void paint (juce::Graphics& g) override;
-    void enablementChanged() override { repaint(); }
-    void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
-    void mouseExit (const juce::MouseEvent&) override { hovering = false; repaint(); }
-    void mouseDown (const juce::MouseEvent&) override { dragged = false; }
-    void mouseDrag (const juce::MouseEvent& e) override;
-    void mouseUp (const juce::MouseEvent& e) override;
-
-private:
-    bool hovering = false, dragged = false;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ExportStamp)
-};
-
 // A horizontal engraved trim: a caption, a hairline rail with a travelling
 // diamond, and the value right-aligned. Used for the two controls you aim and
 // then play against rather than ride -- Tones Fold and Colour -- which is why
@@ -185,27 +136,49 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngravedTrim)
 };
 
-// The dice, beside the theme mark. A pipped face that rolls to a new number on
-// every click, so the control shows that it did something even when the sound
-// it produced is one you do not like.
-class DiceButton : public juce::Component
+// The header's actions, in the house style shared with Shalal: a hairline
+// glyph over a tracked small-caps label. The glyph set, its proportions and
+// its stroke are that sheet's GlyphButton, so the two headers read as one
+// family; only the colours are the plate's own. Hover brightens, a click
+// thumps the glyph, disabled fades the whole button to one alpha. A drag
+// source (EXPORT) fires onDragStart once the mouse has travelled a few
+// pixels, and a gesture that dragged never clicks.
+//   die     DICE    -- an isometric hairline die: roll a patch
+//   trash   CLEAR   -- the wastebasket, for every "throw away"
+//   wavOut  EXPORT  -- a filing tray with an arrow dropping into it
+class HeaderAction : public juce::Component
 {
 public:
-    DiceButton();
+    enum class Glyph { die, trash, wavOut };
+
+    HeaderAction (Glyph glyph, juce::String label);
 
     std::function<void()> onClick;
+    std::function<void()> onDragStart;
+
+    void pulse();   // the thump a click gives
+    void flash();   // the thump plus a red beat: the engine's acknowledgement, not the click
+    void tick();
 
     void paint (juce::Graphics& g) override;
+    void enablementChanged() override { repaint(); }
+    void mouseDown (const juce::MouseEvent&) override { dragStarted = false; }
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
     void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
     void mouseExit (const juce::MouseEvent&) override { hovering = false; repaint(); }
-    void mouseDown (const juce::MouseEvent&) override;
+
+    static void drawGlyph (juce::Graphics& g, Glyph glyph, juce::Rectangle<float> box,
+                           juce::Colour colour, float strokeWidth);
 
 private:
-    int face = 5;
-    bool hovering = false;
-    juce::Random rng;
+    Glyph glyph;
+    juce::String label;
+    bool hovering = false, dragStarted = false;
+    int flashTicks = 0;
+    float pulseAnim = 0.0f;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DiceButton)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeaderAction)
 };
 
 // Sun while dark, moon while light: it shows the sheet you would switch to.

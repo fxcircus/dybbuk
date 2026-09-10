@@ -9,25 +9,47 @@ namespace
     // The canvas transitions its sheet over 350 ms.
     constexpr float kThemeFadeSeconds = 0.35f;
 
+    constexpr int kCanvasW = DybbukEditor::canvasW;
     constexpr int kHeaderH = 52;
     constexpr int kRuleY = 62;
     constexpr int kFaderW = 60;
 
+    // The header in Shalal's zones, with a hairline between each pair: the
+    // nameplate, the bypass cap, the station, the three actions, the theme.
+    // Each control is centred in its zone. The station stays 260 wide on the
+    // plate's centre line and its hairlines sit 16 px outside it, as they do
+    // on Shalal's sheet.
+    constexpr int kStationW = 260;
+    constexpr int kHairAfterName = 198;
+    constexpr int kHairBeforeStation = (kCanvasW - kStationW) / 2 - 16;
+    constexpr int kHairAfterStation = (kCanvasW + kStationW) / 2 + 16;
+    constexpr int kHairBeforeTheme = 780;
+    constexpr int kHairTop = 8, kHairH = 38;
+    constexpr int kBypassW = 70, kThemeW = 70;
+    constexpr int kActionW = 52, kActionH = 44, kActionGap = 4;     // DICE, CLEAR, EXPORT
+    constexpr int kActionsW = 3 * kActionW + 2 * kActionGap;
+    constexpr int kActionsX = kHairAfterStation + (kHairBeforeTheme - kHairAfterStation - kActionsW) / 2;
+
     // Four bands under the header: the hero knobs, the dybbuk's row (the lamp
     // in the middle of the plate with a trim on each side), the small knobs,
-    // and the record button on the bottom strip.
-    constexpr int kHeroY = 150;   // face centres
+    // and the record button on the bottom strip. With nothing stacked above
+    // or below the dybbuk any more, the bands are spread so the paper between
+    // them reads as one rhythm from the rule to the foot of the faders.
+    constexpr int kHeroY = 160;   // face centres
     constexpr int kLampY = 310;
-    constexpr int kMidY = 430;
-    constexpr int kBottomY = 556; // the record button's box centre
+    constexpr int kMidY = 442;
+    constexpr int kBottomY = 564; // the record button's box centre
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
     constexpr int kMidX[5] = { 151, 300, 450, 600, 749 };
 
     // The dybbuk's box, centred on the plate. Wide enough for sixteen pips
-    // around the ember with room to breathe; the export stamp sits on its top
-    // edge and the clear stamp on its bottom one.
+    // around the ember with room to breathe.
     constexpr int kLampSize = 128;
+
+    // What the dice last rolled is printed just over the dybbuk, in the paper
+    // the export stamp used to occupy.
+    const juce::Rectangle<int> kRolledArea (kMidX[2] - 110, kLampY - kLampSize / 2 - 24, 220, 16);
 
     // The trims flank the dybbuk with 50 px of paper between each rail's end
     // and its box.
@@ -100,14 +122,20 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
                     juce::Rectangle<float> (150.0f, 12.0f, 60.0f, 28.0f),
                     juce::Justification::centredLeft, false);
 
-        // What the dice last rolled, fading out beside it. It sits in the gap
-        // between the preset name and the dice, which is otherwise empty.
+        // Hairlines between the header's zones: after the nameplate, before
+        // and after the station, before the theme.
+        g.setColour (pal.ink.withAlpha (0.45f));
+        for (const int x : { kHairAfterName, kHairBeforeStation, kHairAfterStation, kHairBeforeTheme })
+            g.fillRect ((float) x, (float) kHairTop, 1.0f, (float) kHairH);
+
+        // What the dice last rolled, fading out over the dybbuk: the name is
+        // the character the pattern has just been given, so it is printed on
+        // the pattern rather than beside the button.
         if (rolledTicks > 0 && rolledName != nullptr)
         {
             const float fade = juce::jmin (1.0f, (float) rolledTicks / 30.0f);
-            theme::drawTracked (g, juce::String (rolledName).toUpperCase(),
-                                { 600.0f, 15.0f, 148.0f, 16.0f },
-                                juce::Justification::centredRight, theme::Face::semibold, 9.0f,
+            theme::drawTracked (g, juce::String (rolledName).toUpperCase(), kRolledArea.toFloat(),
+                                juce::Justification::centred, theme::Face::semibold, 9.0f,
                                 0.18f, pal.ink.withAlpha (0.75f * fade));
         }
 
@@ -136,31 +164,37 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     };
 
     // --- header --------------------------------------------------------------
+    // Shalal's header: identity (nameplate, bypass cap), which patch (the
+    // station, alone in the centre), what to do with the pattern (DICE /
+    // CLEAR / EXPORT, a group behind a hairline), appearance (theme).
     bypassToggle = std::make_unique<DiamondToggle> (param (params::id::bypass),
                                                     DiamondToggle::Style::framed, "BYPASS", "IN");
     plate.addAndMakeVisible (*bypassToggle);
-    bypassToggle->setBounds (222, kHeaderH / 2 - 11, 70, 22);
+    bypassToggle->setBounds (kHairAfterName + (kHairBeforeStation - kHairAfterName - kBypassW) / 2,
+                             kHeaderH / 2 - 11, kBypassW, 22);
 
     plate.addAndMakeVisible (presetHeader);
-    presetHeader.setBounds (canvasW / 2 - 130, kHeaderH / 2 - 14, 260, 28);
+    presetHeader.setBounds ((canvasW - kStationW) / 2, kHeaderH / 2 - 14, kStationW, 28);
+
+    int actionX = kActionsX;
+    for (auto* action : { &diceAction, &clearAction, &exportAction })
+    {
+        plate.addAndMakeVisible (*action);
+        action->setBounds (actionX, 2, kActionW, kActionH);
+        actionX += kActionW + kActionGap;
+    }
+    diceAction.onClick = [this] { rollDice(); };
+    clearAction.onClick = [this] { proc.requestClear(); };
+    // EXPORT: drag the tray and the pattern leaves as a WAV; click it for a
+    // save dialog. Nothing to drag while there is nothing in the pattern.
+    exportAction.onDragStart = [this] { dragPatternOut(); };
+    exportAction.onClick = [this] { savePatternAs(); };
+    exportAction.setEnabled (proc.canExportPattern());
 
     plate.addAndMakeVisible (themeMark);
-    themeMark.setBounds (canvasW - 30 - 70, kHeaderH / 2 - 11, 70, 22);
+    themeMark.setBounds (kHairBeforeTheme + (canvasW - kHairBeforeTheme - kThemeW) / 2,
+                         kHeaderH / 2 - 11, kThemeW, 22);
     themeMark.onClick = [this] { toggleTheme(); };
-
-    // The dice sits just left of the theme mark, whose box starts at x 800.
-    plate.addAndMakeVisible (dice);
-    dice.setBounds (758, kHeaderH / 2 - 12, 24, 24);
-    dice.onClick = [this]
-    {
-        proc.randomiseParameters();
-        // Say what was rolled. A dice that changes a dozen numbers at once is
-        // otherwise unreadable, and the character's name is the one piece of
-        // information that makes the patch make sense.
-        rolledName = proc.lastRandomCharacter();
-        rolledTicks = 90; // about three seconds at the editor's tick rate
-        repaint();
-    };
 
     // --- faders on both edges -------------------------------------------------
     inFader = std::make_unique<VerticalFader> (param (params::id::input), "IN");
@@ -206,21 +240,10 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     syncToggle->setBounds (kHeroX[0] + 46, kHeroY - 12, 40, 26);
 
     // --- the dybbuk's row -----------------------------------------------------
-    // The lamp in the centre of the plate, the export stamp on its top edge
-    // and the clear stamp on its bottom one, and a trim on each side: LENGTH
-    // to its left, FADE to its right, their rails level with the ember.
+    // The lamp in the centre of the plate and a trim on each side: LENGTH to
+    // its left, FADE to its right, their rails level with the ember.
     plate.addAndMakeVisible (lamp);
     lamp.setBounds (kMidX[2] - kLampSize / 2, kLampY - kLampSize / 2, kLampSize, kLampSize);
-
-    plate.addAndMakeVisible (exportStamp);
-    exportStamp.setBounds (kMidX[2] - 24, kLampY - kLampSize / 2 - 40, 48, 40);
-    exportStamp.onDragStart = [this] { dragPatternOut(); };
-    exportStamp.onClick = [this] { savePatternAs(); };
-    exportStamp.setEnabled (proc.canExportPattern());
-
-    plate.addAndMakeVisible (clearStamp);
-    clearStamp.setBounds (kMidX[2] - 24, kLampY + kLampSize / 2, 48, 40);
-    clearStamp.onClick = [this] { proc.requestClear(); };
 
     lengthTrim = std::make_unique<EngravedTrim> (param (params::id::length), "LENGTH");
     plate.addAndMakeVisible (*lengthTrim);
@@ -262,7 +285,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
 
     // --- bottom strip ---------------------------------------------------------
     // Record alone, dead centre under the dybbuk. The rest of the strip stays
-    // empty: it, Clear and Export are the whole performance.
+    // empty: it and the header's CLEAR are the whole performance.
     recordToggle = std::make_unique<WordToggle> (param (params::id::record), "RECORD", "FROZEN", "ARMED");
     plate.addAndMakeVisible (*recordToggle);
     recordToggle->setBounds (WordToggle::boundsFor ({ canvasW / 2, kBottomY }));
@@ -328,6 +351,17 @@ void DybbukEditor::applyTheme()
         child->repaint();
 }
 
+void DybbukEditor::rollDice()
+{
+    proc.randomiseParameters();
+    // Say what was rolled. A dice that changes a dozen numbers at once is
+    // otherwise unreadable, and the character's name is the one piece of
+    // information that makes the patch make sense.
+    rolledName = proc.lastRandomCharacter();
+    rolledTicks = 90; // about three seconds at the editor's tick rate
+    plate.repaint (kRolledArea);
+}
+
 void DybbukEditor::dragPatternOut()
 {
     // Rendered on the spot into the Dybbuk folder, then handed to the OS: the
@@ -377,7 +411,7 @@ void DybbukEditor::timerCallback()
 
     // The rolled character's name fades out over about three seconds.
     if (rolledTicks > 0 && --rolledTicks >= 0)
-        plate.repaint (600, 12, 160, 22);
+        plate.repaint (kRolledArea);
     lamp.tick();
 
     inFader->setLevel (proc.getInputLevel());
@@ -398,21 +432,21 @@ void DybbukEditor::timerCallback()
                         fillsKnob.get(), chaosKnob.get(), directionKnob.get() })
         knob->tick();
 
-    // The clear stamp lights on the engine's acknowledgement, not on the
-    // click, so what you see is the pattern actually being emptied.
+    // CLEAR lights on the engine's acknowledgement, not on the click, so
+    // what you see is the pattern actually being emptied.
     const int served = proc.getClearsServed();
     if (served != lastClearsServed)
     {
         lastClearsServed = served;
-        clearStamp.flash();
+        clearAction.flash();
         lamp.flash();
     }
-    clearStamp.tick();
+    clearAction.tick();
 
     // Nothing to drag while there is nothing in the pattern.
     const bool exportable = proc.canExportPattern();
-    if (exportable != exportStamp.isEnabled())
-        exportStamp.setEnabled (exportable);
+    if (exportable != exportAction.isEnabled())
+        exportAction.setEnabled (exportable);
 
     presetHeader.tick();
 
