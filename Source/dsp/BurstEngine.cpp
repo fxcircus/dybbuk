@@ -523,17 +523,12 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
         {
             currentRate = rate.getNextValue();
         }
-        // Glue, end of the pattern's chain and before the blend: the tanh with
-        // its slight bias and DC blocker from the old loop, driven and made
-        // up so a half-scale signal stays near unity. At zero the saturator
-        // is skipped entirely, so Glue off is bit-exact.
+        // Glue, end of the pattern's chain and before the blend: the old
+        // loop's saturator, level-matched (see GlueStage). At zero it is
+        // skipped entirely, so Glue off is bit-exact.
         const float ga = glueAmount.getNextValue();
         if (ga > 0.0f)
-        {
-            const float drive = glueDrive (ga);
-            glue.setDrive (drive);
-            wet = glue.process (wet) * drive * glueMakeup (drive);
-        }
+            wet = glue.process (wet, glueDrive (ga));
         const float pl = voice.data != nullptr ? voice.panL : 1.0f;
         const float pr = voice.data != nullptr ? voice.panR : 1.0f;
         outPeak = juce::jmax (outPeak, std::abs (wet) * juce::jmax (pl, pr));
@@ -610,11 +605,10 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
     else
         for (int i = 0; i < n; ++i) order.push_back (i);
 
-    LoopSaturator sat;
+    GlueStage sat;
     sat.prepare (pattern.sampleRate);
     const float ga = juce::jlimit (0.0f, 1.0f, st.glue01);
-    const float drive = glueDrive (ga), makeup = glueMakeup (drive);
-    sat.setDrive (drive);
+    const float drive = glueDrive (ga);
 
     const int total = (int) order.size() * stepSamples;
     out.setSize (2, total);
@@ -635,7 +629,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
             // settles exactly as it does live.
             float s = v.active() ? v.next (playRate) : 0.0f;
             if (ga > 0.0f)
-                s = sat.process (s) * drive * makeup;
+                s = sat.process (s, drive);
             out.setSample (0, pos + i, s * v.panL);
             out.setSample (1, pos + i, s * v.panR);
         }

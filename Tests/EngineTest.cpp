@@ -1048,8 +1048,17 @@ void glueTest()
            "3rd harmonic " + juce::String (dbfs (h3 / juce::jmax (fund1, 1e-9)), 1) + " dB under the fundamental (clean: "
                + juce::String (dbfs (h3c / juce::jmax (fund0, 1e-9)), 1) + ")");
     const double rmsC = rmsOf (clean.out, from, n), rmsH = rmsOf (hot.out, from, n);
-    check ("and the level stays within 6 dB", std::abs (dbfs (rmsH) - dbfs (rmsC)) < 6.0,
+    check ("and the level is matched within 1.5 dB", std::abs (dbfs (rmsH) - dbfs (rmsC)) < 1.5,
            juce::String (dbfs (rmsC), 1) + " dBFS clean, " + juce::String (dbfs (rmsH), 1) + " glued");
+    check ("and the peaks are squashed", peakOf (hot.out, from, n) < peakOf (clean.out, from, n) * 0.9,
+           "peak " + juce::String (peakOf (clean.out, from, n), 3) + " clean, " + juce::String (peakOf (hot.out, from, n), 3) + " glued");
+
+    // Quiet material must not come out louder: the whole point of the match.
+    const auto quiet = burstInput (sr, 2.0, { { 0.1, 0.400, 330.0, 0.05 } });
+    const auto qc = runBurst (quiet, p, sr, 128);
+    const auto qh = runBurst (quiet, g, sr, 128);
+    check ("quiet material is not lifted", std::abs (dbfs (rmsOf (qh.out, from, n)) - dbfs (rmsOf (qc.out, from, n))) < 1.5,
+           juce::String (dbfs (rmsOf (qc.out, from, n)), 1) + " dBFS clean, " + juce::String (dbfs (rmsOf (qh.out, from, n)), 1) + " glued");
     check ("and stays inside full scale", peakOf (hot.out, 0, (int) hot.out.size()) <= 1.0, juce::String (peakOf (hot.out, 0, (int) hot.out.size()), 3));
 }
 

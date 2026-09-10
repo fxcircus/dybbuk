@@ -78,7 +78,7 @@ disagree with what is written here, this wins.
   input is copied to both sides before the engine), and mono in to mono out
   for hosts that run mono tracks mono; stereo in to mono out is refused.
   `ProcessorTest` covers all three
-- `EngineTest`: 16 scenarios plus `render` (65 checks, 0 failures, 0.1 s):
+- `EngineTest`: 16 scenarios plus `render` (67 checks, 0 failures, 0.1 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
   levels, cpu, hostile, pitch, glue, spread
 - `ProcessorTest`: ordering, readouts, session and preset round-trips, five
@@ -144,10 +144,14 @@ expected, three notes.
 
 - **Glue**: the old loop's saturator (tanh with a slight bias and a DC
   blocker) at the end of the pattern's chain, before the blend. Drive
-  runs 1 to 16 with a makeup that keeps a half-scale signal near unity, so
-  more Glue is more colour, not less level; at zero the saturator is
-  skipped, so Glue off is bit-exact. Measured: a third harmonic at full
-  where the clean path has none, level within 6 dB, peak under full scale.
+  runs 1 to 16. The tanh over its drive has unity gain for small signals
+  and squashes loud ones; a 120 ms RMS tracker then lifts the result back
+  to the input's average level, so Glue compresses and colours and the
+  volume stays where it was. (A fixed makeup shipped first and lifted quiet
+  material by 18 dB at full; Roy heard it as louder, not glued.) At zero
+  the stage is skipped, bit-exact. Measured at full: a third harmonic 10 dB
+  under the fundamental where the clean path has none, level matched
+  within 0.1 dB, peaks 0.50 to 0.40, quiet material unchanged.
 - **Spread**: alternate steps sit left and right, step 1 left, step 2
   right, by index so a step keeps its side whatever the direction. A
   linear pan with unity in the middle, so Spread at zero is exactly the

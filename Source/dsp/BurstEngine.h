@@ -190,10 +190,41 @@ private:
         l = juce::jmin (1.0f, 1.0f - pos);
         r = juce::jmin (1.0f, 1.0f + pos);
     }
-    // Glue: drive into the saturator, and the makeup that keeps a half-scale
-    // signal near unity, so more Glue is more colour rather than less level.
+    // Glue: the saturator with a level match behind it. The tanh, divided by
+    // its drive, has unity gain for small signals and squashes the loud
+    // ones; a slow RMS tracker then lifts the result back to the input's
+    // average level. So Glue compresses and colours, and the volume stays
+    // where it was. (A fixed makeup was tried first and lifted quiet
+    // material by 18 dB at full, which Roy heard as "louder", not "glued".)
+    struct GlueStage
+    {
+        LoopSaturator sat;
+        float envIn = 0.0f, envOut = 0.0f, gain = 1.0f, a = 0.0f;
+        static constexpr float kWindowMs = 120.0f;
+        static constexpr float kMaxLift = 16.0f;
+
+        void prepare (double sampleRate) noexcept
+        {
+            sat.prepare (sampleRate);
+            a = 1.0f - std::exp (-1.0f / (kWindowMs * 0.001f * (float) sampleRate));
+            reset();
+        }
+        void reset() noexcept { sat.reset(); envIn = envOut = 0.0f; gain = 1.0f; }
+        inline float process (float x, float drive) noexcept
+        {
+            sat.setDrive (drive);
+            const float y = sat.process (x);              // tanh (drive x) / drive: unity for small x
+            envIn += (x * x - envIn) * a;
+            envOut += (y * y - envOut) * a;
+            if (envOut > 1.0e-9f)
+            {
+                const float wanted = juce::jlimit (1.0f, kMaxLift, std::sqrt (envIn / envOut));
+                gain += (wanted - gain) * a;
+            }
+            return y * gain;
+        }
+    };
     static float glueDrive (float glue01) noexcept { return 1.0f + 15.0f * juce::jlimit (0.0f, 1.0f, glue01); }
-    static float glueMakeup (float drive) noexcept { return 0.5f / std::tanh (0.5f * drive); }
     void beginFill() noexcept;
     void doClear() noexcept;
     void publishSteps() noexcept;
@@ -239,7 +270,7 @@ private:
 
     juce::SmoothedValue<float> inGain, outGain, wetMix, dryMix, rate, glueAmount;
     float currentRate = 1.0f;
-    LoopSaturator glue;
+    GlueStage glue;
 
     std::atomic<int> clearRequests { 0 };
     int clearsSeen = 0;
