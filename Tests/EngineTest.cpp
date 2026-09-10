@@ -685,7 +685,7 @@ void fade()
         first = peakOf (r.out, on[0].sample, step - 300);
         second = peakOf (r.out, on[0].sample + step, step - 300);
     }
-    check ("the second play is 24 dB down", first > 0.4 && std::abs (dbfs (second / juce::jmax (first, 1e-9)) + 24.0) < 1.0,
+    check ("the second play is 18 dB down", first > 0.4 && std::abs (dbfs (second / juce::jmax (first, 1e-9)) + 18.0) < 1.0,
            "first play " + juce::String (dbfs (first), 1) + " dBFS, second " + juce::String (dbfs (second), 1));
     const double tail = rmsOf (r.out, (int) (3.5 * sr), (int) (0.5 * sr));
     check ("the pattern dies away to nothing", r.stepCount == 0 && tail == 0.0,

@@ -136,6 +136,23 @@ expected, three notes.
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
 
+## Second round of notes (2026-09-09, night)
+
+1. **Fade was too steep.** 24 dB a play at the top on a linear law meant
+   10 % was already 2.4 dB a play, a pattern gone in twenty plays. Now
+   18 dB times the square of the knob: 10 % is 0.18 dB (some 300 plays),
+   50 % is 4.5 dB, 100 % is gone in three.
+2. **Length is Decay.** It is the choke on each step, how much of its
+   material may sound; beside Steps and Time the word Length read as the
+   pattern's length, and next to Fills it read as a second version of the
+   same idea. Fills is unrelated: frozen, a note over the threshold
+   scrambles the step order for one cycle. Parameter id unchanged.
+3. **Time's floor is 50 ms**, not 20: under that it is chop, not rhythm.
+   The dice's fastest characters follow.
+4. The dice no longer changes level at all (Blend and Threshold are the
+   player's), so ProcessorTest reports the level spread across rolls
+   instead of asserting one.
+
 ## Before the pivot
 
 Everything from here down describes the PT2399 delay that the plugin was

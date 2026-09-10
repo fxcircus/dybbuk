@@ -209,7 +209,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     addKnob (thresholdKnob, params::id::threshold, "THRESHOLD", EngravedKnob::heroSpec(),
              { kHeroX[0], kHeroY }, "-60", "0");
     auto& step = addKnob (stepKnob, params::id::step, "TIME", EngravedKnob::heroSpec(),
-                          { kHeroX[1], kHeroY }, "20 MS", "2 S");
+                          { kHeroX[1], kHeroY }, "50 MS", "2 S");
     auto& steps = addKnob (stepsKnob, params::id::steps, "STEPS", EngravedKnob::heroSpec(),
                            { kHeroX[2], kHeroY }, "1", "16");
     addKnob (blendKnob, params::id::blend, "BLEND", EngravedKnob::heroSpec(),
@@ -245,7 +245,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     plate.addAndMakeVisible (lamp);
     lamp.setBounds (kMidX[2] - kLampSize / 2, kLampY - kLampSize / 2, kLampSize, kLampSize);
 
-    lengthTrim = std::make_unique<EngravedTrim> (param (params::id::length), "LENGTH");
+    lengthTrim = std::make_unique<EngravedTrim> (param (params::id::length), "DECAY");
     plate.addAndMakeVisible (*lengthTrim);
     lengthTrim->setBounds (76, kLampY - kTrimH / 2, kTrimW, kTrimH);
     lengthTrim->setValueTextProvider ([this]
@@ -427,7 +427,7 @@ void DybbukEditor::timerCallback()
     {
         lastSynced = synced;
         stepKnob->setDetents (synced ? timemap::kDivisionCount : 0);
-        stepKnob->setLegends (synced ? "1/32" : "20 MS", synced ? "1 BAR" : "2 S");
+        stepKnob->setLegends (synced ? "1/32" : "50 MS", synced ? "1 BAR" : "2 S");
     }
 
     for (auto* knob : { stepKnob.get(), stepsKnob.get(), thresholdKnob.get(), blendKnob.get(),

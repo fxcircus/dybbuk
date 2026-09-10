@@ -267,7 +267,10 @@ void BurstEngine::startStep (int index, int stepSamples, const Deviation& d) noe
     // Fade is paid on the way in, so the play you hear is at the level the
     // step had, and the next one is quieter.
     if (cur.fade01 > 0.0f)
-        stepGain[(size_t) index] *= dbToGain (-kFadeMaxDb * juce::jlimit (0.0f, 1.0f, cur.fade01));
+    {
+        const float f = juce::jlimit (0.0f, 1.0f, cur.fade01);
+        stepGain[(size_t) index] *= dbToGain (-kFadeMaxDb * f * f);
+    }
     uiCurrentStep.store (index, std::memory_order_relaxed);
 }
 

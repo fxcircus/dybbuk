@@ -166,9 +166,9 @@ holding; the transport phase and the knob map were left to me.
   loops the first N steps, raising it brings the rest back. Only at a
   commit does the ceiling drop or refuse material (Replace / Hold).
 - **Direction:** forward, reverse, pendulum, drunk, random (Random at the far end of the knob, Roy's call).
-- **Length:** a choke, the fraction of the step a slice may sound.
-- **Fade:** every play costs level (24 dB at full); a step under -60 dB
-  leaves the pattern, so an armed pattern evolves like a delay instead of
+- **Decay** (was Length): a choke, the fraction of the step a slice may sound.
+- **Fade:** every play costs level (18 dB at full, on the square of the
+  knob so the bottom half is gentle); a step under -60 dB leaves the pattern, so an armed pattern evolves like a delay instead of
   piling up.
 - **Fills:** disarmed, a gated onset scrambles the order for one cycle,
   depth being how many pairs are swapped. The hardware's one trick.

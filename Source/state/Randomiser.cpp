@@ -41,7 +41,7 @@ namespace
         // Short steps, choked, with chaos doing the ratchets: a stutter edit
         // played live.
         { "Stutter",
-          { 0.030f, 0.120f }, { 2.0f, 6.0f },
+          { 0.050f, 0.120f }, { 2.0f, 6.0f },
           { 20.0f, 50.0f }, { 20.0f, 55.0f },
           { 30.0f, 70.0f },   { 0.0f, 10.0f },
           { 0.40f, 0.20f, 0.20f, 0.00f, 0.20f },
@@ -70,7 +70,7 @@ namespace
         // and the length anywhere: the roll for when the pattern should not be
         // recognisable as what you played.
         { "Havoc",
-          { 0.040f, 0.300f }, { 6.0f, 16.0f },
+          { 0.050f, 0.300f }, { 6.0f, 16.0f },
           { 40.0f, 100.0f }, { 45.0f, 90.0f },
           { 20.0f, 100.0f },  { 0.0f, 30.0f },
           { 0.10f, 0.10f, 0.10f, 0.30f, 0.40f },

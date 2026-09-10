@@ -112,9 +112,13 @@ private:
     // their front edge. Fades are applied on playback, never to the material.
     static constexpr float kPreRollMs = 4.0f;
     static constexpr float kFadeMs = 2.0f;
-    // Fade: full depth takes this much off a step every play; a step under
-    // the floor leaves the pattern.
-    static constexpr float kFadeMaxDb = 24.0f;
+    // Fade: the level a step loses every play is kFadeMaxDb times the
+    // square of the knob, so the bottom half of the travel is gentle (10 %
+    // is 0.18 dB a play, some 300 plays) and the top is a delay dying in a
+    // few repeats (100 % is 18 dB, gone in three). A linear law with 24 dB
+    // at the top made every small setting fade too fast (Roy, playing it).
+    // A step under the floor leaves the pattern.
+    static constexpr float kFadeMaxDb = 18.0f;
     static constexpr float kFadeFloorDb = -60.0f;
     // Chaos at full depth: the chance per tick that something happens, and
     // past half depth a second and third thing can happen to the same step.

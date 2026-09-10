@@ -504,8 +504,8 @@ void readouts()
     DybbukProcessor p;
     struct Expect { const char* id; float value; const char* text; };
     const Expect cases[] = {
-        { params::id::step, 0.0f, "20 ms" },
-        { params::id::step, 0.5f, "0.20 s" },
+        { params::id::step, 0.0f, "50 ms" },
+        { params::id::step, 0.5f, "0.32 s" },
         { params::id::step, params::knob01ForStepSeconds (0.250), "0.25 s" },
         { params::id::step, 1.0f, "2.00 s" },
         { params::id::steps, 8.0f, "8" },
@@ -603,7 +603,7 @@ void readouts()
     // lands on a different time than it names.
     {
         double worst = 0.0;
-        for (double s : { 0.02, 0.06, 0.18, 0.25, 0.5, 1.0, 2.0 })
+        for (double s : { 0.05, 0.06, 0.18, 0.25, 0.5, 1.0, 2.0 })
             worst = juce::jmax (worst, std::abs (params::stepSecondsForKnob01 (params::knob01ForStepSeconds (s)) - s));
         check ("step knob map round-trips", worst < 1.0e-4, "worst error " + juce::String (worst, 6) + " s");
     }
@@ -674,8 +674,10 @@ void diceIsMusical()
         check ("every roll stays inside full scale", tooLoud == 0,
                name + ": " + juce::String (tooLoud) + " of " + juce::String (rolls) + " over");
         check ("every roll is finite", nonFinite == 0, name);
-        check ("and they are not all the same level", loudest - quietest > 1.0,
-               name + ": " + juce::String (quietest, 1) + " to " + juce::String (loudest, 1) + " dBFS");
+        // Level is no longer something the dice changes (Blend and Threshold
+        // are the player's), so the spread is reported, not asserted.
+        std::printf ("  %-46s ....   %s\n", "level spread across the rolls",
+                     (name + ": " + juce::String (quietest, 1) + " to " + juce::String (loudest, 1) + " dBFS").toRawUTF8());
     }
 
     // What the dice must never touch. Bypass is performance state, In and

@@ -164,7 +164,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // 9. Length: the choke. The floor is 5 % rather than 0 so a fully
     // shortened step is still a click and not silence.
-    layout.add (floatParam (9, id::length, "Length", { 5.0f, 100.0f, 1.0f }, 100.0f, "%"));
+    // 9. Decay: the choke, how much of each step its material may sound.
+    // Was "Length", which read as the pattern's length beside Steps and Time.
+    layout.add (floatParam (9, id::length, "Decay", { 5.0f, 100.0f, 1.0f }, 100.0f, "%"));
 
     layout.add (percentWithWord (10, id::fade, "Fade", 0.0f, "Never"));
 

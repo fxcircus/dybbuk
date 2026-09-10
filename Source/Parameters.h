@@ -39,7 +39,7 @@ inline constexpr float kOutFloorDb = -60.0f; // the bottom of the Out fader read
 // sweep over two decades, so the middle of the travel is 200 ms and a
 // sixteenth at any sane tempo sits near it. Synced, the same 0..1 is
 // quantised to the note divisions in dsp/TimeMap.h.
-inline constexpr double kStepMinSeconds = 0.020;
+inline constexpr double kStepMinSeconds = 0.050;   // under this it is chop, not rhythm (Roy)
 inline constexpr double kStepMaxSeconds = 2.000;
 
 inline double stepSecondsForKnob01 (float t) noexcept
