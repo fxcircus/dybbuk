@@ -3,7 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // The design's two sheets: ink on near-black paper, and ink on parchment.
-// Dark is the default. Components read theme::palette() at paint time rather
+// Light (parchment) is the default since 2026-09-09. Components read theme::palette() at paint time rather
 // than caching colours, so one setTheme() call re-skins the whole window.
 //
 // Two traps this pattern has already caught fire on:
@@ -16,7 +16,7 @@ namespace theme
 {
     enum class Kind : int { dark = 0, light = 1 }; // the values ARE the stored property
     inline constexpr int kThemeCount = 2;
-    inline constexpr Kind kDefaultTheme = Kind::dark;
+    inline constexpr Kind kDefaultTheme = Kind::light;
     inline constexpr auto kThemeProperty = "theme";
 
     struct Palette

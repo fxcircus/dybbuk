@@ -240,7 +240,9 @@ void ExportStamp::paint (juce::Graphics& g)
     const auto b = getLocalBounds().toFloat();
     const auto lineInk = ! isEnabled() ? p.faded.withAlpha (0.45f) : (hovering ? p.ink : p.faded);
 
-    const juce::Rectangle<float> ring (b.getCentreX() - 13.0f, b.getY(), 26.0f, 26.0f);
+    // Mirrors the clear stamp across the dybbuk: legend at the top, ring
+    // nearest the lamp.
+    const juce::Rectangle<float> ring (b.getCentreX() - 13.0f, b.getBottom() - 26.0f, 26.0f, 26.0f);
     g.setColour (lineInk);
     g.drawEllipse (ring, 1.0f);
 
@@ -264,7 +266,7 @@ void ExportStamp::paint (juce::Graphics& g)
     wave.lineTo (cx + 5.0f, cy - 1.8f);
     g.strokePath (wave, juce::PathStrokeType (1.0f));
 
-    theme::drawTracked (g, "DRAG OUT", { -6.0f, ring.getBottom() + 3.0f, b.getWidth() + 12.0f, 10.0f },
+    theme::drawTracked (g, "EXPORT", { -6.0f, ring.getY() - 13.0f, b.getWidth() + 12.0f, 10.0f },
                         juce::Justification::centred, theme::Face::semibold, 7.0f, 0.16f, lineInk);
 }
 

@@ -166,11 +166,11 @@ int main()
 
     // 6. The alternate sheet, settled, rebuilt through the real path, with
     // the pattern still running.
-    processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::Kind::light, nullptr);
+    processor.apvts.state.setProperty (theme::kThemeProperty, (int) theme::Kind::dark, nullptr);
     rebuild (processor, editor);
     push (processor, 0.3, 0.0f);
-    report ("light");
-    snap ("editor_snapshot_light.png");
+    report ("dark");
+    snap ("editor_snapshot_dark.png");
 
     // 7. Every factory preset, which also reviews every readout in the tables.
     // Each is played a phrase of its own so the ring shows its step count.

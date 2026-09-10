@@ -77,8 +77,9 @@ disagree with what is written here, this wins.
 - Five factory presets: Sixteenths, Stutter, Erosion, Pendulum, Deadpan
 - UI: the same plate, both sheets. Hero row Step (+Sync), Steps, Threshold,
   Blend; trims Length and Fade; mid row Fills, Chaos, the dybbuk, Direction,
-  Full rail; Clear stamp under the dybbuk; Record rail and the Drag Out stamp
-  on the bottom strip. The dybbuk is the pattern: a ring of pips, one per
+  Full rail; Clear stamp under the dybbuk and the Export stamp above it,
+  mirrored; the Record rail on the bottom strip. The light sheet is the
+  default since Roy's first look (2026-09-09). The dybbuk is the pattern: a ring of pips, one per
   step, the sounding one bright, the ember pulsing on the tick, breathing
   while listening, flaring while the gate is open, an outlined pip where the
   next step will land, amber and jittering during a fill

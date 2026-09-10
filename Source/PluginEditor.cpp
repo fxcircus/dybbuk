@@ -254,7 +254,8 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     recordSwitch->setBounds (canvasW / 2 - 104, kBottomY - 25, 140, 50);
 
     plate.addAndMakeVisible (exportStamp);
-    exportStamp.setBounds (canvasW / 2 + 56, kBottomY - 12, 48, 40);
+    // Above the dybbuk, the mirror of the clear stamp below it.
+    exportStamp.setBounds (kMidX[2] - 24, kMidY - kLampSize / 2 - 40, 48, 40);
     exportStamp.onDragStart = [this] { dragPatternOut(); };
     exportStamp.onClick = [this] { savePatternAs(); };
     exportStamp.setEnabled (proc.canExportPattern());
