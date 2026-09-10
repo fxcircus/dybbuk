@@ -336,8 +336,8 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
 
     addKnob (lengthKnob, params::id::length, "DECAY", EngravedKnob::midSpec(),
              { kMidX[0], kLampY }, "5", "100");
-    addKnob (fadeKnob, params::id::fade, "FADE", EngravedKnob::midSpec(),
-             { kMidX[1], kLampY }, "NEVER", "100");
+    addKnob (fadeKnob, params::id::feedback, "FEEDBACK", EngravedKnob::midSpec(),
+             { kMidX[1], kLampY }, "0", "INF");
     auto& direction = addKnob (directionKnob, params::id::direction, "DIRECTION",
                                EngravedKnob::midSpec(), { kMidX[3], kLampY }, "FWD", "RANDOM");
     // Five ways round the pattern: a detent for each, and the word under it.
@@ -398,7 +398,11 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     chaosKnob->setValueTextProvider (percentOrWord (params::id::chaos, "Still"));
     glueKnob->setValueTextProvider (percentOrWord (params::id::glue, "Clean"));
     spreadKnob->setValueTextProvider (percentOrWord (params::id::spread, "Mono"));
-    fadeKnob->setValueTextProvider (percentOrWord (params::id::fade, "Never"));
+    fadeKnob->setValueTextProvider ([this]
+    {
+        const float v = raw (params::id::feedback);
+        return v >= 99.5f ? juce::String ("Inf") : juce::String (juce::roundToInt (v)) + " %";
+    });
 
     // Mode changes what three of the knobs mean, and the captions stay put
     // (a caption that changes is a knob you cannot find again), so the
@@ -550,7 +554,7 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
         if (mode == Lamp::wraith)  return "How many steps a frozen moment keeps sounding, 1 to 8.";
         return "How much of each step sounds before it is cut.";
     }
-    if (c == fadeKnob.get())      return "Level a step loses every play. A step that fades out leaves the pattern.";
+    if (c == fadeKnob.get())      return "Level a step keeps every play, like a delay's feedback. Under Inf a step fades and leaves the pattern.";
     if (c == directionKnob.get()) return "The order the steps play: forward, reverse, pendulum, drunk, random.";
     if (c == pitchKnob.get())
         return mode == Lamp::legion ? "The interval between the three voices, in semitones; octaves at zero."

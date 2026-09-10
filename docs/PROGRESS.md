@@ -67,7 +67,7 @@ disagree with what is written here, this wins.
 - Parameter count: 19, in Push 3 page order (Roy, 2026-09-10: the most
   useful eight on page one, which is not the plate's order): page one Mode,
   Freeze, Time (id `step`), Steps, Blend, Chaos, Direction, Pitch; page two
-  Decay (id `length`), Fade, Fills, Glue, Spread, Threshold, Sync, Bar;
+  Decay (id `length`), Feedback (id `feedback`, was Fade), Fills, Glue, Spread, Threshold, Sync, Bar;
   page three In, Out, Bypass last. Pitch is B3's Clock under the
   name Roy chose: -12..+12 semitones on every step's material, the step
   clock untouched (a departure from the pedal, where CLOCK also slows the
@@ -102,7 +102,7 @@ disagree with what is written here, this wins.
   Roy's favourite) first, at y 100, with the hover hint and the rolled dice
   character on the strip directly under it; the hero
   row Threshold, Time (+SYNC and BAR diamonds), Steps, Blend at 202; the
-  dybbuk row, "how the pattern plays": Decay, Fade | the dybbuk at (450,
+  dybbuk row, "how the pattern plays": Decay, Feedback | the dybbuk at (450,
   366) | Direction, Pitch; and the bottom row, "the hand and the output":
   Glue, Fills, the FREEZE button dead centre, Chaos, Spread, so Fills and
   Chaos sit either side of the switch that gives Fills its meaning and
@@ -147,6 +147,15 @@ expected, three notes.
    instrument and the room, not the patch; the dice touches only what
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
+
+## Fade is Feedback (2026-09-10)
+
+Roy: the delay word says what it does. With the name comes the delay's
+polarity: Feedback is the level a step keeps every play, 100 % reads Inf
+and keeps every step forever (the new default), 50 % is 6 dB a play, 0 is
+one play. A step under -60 dB leaves the pattern as before. Fade's law
+(a loss per play on the square of the knob) is gone; the dice's spans and
+the Erosion preset are inverted to match.
 
 ## The modes' names (2026-09-10)
 

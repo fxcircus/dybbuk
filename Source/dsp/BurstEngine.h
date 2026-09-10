@@ -62,7 +62,7 @@ public:
         float fills01 = 0.0f;         // disarmed, a gated onset scrambles the order for one cycle, this deep
         float chaos01 = 0.0f;         // per-tick chance of a skip, a ratchet, a reverse or a repeat
         float length01 = 1.0f;        // choke: the fraction of the step a slice may sound
-        float fade01 = 0.0f;          // level lost every play; a step that fades out leaves the pattern
+        float feedback01 = 1.0f;      // the level a step keeps every play, like a delay's feedback; under 1 it fades and leaves
         float pitchSemitones = 0.0f;  // resamples every step's material; the step clock is untouched
         float glue01 = 0.0f;          // the end-of-chain saturator on the pattern: warmth to thrash
         float spread01 = 0.0f;        // alternate steps left and right, this far
@@ -149,13 +149,10 @@ private:
     static constexpr int kWraithMaxTicks = 8;
     static constexpr float kWraithGain = 0.7f;
 
-    // Fade: the level a step loses every play is kFadeMaxDb times the
-    // square of the knob, so the bottom half of the travel is gentle (10 %
-    // is 0.18 dB a play, some 300 plays) and the top is a delay dying in a
-    // few repeats (100 % is 18 dB, gone in three). A linear law with 24 dB
-    // at the top made every small setting fade too fast (Roy, playing it).
-    // A step under the floor leaves the pattern.
-    static constexpr float kFadeMaxDb = 18.0f;
+    // Feedback: a step's gain is multiplied by it every play, so 100 % keeps
+    // every step forever and 50 % is 6 dB a play. A step under the floor
+    // leaves the pattern. (Shipped first as Fade, a loss per play; Roy: the
+    // delay word says what it does.)
     static constexpr float kFadeFloorDb = -60.0f;
     // Chaos at full depth: the chance per tick that something happens, and
     // past half depth a second and third thing can happen to the same step.

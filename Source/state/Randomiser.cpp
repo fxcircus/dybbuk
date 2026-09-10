@@ -23,7 +23,7 @@ namespace
         const char* name;
         Span stepSeconds;   // log-uniform
         Span steps;         // integer, inclusive
-        Span fills, chaos, length, fade;
+        Span fills, chaos, length, feedback;
         float direction[BurstEngine::kDirectionCount]; // relative weights, Forward, Reverse, Pendulum, Drunk, Random
         Span pitch;         // semitones, integer; half the rolls stay at 0
         Span glue;          // the drive, percent
@@ -36,7 +36,7 @@ namespace
         { "Steady",
           { 0.120f, 0.500f }, { 4.0f, 8.0f },
           { 0.0f, 25.0f }, { 0.0f, 10.0f },
-          { 70.0f, 100.0f },  { 0.0f, 10.0f },
+          { 70.0f, 100.0f },  { 90.0f, 100.0f },
           { 0.70f, 0.10f, 0.20f, 0.00f, 0.00f },
           { 0.0f, 0.0f },
           { 0.0f, 15.0f },
@@ -47,7 +47,7 @@ namespace
         { "Stutter",
           { 0.050f, 0.120f }, { 2.0f, 6.0f },
           { 20.0f, 50.0f }, { 20.0f, 55.0f },
-          { 30.0f, 70.0f },   { 0.0f, 10.0f },
+          { 30.0f, 70.0f },   { 90.0f, 100.0f },
           { 0.40f, 0.20f, 0.20f, 0.00f, 0.20f },
           { -12.0f, 12.0f },
           { 10.0f, 50.0f },
@@ -59,7 +59,7 @@ namespace
         { "Erosion",
           { 0.150f, 0.600f }, { 10.0f, 16.0f },
           { 10.0f, 40.0f }, { 5.0f, 30.0f },
-          { 60.0f, 100.0f },  { 15.0f, 45.0f },
+          { 60.0f, 100.0f },  { 55.0f, 85.0f },
           { 0.20f, 0.10f, 0.10f, 0.40f, 0.20f },
           { -12.0f, 0.0f },
           { 20.0f, 60.0f },
@@ -70,7 +70,7 @@ namespace
         { "Pendulum",
           { 0.100f, 0.400f }, { 3.0f, 8.0f },
           { 10.0f, 35.0f }, { 0.0f, 20.0f },
-          { 50.0f, 100.0f },  { 0.0f, 20.0f },
+          { 50.0f, 100.0f },  { 80.0f, 100.0f },
           { 0.00f, 0.30f, 0.70f, 0.00f, 0.00f },
           { -7.0f, 7.0f },
           { 0.0f, 25.0f },
@@ -82,7 +82,7 @@ namespace
         { "Havoc",
           { 0.050f, 0.300f }, { 6.0f, 16.0f },
           { 40.0f, 100.0f }, { 45.0f, 90.0f },
-          { 20.0f, 100.0f },  { 0.0f, 30.0f },
+          { 20.0f, 100.0f },  { 70.0f, 100.0f },
           { 0.10f, 0.10f, 0.10f, 0.30f, 0.40f },
           { 0.0f, 12.0f },
           { 40.0f, 100.0f },
@@ -166,7 +166,7 @@ void Randomiser::randomiseCharacter (juce::AudioProcessorValueTreeState& apvts, 
     setParam (apvts, id::fills, std::round (pick (c.fills, rng)));
     setParam (apvts, id::chaos, std::round (pick (c.chaos, rng)));
     setParam (apvts, id::length, std::round (pick (c.length, rng)));
-    setParam (apvts, id::fade, std::round (pick (c.fade, rng)));
+    setParam (apvts, id::feedback, std::round (pick (c.feedback, rng)));
     setParam (apvts, id::direction, (float) pickWeighted (c.direction, BurstEngine::kDirectionCount, rng));
     setParam (apvts, id::pitch, rng.nextFloat() < 0.5f ? 0.0f : (float) pickInt (c.pitch, rng));
     setParam (apvts, id::glue, std::round (pick (c.glue, rng)));

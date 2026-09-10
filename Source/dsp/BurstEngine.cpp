@@ -562,13 +562,10 @@ void BurstEngine::startStep (int index, int stepSamples, const Deviation& d) noe
     ratchetsLeft = d.ratchets > 1 ? d.ratchets - 1 : 0;
     ratchetCounter = ratchetPeriod;
 
-    // Fade is paid on the way in, so the play you hear is at the level the
-    // step had, and the next one is quieter.
-    if (cur.fade01 > 0.0f)
-    {
-        const float f = juce::jlimit (0.0f, 1.0f, cur.fade01);
-        stepGain[(size_t) index] *= dbToGain (-kFadeMaxDb * f * f);
-    }
+    // Feedback is paid on the way in, so the play you hear is at the level
+    // the step had, and the next one is quieter.
+    if (cur.feedback01 < 1.0f)
+        stepGain[(size_t) index] *= juce::jmax (0.0f, cur.feedback01);
     uiCurrentStep.store (index, std::memory_order_relaxed);
 }
 

@@ -167,8 +167,9 @@ holding; the transport phase and the knob map were left to me.
   commit does the ceiling drop or refuse material (Replace / Hold).
 - **Direction:** forward, reverse, pendulum, drunk, random (Random at the far end of the knob, Roy's call).
 - **Decay** (was Length): a choke, the fraction of the step a slice may sound.
-- **Fade:** every play costs level (18 dB at full, on the square of the
-  knob so the bottom half is gentle); a step under -60 dB leaves the pattern, so an armed pattern evolves like a delay instead of
+- **Feedback** (was Fade, with the opposite polarity): the level a step
+  keeps every play, like a delay's feedback; Inf keeps every step, under
+  it a step fades and, under -60 dB, leaves the pattern, so an armed pattern evolves like a delay instead of
   piling up.
 - **Fills:** disarmed, a gated onset scrambles the order for one cycle,
   depth being how many pairs are swapped. The hardware's one trick.

@@ -26,7 +26,7 @@ namespace id
     inline constexpr auto chaos     = "chaos";
     inline constexpr auto direction = "direction";
     inline constexpr auto length    = "length";
-    inline constexpr auto fade      = "fade";
+    inline constexpr auto feedback  = "feedback";
     inline constexpr auto pitch     = "pitch";
     inline constexpr auto glue      = "glue";
     inline constexpr auto spread    = "spread";

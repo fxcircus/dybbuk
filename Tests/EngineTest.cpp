@@ -671,11 +671,11 @@ void length()
 
 void fade()
 {
-    std::printf ("fade: every play costs level, and a step that fades out leaves\n");
+    std::printf ("feedback: every play keeps this much level, and a step under the floor leaves\n");
     const double sr = 48000.0;
     const auto in = burstInput (sr, 4.0, kFour);
     auto p = wetParams();
-    p.fade01 = 1.0f;
+    p.feedback01 = 0.126f;   // -18 dB a play
     const auto r = runBurst (in, p, sr, 128);
     const auto on = onsetsOf (r.out, sr);
     const int step = juce::roundToInt (0.2 * sr);
@@ -693,7 +693,7 @@ void fade()
 
     auto keep = wetParams();
     const auto rk = runBurst (in, keep, sr, 128);
-    check ("Fade at zero keeps every step", rk.stepCount == 4 && peakOf (rk.out, (int) (3.5 * sr), (int) (0.5 * sr)) > 0.4,
+    check ("Feedback at Inf keeps every step", rk.stepCount == 4 && peakOf (rk.out, (int) (3.5 * sr), (int) (0.5 * sr)) > 0.4,
            juce::String (rk.stepCount) + " steps");
 }
 
@@ -933,7 +933,7 @@ void cpu()
     auto p = wetParams();
     p.maxSteps = 16;
     p.chaos01 = 0.5f;
-    p.fade01 = 0.1f;
+    p.feedback01 = 0.9f;
     const double t0 = juce::Time::getMillisecondCounterHiRes();
     const auto r = runBurst (in, p, sr, 128);
     const double us = (juce::Time::getMillisecondCounterHiRes() - t0) * 1000.0 / (in.size() / 128.0);
@@ -1377,7 +1377,7 @@ struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
     { "burst", burst },       { "sync", sync },     { "direction", direction }, { "length", length },
-    { "fade", fade },         { "fills", fills },   { "chaos", chaos },         { "ceiling", ceiling },
+    { "feedback", fade },         { "fills", fills },   { "chaos", chaos },         { "ceiling", ceiling },
     { "export", exportPattern }, { "deaf", deaf },  { "levels", levels },       { "cpu", cpu },
     { "hostile", hostile },   { "pitch", pitch },     { "glue", glueTest },       { "spread", spreadTest },
     { "bar", barreset },      { "trance", trance },   { "legion", legion },       { "wraith", wraith },

@@ -177,7 +177,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // Was "Length", which read as the pattern's length beside Steps and Time.
     auto pDecay = floatParam (9, id::length, "Decay", { 5.0f, 100.0f, 1.0f }, 100.0f, "%");
 
-    auto pFade = percentWithWord (10, id::fade, "Fade", 0.0f, "Never");
+    // 10. Feedback: the level a step keeps every play, like a delay's. 100 %
+    // reads Inf and keeps every step; under it a step fades and leaves.
+    auto pFade = std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { id::feedback, 10 }, "Feedback",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 1.0f), 100.0f,
+        juce::AudioParameterFloatAttributes()
+            .withLabel ("")
+            .withStringFromValueFunction ([] (float v, int)
+            {
+                return v >= 99.5f ? juce::String ("Inf") : juce::String (juce::roundToInt (v)) + " %";
+            }));
 
     // 11. Pitch: the hardware's CLOCK, but only the half of it that
     // repitches. Every step's material is resampled by this many semitones;

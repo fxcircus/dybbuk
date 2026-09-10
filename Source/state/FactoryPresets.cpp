@@ -28,7 +28,7 @@ namespace
         { id::step, params::knob01ForStepSeconds (0.060) },
         { id::steps, 4.0f },          { id::blend, 60.0f },    { id::fills, 30.0f },
         { id::chaos, 40.0f },         { id::direction, 0.0f }, { id::length, 50.0f },
-        { id::fade, 0.0f }
+        { id::feedback, 100.0f }
     };
 
     // Erosion: the long pattern that forgets. Sixteen steps, each a little
@@ -38,7 +38,7 @@ namespace
         { id::step, params::knob01ForStepSeconds (0.200) },
         { id::steps, 16.0f },         { id::blend, 55.0f },    { id::fills, 25.0f },
         { id::chaos, 10.0f },         { id::direction, 3.0f }, { id::length, 100.0f },   // Drunk
-        { id::fade, 35.0f }
+        { id::feedback, 65.0f }
     };
 
     // Pendulum: six steps played there and back. The turnaround is the
@@ -47,7 +47,7 @@ namespace
         { id::step, params::knob01ForStepSeconds (0.180) },
         { id::steps, 6.0f },          { id::blend, 50.0f },    { id::fills, 15.0f },
         { id::chaos, 0.0f },          { id::direction, 2.0f }, { id::length, 85.0f },
-        { id::fade, 0.0f }
+        { id::feedback, 100.0f }
     };
 
     // Deadpan: no fills, no chaos, no fade, nothing choked. The last eight
@@ -56,7 +56,7 @@ namespace
         { id::step, params::knob01ForStepSeconds (0.250) },
         { id::steps, 8.0f },          { id::blend, 50.0f },    { id::fills, 0.0f },
         { id::chaos, 0.0f },          { id::direction, 0.0f }, { id::length, 100.0f },
-        { id::fade, 0.0f }
+        { id::feedback, 100.0f }
     };
 
     template <int N>

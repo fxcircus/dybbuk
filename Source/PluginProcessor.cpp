@@ -49,7 +49,7 @@ DybbukProcessor::DybbukProcessor()
     pChaos     = apvts.getRawParameterValue (params::id::chaos);
     pDirection = apvts.getRawParameterValue (params::id::direction);
     pLength    = apvts.getRawParameterValue (params::id::length);
-    pFade      = apvts.getRawParameterValue (params::id::fade);
+    pFade      = apvts.getRawParameterValue (params::id::feedback);
     pStepSync  = apvts.getRawParameterValue (params::id::stepsync);
     pInput     = apvts.getRawParameterValue (params::id::input);
     pOut       = apvts.getRawParameterValue (params::id::out);
@@ -204,7 +204,7 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     p.fills01 = pFills->load() * 0.01f;
     p.chaos01 = pChaos->load() * 0.01f;
     p.length01 = pLength->load() * 0.01f;
-    p.fade01 = pFade->load() * 0.01f;
+    p.feedback01 = pFade->load() * 0.01f;
     p.direction = directionParam();
     p.pitchSemitones = pPitch->load();
     p.glue01 = pGlue->load() * 0.01f;
