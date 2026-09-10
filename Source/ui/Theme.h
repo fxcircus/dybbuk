@@ -26,6 +26,7 @@ namespace theme
         juce::Colour ink;    // every line and every letter
         juce::Colour faded;  // captions, minimum and maximum labels
         juce::Colour red;    // the danger zone, the lamp, the meters
+        juce::Colour blue;   // frozen: the freeze button and the dybbuk while it holds
         juce::Colour bright; // hover and drag
         float vignette;      // how hard the corners fall away
     };

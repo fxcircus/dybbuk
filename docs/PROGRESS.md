@@ -84,8 +84,9 @@ disagree with what is written here, this wins.
   call); the dybbuk at the plate's centre (450, 310) with the Length and
   Fade trims shortened to flank it and nothing above or below it; a knob
   row of Fills, Chaos, Direction and the Full button (Replace / Hold); the
-  FREEZE button, no caption, lit while it holds, centred on the bottom
-  strip (Roy: armed is the normal state and bypass is how audio stops, so
+  FREEZE button, no caption, lit blue while it holds, centred on the bottom
+  strip; the dybbuk frosts with it, ember and tentacles going the same blue
+  and holding still (Roy: armed is the normal state and bypass is how audio stops, so
   a Record arm read backwards). The rolled
   dice character is printed over the dybbuk for three seconds. The light sheet is the
   default since Roy's first look (2026-09-09). The dybbuk is the pattern, as a

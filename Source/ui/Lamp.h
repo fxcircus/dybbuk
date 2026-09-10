@@ -39,6 +39,7 @@ public:
     void setGateOpen (bool open) noexcept { gate = open; }
     void setFillRunning (bool running) noexcept { fill = running; }
     void setBypassed (bool shouldBeBypassed) noexcept { bypassed = shouldBeBypassed; }
+    void setFrozen (bool shouldBeFrozen) noexcept { frozen = shouldBeFrozen; }
     void flash() noexcept; // Clear: drop to the ember bed, collapse the ring, re-light
     void tick();
     float liveLevel() const noexcept { return live; }
@@ -46,18 +47,20 @@ public:
     void paint (juce::Graphics& g) override;
 
 private:
+    juce::Colour emberColour (const theme::Palette& p) const noexcept;   // red, or blue as the frost sets
     juce::Colour pipColour (const theme::Palette& p) const noexcept;
 
     // Published state.
     int count = 0, current = -1, lastTicks = 0;
     int ceiling = 8;
     bool hold = false;
-    bool gate = false, fill = false, bypassed = false;
+    bool gate = false, fill = false, bypassed = false, frozen = false;
     std::array<float, kMaxPips> level {}, gain {};
 
     // The ember.
     float envelope = 0.0f, flicker = 0.0f, live = 0.0f, lastPainted = -1.0f;
     float pulse = 0.0f, flare = 0.0f, dip = 0.0f, breath = 0.0f, warmth = 0.0f;
+    float frost = 0.0f;                         // 1 once Freeze has set in: blue, and still
 
     // The ring. Slots ease rather than jump, so a step arriving turns the
     // others into their new places instead of snapping them.

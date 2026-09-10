@@ -9,19 +9,19 @@ namespace theme
         struct Spec
         {
             const char* name;
-            juce::uint32 paper, ink, faded, red, bright;
+            juce::uint32 paper, ink, faded, red, blue, bright;
             float vignette;
         };
 
         // juce::Colour is not constexpr, so the sheets live as ARGB words and
         // become Colours on first use.
-        constexpr Spec kDark { "dark", 0xff17150f, 0xffece8dc, 0xffa39d8f, 0xffd45a4a, 0xfffffdf5, 0.34f };
-        constexpr Spec kLight { "light", 0xfff2eee4, 0xff1c1a15, 0xff5c574c, 0xffa8362b, 0xff000000, 0.08f };
+        constexpr Spec kDark { "dark", 0xff17150f, 0xffece8dc, 0xffa39d8f, 0xffd45a4a, 0xff6fb0dc, 0xfffffdf5, 0.34f };
+        constexpr Spec kLight { "light", 0xfff2eee4, 0xff1c1a15, 0xff5c574c, 0xffa8362b, 0xff2e6a9e, 0xff000000, 0.08f };
 
         Palette makePalette (const Spec& s)
         {
             return { s.name, juce::Colour (s.paper), juce::Colour (s.ink), juce::Colour (s.faded),
-                     juce::Colour (s.red), juce::Colour (s.bright), s.vignette };
+                     juce::Colour (s.red), juce::Colour (s.blue), juce::Colour (s.bright), s.vignette };
         }
 
         Kind current = kDefaultTheme;

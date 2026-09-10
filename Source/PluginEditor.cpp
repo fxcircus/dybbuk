@@ -290,6 +290,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     freezeToggle = std::make_unique<WordToggle> (param (params::id::freeze), juce::String(), "FREEZE", "FREEZE");
     plate.addAndMakeVisible (*freezeToggle);
     freezeToggle->setBounds (WordToggle::boundsFor ({ canvasW / 2, kBottomY }));
+    freezeToggle->setAccent (WordToggle::Accent::blue);
 
     // The plate spells out every unit, because a bare number under a knob is
     // only readable if you already know what the knob is.
@@ -409,6 +410,7 @@ void DybbukEditor::timerCallback()
     lamp.setGateOpen (proc.isGateOpen());
     lamp.setFillRunning (proc.isFillRunning());
     lamp.setBypassed (bypassed);
+    lamp.setFrozen (raw (params::id::freeze) >= 0.5f);
 
     // The rolled character's name fades out over about three seconds.
     if (rolledTicks > 0 && --rolledTicks >= 0)

@@ -201,7 +201,7 @@ void WordToggle::paint (juce::Graphics& g)
                          .reduced (0.5f);
     if (on)
     {
-        g.setColour (p.red);
+        g.setColour (accent == Accent::blue ? p.blue : p.red);
         g.fillRoundedRectangle (box, 4.0f);
     }
     g.setColour (lineInk);

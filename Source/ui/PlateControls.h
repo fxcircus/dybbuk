@@ -86,6 +86,11 @@ public:
 
     bool isOn() const noexcept { return normValue >= 0.5f; }
 
+    // What the engaged fill means: red is the plate's "this is live", blue
+    // is "this is held" (Freeze).
+    enum class Accent { red, blue };
+    void setAccent (Accent a) noexcept { accent = a; repaint(); }
+
     void paint (juce::Graphics& g) override;
     void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
     void mouseExit (const juce::MouseEvent&) override { hovering = false; repaint(); }
@@ -97,6 +102,7 @@ private:
     juce::String captionText, offText, onText;
     float normValue = 0.0f;
     bool hovering = false;
+    Accent accent = Accent::red;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WordToggle)
 };

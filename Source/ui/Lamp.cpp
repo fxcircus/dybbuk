@@ -13,6 +13,7 @@ namespace
     constexpr float kDipDecay = 0.12f;
     constexpr float kBreathPeriodTicks = 2.5f * 30.0f;
     constexpr float kWarmthRate = 0.2f;
+    constexpr float kFrostRate = 0.12f;      // Freeze sets in over about a quarter second
     constexpr float kRepaintEps = 0.004f;
 
     // The ring. Slots ease into place; the collapse after a clear is quick
@@ -142,6 +143,15 @@ void Lamp::tick()
     flare = gate && ! bypassed ? flare + (1.0f - flare) * kFlareRise : flare * kFlareDecay;
     dip = juce::jmax (0.0f, dip - kDipDecay);
     warmth += ((fill && ! bypassed ? 1.0f : 0.0f) - warmth) * kWarmthRate;
+    {
+        const float wantedFrost = frozen && ! bypassed ? 1.0f : 0.0f;
+        const float before = frost;
+        frost += (wantedFrost - frost) * kFrostRate;
+        if (std::abs (frost - wantedFrost) < 0.005f)
+            frost = wantedFrost;
+        if (std::abs (frost - before) > 0.001f)
+            ringDirty = true;
+    }
 
     const float lit = bypassed ? 0.0f : 0.4f * pulse + 0.45f * flare;
     live = juce::jlimit (0.03f, 1.0f, (envelope * (0.9f + flicker) + lit) * (1.0f - dip));
@@ -169,10 +179,11 @@ void Lamp::tick()
     }
 
     // The tentacles are never still while there are any: slow at rest,
-    // quicker on the tick, and thrashing during a fill.
-    if (count > 0 || collapse > 0.0f || (gate && ! bypassed))
+    // quicker on the tick, thrashing during a fill, and frozen solid once
+    // the frost has set.
+    if ((count > 0 || collapse > 0.0f || (gate && ! bypassed)) && frost < 1.0f)
     {
-        writhe += kWritheRate * (1.0f + 1.5f * pulse + 3.0f * warmth);
+        writhe += kWritheRate * (1.0f + 1.5f * pulse + 3.0f * warmth) * (1.0f - frost);
         if (writhe > juce::MathConstants<float>::twoPi * 64.0f)
             writhe -= juce::MathConstants<float>::twoPi * 64.0f;
         ringDirty = true;
@@ -194,10 +205,18 @@ void Lamp::tick()
     }
 }
 
+juce::Colour Lamp::emberColour (const theme::Palette& p) const noexcept
+{
+    // Frozen, the whole creature goes cold: the same blue as the button.
+    return frost > 0.001f ? p.red.interpolatedWith (p.blue, frost) : p.red;
+}
+
 juce::Colour Lamp::pipColour (const theme::Palette& p) const noexcept
 {
-    // A fill warms the red toward amber for as long as it runs.
-    return warmth > 0.01f ? p.red.interpolatedWith (juce::Colour (0xffe6a23c), 0.5f * warmth) : p.red;
+    // A fill warms the red toward amber for as long as it runs; not while frozen.
+    const auto base = emberColour (p);
+    const float warm = warmth * (1.0f - frost);
+    return warm > 0.01f ? base.interpolatedWith (juce::Colour (0xffe6a23c), 0.5f * warm) : base;
 }
 
 void Lamp::paint (juce::Graphics& g)
@@ -219,13 +238,15 @@ void Lamp::paint (juce::Graphics& g)
     }
 
 
+    const auto ember = emberColour (p);
+
     // The glow sits under the glass and grows with the ember.
     const float glowRadius = 22.0f + 26.0f * live;
     const float glowAlpha = (0.22f + 0.4f * live) * 0.5f * dim;
     for (int ring = 3; ring >= 1; --ring)
     {
         const float r = glowRadius * (float) ring / 3.0f;
-        g.setColour (p.red.withAlpha (glowAlpha / (float) (ring * 2)));
+        g.setColour (ember.withAlpha (glowAlpha / (float) (ring * 2)));
         g.fillEllipse (c.x - r, c.y - r, r * 2.0f, r * 2.0f);
     }
 
@@ -244,7 +265,7 @@ void Lamp::paint (juce::Graphics& g)
         clip.addEllipse (glass);
         g.reduceClipRegion (clip);
 
-        g.setColour (p.red.withAlpha (alpha));
+        g.setColour (ember.withAlpha (alpha));
         const float spacing = 5.0f;
         for (float d = -r * 2.0f; d < r * 4.0f; d += spacing)
         {
@@ -255,7 +276,7 @@ void Lamp::paint (juce::Graphics& g)
         }
     }
 
-    g.setColour (p.red.withAlpha (juce::jmin (1.0f, alpha + 0.2f)));
+    g.setColour (ember.withAlpha (juce::jmin (1.0f, alpha + 0.2f)));
     g.drawEllipse (glass, 1.0f);
 
     // The tentacles. Each step is a limb growing out of the housing: its
