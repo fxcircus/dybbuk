@@ -100,7 +100,7 @@ private:
     ThemeFade themeFade;
     Lamp lamp;
     PresetHeader presetHeader { proc.presetManager };
-    HeaderAction diceAction { HeaderAction::Glyph::die, "DICE" };
+    HeaderAction diceAction { HeaderAction::Glyph::die, "RANDOM" };
     HeaderAction clearAction { HeaderAction::Glyph::trash, "CLEAR" };
     HeaderAction exportAction { HeaderAction::Glyph::wavOut, "EXPORT" };
     ThemeMark themeMark;

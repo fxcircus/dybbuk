@@ -115,7 +115,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // synced Step must not read "0.31 s" there). The default is a quarter
     // second: a sixteenth at 60, an eighth at 120.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { id::step, 1 }, "Step",
+        juce::ParameterID { id::step, 1 }, "Time",
         juce::NormalisableRange<float> (0.0f, 1.0f), knob01ForStepSeconds (0.250),
         juce::AudioParameterFloatAttributes()
             .withLabel ("")

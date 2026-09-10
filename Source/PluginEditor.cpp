@@ -26,7 +26,7 @@ namespace
     constexpr int kHairBeforeTheme = 780;
     constexpr int kHairTop = 8, kHairH = 38;
     constexpr int kBypassW = 70, kThemeW = 70;
-    constexpr int kActionW = 52, kActionH = 44, kActionGap = 4;     // DICE, CLEAR, EXPORT
+    constexpr int kActionW = 52, kActionH = 44, kActionGap = 4;     // RANDOM, CLEAR, EXPORT
     constexpr int kActionsW = 3 * kActionW + 2 * kActionGap;
     constexpr int kActionsX = kHairAfterStation + (kHairBeforeTheme - kHairAfterStation - kActionsW) / 2;
 
@@ -165,7 +165,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
 
     // --- header --------------------------------------------------------------
     // Shalal's header: identity (nameplate, bypass cap), which patch (the
-    // station, alone in the centre), what to do with the pattern (DICE /
+    // station, alone in the centre), what to do with the pattern (RANDOM /
     // CLEAR / EXPORT, a group behind a hairline), appearance (theme).
     bypassToggle = std::make_unique<DiamondToggle> (param (params::id::bypass),
                                                     DiamondToggle::Style::framed, "BYPASS", "IN");
@@ -206,7 +206,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     outFader->setBounds (canvasW - kFaderW - 8, kRuleY + 6, kFaderW, canvasH - kRuleY - 18);
 
     // --- hero row -------------------------------------------------------------
-    auto& step = addKnob (stepKnob, params::id::step, "STEP", EngravedKnob::heroSpec(),
+    auto& step = addKnob (stepKnob, params::id::step, "TIME", EngravedKnob::heroSpec(),
                           { kHeroX[0], kHeroY }, "20 MS", "2 S");
     auto& steps = addKnob (stepsKnob, params::id::steps, "STEPS", EngravedKnob::heroSpec(),
                            { kHeroX[1], kHeroY }, "1", "16");

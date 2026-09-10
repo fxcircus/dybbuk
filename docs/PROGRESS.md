@@ -64,7 +64,7 @@ disagree with what is written here, this wins.
 
 ## Current state (2026-09-09, after the Burst pivot)
 
-- Parameter count: 15, in Push bank order, all automatable: Step, Steps,
+- Parameter count: 15, in Push bank order, all automatable: Time (id `step`), Steps,
   Threshold, Blend, Record, Fills, Chaos, Direction (bank 1), then Length,
   Fade, Full, Sync, In, Out, Bypass last
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
@@ -76,11 +76,12 @@ disagree with what is written here, this wins.
   crossfade with the engine deaf, WAV export (0 failures)
 - Five factory presets: Sixteenths, Stutter, Erosion, Pendulum, Deadpan
 - UI: the same plate, both sheets. The header is Shalal's, zone for zone
-  and glyph for glyph: nameplate | bypass cap | preset station | DICE,
+  and glyph for glyph: nameplate | bypass cap | preset station | RANDOM,
   CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between
   (Roy's third look; the die, wastebasket and export tray are Shalal's
-  drawings ported line for line). Hero row Step (+Sync), Steps, Threshold,
-  Blend; the dybbuk at the plate's centre (450, 310) with the Length and
+  drawings ported line for line). Hero row Time (+Sync), Steps, Threshold,
+  Blend (the step clock reads TIME on the plate and in the host, Roy's
+  call); the dybbuk at the plate's centre (450, 310) with the Length and
   Fade trims shortened to flank it and nothing above or below it; a knob
   row of Fills, Chaos, Direction and the Full button (Replace / Hold); the
   Record button (Armed / Frozen) centred on the bottom strip. The rolled

@@ -143,7 +143,7 @@ private:
 // thumps the glyph, disabled fades the whole button to one alpha. A drag
 // source (EXPORT) fires onDragStart once the mouse has travelled a few
 // pixels, and a gesture that dragged never clicks.
-//   die     DICE    -- an isometric hairline die: roll a patch
+//   die     RANDOM  -- an isometric hairline die: roll a patch
 //   trash   CLEAR   -- the wastebasket, for every "throw away"
 //   wavOut  EXPORT  -- a filing tray with an arrow dropping into it
 class HeaderAction : public juce::Component
