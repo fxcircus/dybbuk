@@ -23,7 +23,7 @@ namespace
         const char* name;
         Span stepSeconds;   // log-uniform
         Span steps;         // integer, inclusive
-        Span threshold, blend, fills, chaos, length, fade;
+        Span blend, fills, chaos, length, fade;
         float direction[BurstEngine::kDirectionCount]; // relative weights, Forward, Reverse, Pendulum, Drunk, Random
         Span pitch;         // semitones, integer; half the rolls stay at 0
     };
@@ -33,7 +33,7 @@ namespace
         // forwards, with a fill now and then when you play over it.
         { "Steady",
           { 0.120f, 0.500f }, { 4.0f, 8.0f },
-          { -40.0f, -20.0f }, { 40.0f, 65.0f }, { 0.0f, 25.0f }, { 0.0f, 10.0f },
+          { 40.0f, 65.0f }, { 0.0f, 25.0f }, { 0.0f, 10.0f },
           { 70.0f, 100.0f },  { 0.0f, 10.0f },
           { 0.70f, 0.10f, 0.20f, 0.00f, 0.00f },
           { 0.0f, 0.0f } },
@@ -42,7 +42,7 @@ namespace
         // played live.
         { "Stutter",
           { 0.030f, 0.120f }, { 2.0f, 6.0f },
-          { -40.0f, -20.0f }, { 50.0f, 80.0f }, { 20.0f, 50.0f }, { 20.0f, 55.0f },
+          { 50.0f, 80.0f }, { 20.0f, 50.0f }, { 20.0f, 55.0f },
           { 30.0f, 70.0f },   { 0.0f, 10.0f },
           { 0.40f, 0.20f, 0.20f, 0.00f, 0.20f },
           { -12.0f, 12.0f } },
@@ -52,7 +52,7 @@ namespace
         // it is drunk more often than not.
         { "Erosion",
           { 0.150f, 0.600f }, { 10.0f, 16.0f },
-          { -40.0f, -20.0f }, { 45.0f, 70.0f }, { 10.0f, 40.0f }, { 5.0f, 30.0f },
+          { 45.0f, 70.0f }, { 10.0f, 40.0f }, { 5.0f, 30.0f },
           { 60.0f, 100.0f },  { 15.0f, 45.0f },
           { 0.20f, 0.10f, 0.10f, 0.40f, 0.20f },
           { -12.0f, 0.0f } },
@@ -61,7 +61,7 @@ namespace
         // is the rhythm.
         { "Pendulum",
           { 0.100f, 0.400f }, { 3.0f, 8.0f },
-          { -40.0f, -20.0f }, { 40.0f, 65.0f }, { 10.0f, 35.0f }, { 0.0f, 20.0f },
+          { 40.0f, 65.0f }, { 10.0f, 35.0f }, { 0.0f, 20.0f },
           { 50.0f, 100.0f },  { 0.0f, 20.0f },
           { 0.00f, 0.30f, 0.70f, 0.00f, 0.00f },
           { -7.0f, 7.0f } },
@@ -71,7 +71,7 @@ namespace
         // recognisable as what you played.
         { "Havoc",
           { 0.040f, 0.300f }, { 6.0f, 16.0f },
-          { -40.0f, -20.0f }, { 55.0f, 90.0f }, { 40.0f, 100.0f }, { 45.0f, 90.0f },
+          { 55.0f, 90.0f }, { 40.0f, 100.0f }, { 45.0f, 90.0f },
           { 20.0f, 100.0f },  { 0.0f, 30.0f },
           { 0.10f, 0.10f, 0.10f, 0.30f, 0.40f },
           { 0.0f, 12.0f } },
@@ -151,7 +151,6 @@ void Randomiser::randomiseCharacter (juce::AudioProcessorValueTreeState& apvts, 
     // the right musical neighbourhood, and the switch itself is not touched.
     setParam (apvts, id::step, params::knob01ForStepSeconds ((double) pickLog (c.stepSeconds, rng)));
     setParam (apvts, id::steps, (float) pickInt (c.steps, rng));
-    setParam (apvts, id::threshold, std::round (pick (c.threshold, rng)));
     setParam (apvts, id::blend, std::round (pick (c.blend, rng)));
     setParam (apvts, id::fills, std::round (pick (c.fills, rng)));
     setParam (apvts, id::chaos, std::round (pick (c.chaos, rng)));
@@ -160,5 +159,6 @@ void Randomiser::randomiseCharacter (juce::AudioProcessorValueTreeState& apvts, 
     setParam (apvts, id::direction, (float) pickWeighted (c.direction, BurstEngine::kDirectionCount, rng));
     setParam (apvts, id::pitch, rng.nextFloat() < 0.5f ? 0.0f : (float) pickInt (c.pitch, rng));
 
-    // in, out, stepsync, freeze and bypass are deliberately untouched. See the header.
+    // threshold, in, out, stepsync, freeze and bypass are deliberately untouched:
+    // they are set to the instrument and the room, not to the patch. See the header.
 }

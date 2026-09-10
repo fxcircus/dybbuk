@@ -25,8 +25,10 @@
 //     wearing headphones, and a random one is not a musical idea.
 //   Sync, because whether you are working in note divisions is a workflow
 //     choice, not a sound.
-//   Record, because the arm is the player's hand on the pattern: a dice that
-//     could start or stop recording would be a dice that erases things.
+//   Freeze, because it is the player's hand on the pattern: a dice that could
+//     freeze or unfreeze would be a dice that erases things.
+//   Threshold, because it is set to the instrument and the room, not to the
+//     patch: a roll that deafened the gate would look like a broken plugin.
 class Randomiser
 {
 public:
