@@ -231,6 +231,108 @@ Tones, drift. Git keeps them.
 - Per-step chance, ratchet, reverse, and a swing amount, driven by a
   single Chaos macro so the dice has something to roll.
 
+### B5 — Radio: other players for the same pattern (proposal, 2026-09-09)
+
+**What the hardware does.** Radio mode "contains five distinct loopers
+that take the same recording and interpret it into different genres
+spread across various stations. You can scan freely between the stations,
+introducing interference and combining the different loops." MODIFY is
+the dial; each station has one clean spot where "the static parts", and
+between two stations both play, through static. LENGTH means something
+different at every station. The stations, in the manual's own words:
+
+| Station | Manual | LENGTH |
+|---|---|---|
+| Tape | plays the loop in full, but lets you change its speed and/or direction | speed / direction |
+| Ambient | keeps the pitch but slows it dramatically, "a cinematic blur" | playback speed |
+| Orchestral | "a symphony of different voices that come in and out" | number of voices |
+| Shoegaze | "a collection of frozen moments that last forever", stacked layers you navigate | moment selector |
+| Dance | rotates steadily between half, double and normal speed, "club night at the circus" | rotation speed |
+
+That is all anyone has written down. Reviews restate it; the walkthrough
+videos have no transcripts we can reach. Two stations have ancestors in
+the MOOD MKII manual, which is more specific: **Tape** there is speed and
+direction "in harmonized steps (octaves)", half to 4x, forward or
+reversed; **Stretch** (Ambient's parent) "chops your loop up into slices
+and moving through them at a speed of your choosing", slice size on one
+knob (small = "blurry and grainy", large = "repeating phrases"), speed
+and direction on the other with noon as a freeze. MKII also had **Env**:
+"whenever sound is detected at the input it will repeat the current slice
+until the sound disappears". Orchestral, Shoegaze and Dance are new and
+undocumented beyond the table.
+
+**The translation.** Dybbuk has no loop to reinterpret; it has a pattern
+of steps on a clock. So a station here is a different *player* for every
+step. The sequencer, the pattern and the clock stay exactly as they are;
+the station changes what a step does with its material during its step.
+Every station keeps the rhythm, which is the whole point of Burst. Two
+controls: **STATION** (detented: Off, then the stations) and **TUNE**
+(the station's own parameter, the hardware's LENGTH). The dial's static
+is a separate, later decision (below).
+
+**Station by station**, with a viability call and a fun call:
+
+1. **Tape.** Speed and direction. Already shipped as Pitch and Direction,
+   and Steps plus Time cover "shorten the loop". Nothing to build. STATION
+   Off is Tape.
+2. **Stretch** (Ambient). Each step's material time-stretched to fill its
+   step at its own pitch, granular: 30 to 60 ms Hann grains, two
+   overlapping, a little random offset so the grains do not comb. TUNE
+   = stretch factor from 1x to 8x, with the top of the knob a freeze of
+   the step's first moment. Length's choke still applies on top. Cost:
+   two extra reads per sample, trivial. Testable: a 40 ms burst at 4x
+   sounds for 160 ms at the same measured frequency, the harness can
+   assert both. **Fun: high.** A muted pick becomes a pad that still
+   lands on the grid, and with Fade it dissolves. **Build first.**
+3. **Choir** (Orchestral). One to four voices per step at harmonised
+   intervals (unison, octave up, fifth, fourth down, octave down, each a
+   Pitch-style read), a few cents of detune between them, and the voices
+   "come in and out": each voice has a chance per cycle of joining or
+   leaving, so the arrangement keeps changing. TUNE = number of voices.
+   Cost: N reads. Testable by Goertzel at each interval. **Fun: high,**
+   especially with Direction, where it becomes an arpeggiator playing
+   your own notes. **Build second.**
+4. **Halo** (Shoegaze). A moment of each step frozen into a drone that
+   sustains for the whole step: a granular freeze (a 40 ms grain looped
+   with a crossfade and a little random position) rather than a spectral
+   one, which sounds close enough here and needs no FFT. The "stacked
+   layers": the frozen moment does not stop at the step boundary but
+   continues under the following steps, up to N layers, so a pattern
+   turns into a chord that changes as steps arrive. TUNE = which moment
+   of the step is frozen. Cost: up to N frozen reads. **Fun: high,** and
+   the most "shoegaze" thing this plugin could do. **Build third**, after
+   Stretch has proven the grain engine.
+5. **Rotate** (Dance). Every N steps the whole pattern jumps between
+   half, normal and double speed: Pitch stepping -12, 0, +12 on its own
+   rotation clock. TUNE = steps per turn. Cost: nothing, it is Pitch
+   automated. Testable in one scenario. **Fun: medium**; it is an octave
+   LFO, but a cheap one, and on a dance pattern it is exactly the pedal's
+   joke. **Build last, or fold into Chaos.**
+6. **Stutter** (MKII's Env, a bonus). While the input is over the
+   threshold, the current step repeats instead of advancing, then the
+   pattern carries on where it would have been. Uses the gate that
+   already drives Fills. Cost: nothing. **Fun: high live,** a hand on the
+   pattern that needs no knob. **Worth a station.**
+
+**The dial.** On the hardware MODIFY is continuous: static between
+stations, two stations at once in the gaps. Here the honest version is a
+STATION knob with detents and, later, a **Dial** option that crossfades
+neighbouring stations with a band of static (noise plus a bit of the
+Crust idea from B4) in between. Fun and on-brand, but it is a second
+control and a UX question, so it is proposed as B5.2 rather than the
+first cut.
+
+**Where it goes on the plate.** Two knobs, STATION and TUNE, on the
+bottom strip where Record used to sit, centred as a pair, or STATION as a
+word rail and TUNE as a trim. Roy's call. The dybbuk should show the
+station: Stretch lengthens the tentacles, Choir splits their tips, Halo
+leaves a glow ring hanging after each step.
+
+**Order:** Stretch, Choir, Halo, Stutter, Rotate, then the Dial.
+**Gate per station:** an EngineTest scenario that proves the described
+behaviour with numbers, the export rendering with the station applied,
+and a snapshot of the dybbuk in that station.
+
 ### B4 — character and stereo
 - Glue (the saturator) as an end-of-chain stage, Colour and Crust folded
   in as the lo-fi of the Clock reduction.

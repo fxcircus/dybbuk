@@ -6,9 +6,9 @@ than deleted: knowing what was considered and rejected is useful later.
 
 ## Parked by the Burst pivot (2026-09-09)
 
-- **Radio mode** (five reinterpretations of one loop) and **Mask mode** (a
-  threshold-driven disguise of the loud parts) from BAD MOOD, once Burst is
-  finished. See `docs/BURST.md`.
+- **Radio mode** is now B5 in `docs/BURST.md` (six stations proposed, with
+  a viability and fun call each). **Mask mode** (a threshold-driven disguise
+  of the loud parts) stays parked.
 - Everything below this line concerns the delay engine, which B2 removes.
 
 ## The wildness pass
