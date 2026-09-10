@@ -30,6 +30,7 @@ public:
     int getStepCount() const noexcept { return engine.uiStepCount.load (std::memory_order_relaxed); }
     int getCurrentStep() const noexcept { return engine.uiCurrentStep.load (std::memory_order_relaxed); }
     int getTicks() const noexcept { return engine.uiTicks.load (std::memory_order_relaxed); }
+    int getCommits() const noexcept { return engine.uiCommits.load (std::memory_order_relaxed); }
     float getStepLevel (int i) const noexcept
     {
         return i >= 0 && i < BurstEngine::kMaxSteps

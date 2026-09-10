@@ -8,11 +8,13 @@
 
 // The centrepiece: the red ember behind hatched glass is now the dybbuk
 // itself, and the pattern lives around it as tentacles. One per step, laid
-// clockwise from twelve o'clock over the whole circle whatever the count (four
-// steps make a square, sixteen a full ring); each pip's size follows the peak
-// of its material and its ink follows its fade, the sounding one is bright
-// and a touch larger, and the ember pulses on every tick, so the dot is the
-// clock.
+// clockwise from twelve o'clock in the slots of the Steps ceiling (four steps
+// at a ceiling of eight fill the top half of the ring, and the empty slots
+// are the room to add); each limb's reach follows the peak of its material
+// and its ink follows its fade, the sounding one is bright and a touch
+// larger, and the ember pulses on every tick, so the dot is the clock. A
+// step that has just joined grows out of the housing at its own slot, so
+// nothing else moves when it arrives.
 //
 // While the engine is listening the ember breathes slowly and the ring is an
 // empty guide circle. While the gate is open the ember flares and the pip
@@ -33,9 +35,12 @@ public:
     // The pattern as the engine publishes it, polled once per editor tick.
     void setPattern (int stepCount, int currentStep, int ticks) noexcept;
     void setStep (int index, float level01, float gain01) noexcept;
-    // The ceiling and what happens at it, so the pip being written can be
-    // shown in the slot it will actually take.
+    // The ceiling and what happens at it: the limbs are spaced over it, and
+    // the pip being written is shown in the slot it will actually take.
     void setCeiling (int maxSteps, bool holdWhenFull) noexcept;
+    // The engine's count of steps that have joined, polled after setPattern:
+    // a change is a new limb, which starts at nothing and grows.
+    void setCommits (int commits) noexcept;
     void setGateOpen (bool open) noexcept { gate = open; }
     void setFillRunning (bool running) noexcept { fill = running; }
     void setBypassed (bool shouldBeBypassed) noexcept { bypassed = shouldBeBypassed; }
@@ -60,9 +65,9 @@ private:
     juce::Colour pipColour (const theme::Palette& p) const noexcept;
 
     // Published state.
-    int count = 0, current = -1, lastTicks = 0;
+    int count = 0, current = -1, lastTicks = 0, lastCommits = 0;
     int ceiling = 8;
-    bool hold = false;
+    bool hold = false, ceilingSeen = false;
     bool gate = false, fill = false, bypassed = false, frozen = false;
     std::array<float, kMaxPips> level {}, gain {};
 
@@ -71,9 +76,14 @@ private:
     float pulse = 0.0f, flare = 0.0f, dip = 0.0f, breath = 0.0f, warmth = 0.0f;
     float frost = 0.0f;                         // 1 once Freeze has set in: blue, and still
 
-    // The ring. Slots ease rather than jump, so a step arriving turns the
-    // others into their new places instead of snapping them.
-    float shownSlots = 1.0f;
+    // The ring. The ceiling eases rather than jumps, so turning the Steps
+    // knob re-spaces the limbs instead of snapping them; that and the shift
+    // when a full ring replaces its oldest are the only times a limb moves
+    // off its slot. Each limb has a growth of its own, zero as it joins.
+    float shownCeiling = 8.0f;
+    float shift = 0.0f;                         // 1 as the oldest is replaced: the rest sit a slot on, and slide back
+    std::array<float, kMaxPips> grow {};
+    bool joinedThisFrame = false;               // setPattern saw the count rise, so setCommits need not
     float collapse = 0.0f;                      // 1 at the clear, 0 when the ring is gone
     int ghostCount = 0;                         // the ring as it was at the clear
     std::array<float, kMaxPips> ghostLevel {}, ghostGain {}, jitter {};

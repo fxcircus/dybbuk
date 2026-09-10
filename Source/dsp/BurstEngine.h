@@ -114,6 +114,7 @@ public:
     std::atomic<int> uiStepCount { 0 };
     std::atomic<int> uiCurrentStep { -1 };     // -1 while listening
     std::atomic<int> uiTicks { 0 };            // counts step-clock ticks, for a pulse
+    std::atomic<int> uiCommits { 0 };          // counts steps joining the pattern, so the plate can grow a new limb
     std::atomic<int> uiClearsServed { 0 };
     std::atomic<float> uiGate { 0.0f };        // 1 while capturing
     std::atomic<float> uiFill { 0.0f };        // 1 while a fill's scrambled order is running

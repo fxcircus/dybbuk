@@ -408,6 +408,7 @@ void BurstEngine::commit() noexcept
         if (! held) { captureSlot = s; break; }
     }
     publishSteps();
+    uiCommits.fetch_add (1, std::memory_order_relaxed);
 
     if (count == 1)
     {

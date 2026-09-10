@@ -657,11 +657,15 @@ void DybbukEditor::timerCallback()
 {
     const bool bypassed = raw (params::id::bypass) >= 0.5f;
 
-    // The dybbuk: everything the engine publishes, once per frame.
+    // The dybbuk: everything the engine publishes, once per frame. The
+    // commit counter is read before the count: the engine publishes the
+    // step first and counts it second, so a join seen here is in the count.
+    const int commits = proc.getCommits();
     const int count = proc.getStepCount();
     for (int i = 0; i < BurstEngine::kMaxSteps; ++i)
         lamp.setStep (i, proc.getStepLevel (i), proc.getStepGain (i));
     lamp.setPattern (count, proc.getCurrentStep(), proc.getTicks());
+    lamp.setCommits (commits);
     lamp.setCeiling (juce::roundToInt (raw (params::id::steps)), false);
     lamp.setGateOpen (proc.isGateOpen());
     lamp.setFillRunning (proc.isFillRunning());

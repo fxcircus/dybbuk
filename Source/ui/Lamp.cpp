@@ -16,9 +16,11 @@ namespace
     constexpr float kFrostRate = 0.12f;      // Freeze sets in over about a quarter second
     constexpr float kRepaintEps = 0.004f;
 
-    // The ring. Slots ease into place; the collapse after a clear is quick
-    // enough to read as one gesture with the ember's dip.
+    // The ring. The ceiling eases into place; a new limb is most of the way
+    // grown in a quarter second; the collapse after a clear is quick enough
+    // to read as one gesture with the ember's dip.
     constexpr float kSlotEase = 0.3f;
+    constexpr float kGrowEase = 0.32f;
     constexpr float kCollapseDecay = 0.85f;
     constexpr float kJitterPx = 1.6f;
 
@@ -26,9 +28,10 @@ namespace
     constexpr float kHousingR = 30.0f;
     constexpr float kRayInnerR = 34.0f, kRayOuterR = 40.0f;
 
-    // The tentacles. They root just inside the housing and reach out toward
-    // the old ring radius; a loud step reaches further, a spent one withers.
-    constexpr float kTentacleRoot = kHousingR - 3.0f;
+    // The tentacles. They root in the white band inside the housing, so the
+    // shoulder is seen pushing through the ring, and reach out toward the
+    // old ring radius; a loud step reaches further, a spent one withers.
+    constexpr float kTentacleRoot = kHousingR - 6.0f;
     constexpr float kTentacleMin = 11.0f, kTentacleMax = 24.0f;
     constexpr float kWaveAmp = 2.6f;
     constexpr float kWritheRate = 0.055f;            // radians per tick at rest
@@ -45,31 +48,19 @@ namespace
     constexpr float kTrailDrift = 0.35f;             // ... drifting back a third of a slot as it goes
     constexpr float kTremorPx = 2.2f;                // Tremor: how far the ember shakes with the gate open
 
+    // Slot i of the ceiling, clockwise from twelve o'clock over the whole
+    // circle: a limb's place depends on the ceiling, not on how many there are.
     juce::Point<float> rayDir (float slot, float slots) noexcept
     {
         const float a = juce::MathConstants<float>::twoPi * slot / juce::jmax (1.0f, slots);
         return { std::sin (a), -std::cos (a) };
-    }
-
-
-    juce::Point<float> onRing (juce::Point<float> c, float radius, float slot, float slots) noexcept
-    {
-        // Clockwise from twelve o'clock, over the whole circle.
-        const float a = juce::MathConstants<float>::twoPi * slot / juce::jmax (1.0f, slots);
-        return { c.x + radius * std::sin (a), c.y - radius * std::cos (a) };
-    }
-
-    float pipRadius (float level01, bool sounding) noexcept
-    {
-        // Size follows the peak of the material on a square root, so a quiet
-        // step is still a visible pip and a loud one does not swamp the ring.
-        return 2.8f + 3.0f * std::sqrt (juce::jlimit (0.0f, 1.0f, level01)) + (sounding ? 1.6f : 0.0f);
     }
 }
 
 Lamp::Lamp()
 {
     setInterceptsMouseClicks (false, false);
+    grow.fill (1.0f);
 }
 
 void Lamp::setPattern (int stepCount, int currentStep, int ticks) noexcept
@@ -85,6 +76,16 @@ void Lamp::setPattern (int stepCount, int currentStep, int ticks) noexcept
         ghostLevel = level;
         ghostGain = gain;
         collapse = 1.0f;
+    }
+
+    // A step joined: it starts as nothing at its own slot and grows. (The
+    // commit counter catches the joins this cannot: a replacement, or a
+    // join the count showed a frame before the counter did.)
+    if (newCount > count)
+    {
+        for (int i = count; i < newCount; ++i)
+            grow[(size_t) i] = 0.0f;
+        joinedThisFrame = true;
     }
 
     if (newCount != count || currentStep != current)
@@ -117,6 +118,29 @@ void Lamp::setCeiling (int maxSteps, bool holdWhenFull) noexcept
 {
     ceiling = juce::jlimit (1, kMaxPips, maxSteps);
     hold = holdWhenFull;
+    // The first ceiling is where the limbs start, not somewhere to ease from.
+    if (! ceilingSeen)
+    {
+        ceilingSeen = true;
+        shownCeiling = (float) ceiling;
+    }
+}
+
+void Lamp::setCommits (int commits) noexcept
+{
+    if (commits == lastCommits)
+        return;
+    lastCommits = commits;
+    if (joinedThisFrame || count <= 0)
+        return;
+
+    // A join the count did not show: the newest limb grows all the same, and
+    // if the ring was full it is the oldest that went, so the rest stand a
+    // slot on from where they belong and slide back, as a ring buffer does.
+    grow[(size_t) (count - 1)] = 0.0f;
+    if (count >= ceiling)
+        shift = 1.0f;
+    ringDirty = true;
 }
 
 void Lamp::flash() noexcept
@@ -196,7 +220,7 @@ void Lamp::tick()
                 t.age *= kTrailAgePerTick;
             auto& t = trails[(size_t) nextTrail];
             t.slot = current;
-            t.slots = shownSlots;
+            t.slots = shownCeiling;
             t.level = level[(size_t) current];
             t.gain = gain[(size_t) current];
             t.writhe = writhe;
@@ -232,17 +256,35 @@ void Lamp::tick()
         ringDirty = true;
     }
 
-    // The ring's layout: one more slot while a step is being written, unless
-    // the pattern is full and holding, in which case nothing will be added.
-    const bool writing = gate && ! bypassed && (count < ceiling || ! hold);
-    const float wantedSlots = (float) juce::jmax (1, count + (writing && count < ceiling ? 1 : 0));
-    if (std::abs (wantedSlots - shownSlots) > 0.002f)
+    // The ring's layout follows the Steps knob. Ease most of the way, then
+    // land exactly so the limbs never sit a hair off their slots for want of
+    // a last step; the same for the shift after a replacement.
+    joinedThisFrame = false;
+    const float wantedCeiling = (float) ceiling;
+    if (std::abs (wantedCeiling - shownCeiling) > 0.002f)
     {
-        // Ease most of the way, then land exactly so the pips never sit a
-        // hair off their slots for want of a last step.
-        shownSlots += (wantedSlots - shownSlots) * kSlotEase;
-        if (std::abs (wantedSlots - shownSlots) <= 0.002f)
-            shownSlots = wantedSlots;
+        shownCeiling += (wantedCeiling - shownCeiling) * kSlotEase;
+        if (std::abs (wantedCeiling - shownCeiling) <= 0.002f)
+            shownCeiling = wantedCeiling;
+        ringDirty = true;
+    }
+    if (shift > 0.0f)
+    {
+        shift *= 1.0f - kSlotEase;
+        if (shift <= 0.002f)
+            shift = 0.0f;
+        ringDirty = true;
+    }
+
+    // A limb that has just joined grows out of the housing.
+    for (int i = 0; i < count; ++i)
+    {
+        auto& gw = grow[(size_t) i];
+        if (gw >= 1.0f)
+            continue;
+        gw += (1.0f - gw) * kGrowEase;
+        if (gw > 0.995f)
+            gw = 1.0f;
         ringDirty = true;
     }
 
@@ -370,7 +412,7 @@ void Lamp::paint (juce::Graphics& g)
     // that lights up and lunges.
     const auto red = pipColour (p);
     auto drawTentacle = [&] (float slot, float slots, float lv, float gn, bool sounding, float fade,
-                             float lengthScale, int phaseIndex, float writheAt)
+                             float lengthScale, int phaseIndex, float writheAt, float growth)
     {
         // Seizing, the sounding limb jerks off its heading a little every frame.
         const float twist = sounding ? twitch * 0.12f * tremorMix : 0.0f;
@@ -380,9 +422,12 @@ void Lamp::paint (juce::Graphics& g)
         const juce::Point<float> perp (-dir.y, dir.x);
         // In a trance, every limb is stretched: further out, and rowing wider.
         const float stretch = 1.0f + kTranceStretch * tranceMix;
-        const float reach = (kTentacleMin + (kTentacleMax - kTentacleMin) * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)))
-                                * (0.55f + 0.45f * gn) * lengthScale * stretch
-                            + (sounding ? 4.0f * (0.6f + 0.4f * pulse) : 0.0f);
+        // A limb that is still joining is a shorter, thinner one with a
+        // smaller bulb: it swells out of the housing rather than unfolding.
+        const float reach = ((kTentacleMin + (kTentacleMax - kTentacleMin) * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)))
+                                 * (0.55f + 0.45f * gn) * lengthScale * stretch
+                             + (sounding ? 4.0f * (0.6f + 0.4f * pulse) : 0.0f))
+                            * growth;
         if (reach < 2.0f)
             return;
 
@@ -397,8 +442,8 @@ void Lamp::paint (juce::Graphics& g)
         // than touching it with a hair, and the two are one outline. Legion
         // shrinks the bulb, since it is about to be one of three.
         const float tipR = (2.2f + 1.7f * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)) + (sounding ? 0.8f : 0.0f))
-                           * (1.0f - 0.3f * legionMix);
-        const float wRoot = 4.4f + 1.8f * lv + (sounding ? 0.8f : 0.0f);
+                           * (1.0f - 0.3f * legionMix) * (0.4f + 0.6f * growth);
+        const float wRoot = (4.4f + 1.8f * lv + (sounding ? 0.8f : 0.0f)) * (0.6f + 0.4f * growth);
         const float wTip = tipR;
 
         juce::Point<float> spine[kSpineSegments + 1];
@@ -427,8 +472,14 @@ void Lamp::paint (juce::Graphics& g)
         const auto joinPlus = tip - unitDir * (tipR * std::cos (neckAngle)) + unitPerp * (tipR * std::sin (neckAngle));
         const auto joinMinus = tip - unitDir * (tipR * std::cos (neckAngle)) - unitPerp * (tipR * std::sin (neckAngle));
 
+        // The root is closed the same way, with a half circle about the root
+        // point turned inward, so the limb has a rounded shoulder that pushes
+        // out through the housing line rather than a flat cut on it.
+        const float rootHeading = std::atan2 (dir.x, -dir.y);
+        const float rootR = width[0] * 0.5f;
+
         juce::Path limb;
-        limb.startNewSubPath (spine[0] + perp * (width[0] * 0.5f));
+        limb.startNewSubPath (spine[0] + perp * rootR);
         for (int k = 1; k < kSpineSegments; ++k)
             limb.lineTo (spine[k] + perp * (width[k] * 0.5f));
         limb.lineTo (joinPlus);
@@ -436,6 +487,9 @@ void Lamp::paint (juce::Graphics& g)
         limb.lineTo (joinMinus);
         for (int k = kSpineSegments - 1; k >= 0; --k)
             limb.lineTo (spine[k] - perp * (width[k] * 0.5f));
+        limb.addCentredArc (spine[0].x, spine[0].y, rootR, rootR, 0.0f,
+                            rootHeading - juce::MathConstants<float>::halfPi,
+                            rootHeading - 3.0f * juce::MathConstants<float>::halfPi, false);
         limb.closeSubPath();
 
         // The limb sits ON the housing, whatever its fade: an opaque paper
@@ -497,27 +551,31 @@ void Lamp::paint (juce::Graphics& g)
         for (const auto& t : trails)
             if (t.age > 0.0f && t.slot >= 0)
                 drawTentacle ((float) t.slot - kTrailDrift * (1.0f - t.age), t.slots, t.level, t.gain, false,
-                              0.55f * t.age * wraithMix, 1.2f + 0.1f * (1.0f - t.age), t.slot + 3, t.writhe);
+                              0.55f * t.age * wraithMix, 1.2f + 0.1f * (1.0f - t.age), t.slot + 3, t.writhe, 1.0f);
 
+    // Each limb at its own slot of the ceiling. After a replacement the older
+    // ones are still sliding back from a slot on; the newest grows in place.
     for (int i = 0; i < count; ++i)
     {
         const auto idx = (size_t) i;
-        drawTentacle ((float) i, shownSlots, level[idx], gain[idx], i == current, 1.0f, 1.0f, i, writhe);
+        const float slot = (float) i + (i < count - 1 ? shift : 0.0f);
+        drawTentacle (slot, shownCeiling, level[idx], gain[idx], i == current, 1.0f, 1.0f, i, writhe, grow[idx]);
     }
 
     // The limb being written: a nub pushing out of the housing at the slot
-    // the new step will take, growing with the gate's flare.
+    // the new step will take (the last one's, if it is full and replacing),
+    // growing with the gate's flare.
     const bool writing = gate && ! bypassed && (count < ceiling || ! hold);
     if (writing)
     {
-        const int slot = count < ceiling ? count : 0;
-        drawTentacle ((float) slot, shownSlots, 0.5f, 0.6f, false, 0.35f + 0.65f * flare, 0.25f + 0.55f * flare,
-                      slot + 7, writhe);
+        const int slot = count < ceiling ? count : count - 1;
+        drawTentacle ((float) slot, shownCeiling, 0.5f, 0.6f, false, 0.35f + 0.65f * flare, 0.25f + 0.55f * flare,
+                      slot + 7, writhe, 1.0f);
     }
 
     // The limbs as they were, drawn back into the ember after a clear.
     if (collapse > 0.0f && ghostCount > 0)
         for (int i = 0; i < ghostCount; ++i)
-            drawTentacle ((float) i, (float) ghostCount, ghostLevel[(size_t) i], ghostGain[(size_t) i], false,
-                          collapse, collapse, i, writhe);
+            drawTentacle ((float) i, shownCeiling, ghostLevel[(size_t) i], ghostGain[(size_t) i], false,
+                          collapse, collapse, i, writhe, 1.0f);
 }

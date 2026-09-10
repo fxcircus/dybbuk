@@ -148,6 +148,25 @@ expected, three notes.
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
 
+## The creature grows in place (2026-09-10)
+
+Roy, from a screenshot: the tentacles' roots were a flat cut at the
+housing ring, and a new tentacle "comes out of a point and then slides
+into place". The slide was the ring re-spacing itself: limbs were spread
+over the number of steps, so every new step moved all the others. Now:
+- Limbs are spread over the Steps ceiling, not the count: limb i sits at
+  slot i of the ceiling, clockwise from twelve, so a four-step pattern at
+  Steps 8 fills the top half of the ring and the empty slots are room to
+  add. Adding a step moves nothing. Only turning Steps, or a replacement
+  on a full ring, re-spaces, and both ease.
+- A new limb grows from zero reach at its own slot over about 250 ms,
+  bulb and shoulder swelling with it. The engine publishes a commit
+  counter (`uiCommits`, `getCommits()`) so the plate knows the moment a
+  step joins, including a replacement the count cannot show.
+- Each root starts 6 px inside the housing and is closed with a
+  semicircular cap, so the limb is a rounded shoulder bursting through the
+  ring rather than a stump on it.
+
 ## Fade is Feedback (2026-09-10)
 
 Roy: the delay word says what it does. With the name comes the delay's

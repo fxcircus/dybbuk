@@ -95,9 +95,9 @@ int main()
 
     auto report = [&processor] (const char* what)
     {
-        std::printf ("  %s: steps %d, current %d, gate %s, fill %s\n", what, processor.getStepCount(),
+        std::printf ("  %s: steps %d, current %d, gate %s, fill %s, commits %d\n", what, processor.getStepCount(),
                      processor.getCurrentStep(), processor.isGateOpen() ? "open" : "shut",
-                     processor.isFillRunning() ? "on" : "off");
+                     processor.isFillRunning() ? "on" : "off", processor.getCommits());
     };
 
     // 1. Listening: nothing played yet, the ember breathing, the ring empty.
@@ -105,9 +105,20 @@ int main()
     report ("listening");
     snap ("editor_snapshot_listening.png");
 
-    // 2. A four-note phrase became four steps, and the sequencer is on one
-    // of them. Stopping mid-way between ticks leaves the sounding step lit.
-    pushPhrase (processor, 4);
+    // 2. A four-note phrase becomes four steps. The fourth is caught about
+    // 80 ms after it commits, still growing out of the housing at its own
+    // slot (the editor's timer only runs in the dispatch loop, so the growth
+    // starts at the first frame after the feed stops); the three before it
+    // must not have moved.
+    pushPhrase (processor, 3);
+    push (processor, 0.100, 0.5f, 165.0);
+    push (processor, 0.120, 0.0f);
+    report ("grow");
+    snapAfter ("editor_snapshot_grow.png", 80);
+    push (processor, 0.030, 0.0f);
+
+    // ... and the sequencer is on one of them. Stopping mid-way between
+    // ticks leaves the sounding step lit.
     push (processor, 0.55, 0.0f);
     report ("pattern");
     snap ("editor_snapshot_pattern.png");
