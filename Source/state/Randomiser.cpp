@@ -160,5 +160,5 @@ void Randomiser::randomiseCharacter (juce::AudioProcessorValueTreeState& apvts, 
     setParam (apvts, id::direction, (float) pickWeighted (c.direction, BurstEngine::kDirectionCount, rng));
     setParam (apvts, id::full, rng.nextFloat() < c.holdChance ? 1.0f : 0.0f);
 
-    // in, out, stepsync, record and bypass are deliberately untouched. See the header.
+    // in, out, stepsync, freeze and bypass are deliberately untouched. See the header.
 }

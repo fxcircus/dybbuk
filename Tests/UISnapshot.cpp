@@ -124,14 +124,14 @@ int main()
     // 3b. A fill: disarmed, a gated onset scrambles the order for one cycle,
     // and the ring should warm and shiver for as long as it runs. Full is
     // flipped to Hold here too, so this frame reviews the other word on both
-    // buttons (FROZEN and HOLD; the rest of the run shows ARMED and REPLACE).
-    setParam (processor, params::id::record, 0.0f);
+    // buttons (FREEZE lit and HOLD; the rest of the run shows them off).
+    setParam (processor, params::id::freeze, 1.0f);
     setParam (processor, params::id::full, 1.0f);
     push (processor, 0.100, 0.5f, 330.0);
     push (processor, 0.020, 0.0f);
     report ("fill");
     snap ("editor_snapshot_fill.png");
-    setParam (processor, params::id::record, 1.0f);
+    setParam (processor, params::id::freeze, 0.0f);
     setParam (processor, params::id::full, 0.0f);
     push (processor, 1.5, 0.0f);
 

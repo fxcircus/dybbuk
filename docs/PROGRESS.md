@@ -65,7 +65,7 @@ disagree with what is written here, this wins.
 ## Current state (2026-09-09, after the Burst pivot)
 
 - Parameter count: 15, in Push bank order, all automatable: Time (id `step`), Steps,
-  Threshold, Blend, Record, Fills, Chaos, Direction (bank 1), then Length,
+  Threshold, Blend, Freeze, Fills, Chaos, Direction (bank 1), then Length,
   Fade, Full, Sync, In, Out, Bypass last
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
 - `EngineTest`: 13 scenarios plus `render` (54 checks, 0 failures, 0.1 s):
@@ -84,7 +84,9 @@ disagree with what is written here, this wins.
   call); the dybbuk at the plate's centre (450, 310) with the Length and
   Fade trims shortened to flank it and nothing above or below it; a knob
   row of Fills, Chaos, Direction and the Full button (Replace / Hold); the
-  Record button (Armed / Frozen) centred on the bottom strip. The rolled
+  FREEZE button, no caption, lit while it holds, centred on the bottom
+  strip (Roy: armed is the normal state and bypass is how audio stops, so
+  a Record arm read backwards). The rolled
   dice character is printed over the dybbuk for three seconds. The light sheet is the
   default since Roy's first look (2026-09-09). The dybbuk is the pattern, as a
   monster: one tentacle per step growing out of the housing (Roy's call

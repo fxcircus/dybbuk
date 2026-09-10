@@ -119,9 +119,10 @@ because the delay core's variable-rate memory is already written.
   (about 6.5 MB at 48 kHz, 26 MB at 192 kHz). One spare over the ceiling
   of 16 means capture never writes into a slice the sequencer may be
   reading. A held note past 2 s commits as-is.
-- **Record (arm).** While armed, every gated event becomes a step,
-  appended as its gate closes. Disarmed, the gate stays shut and the
-  pattern is frozen: that is "play over it". The first design had a
+- **Freeze.** Off, every gated event becomes a step, appended as its gate
+  closes. On, the gate stays shut and the pattern is frozen: that is "play
+  over it". (Shipped as a Record arm first; Roy pointed out that armed is
+  the normal state and bypass is how audio stops, so the switch is Freeze.) The first design had a
   play-over switch that still captured one step while off, which turned
   out to be useless in the test, so the switch became a plain arm.
 - **Sequencer.** A steady step clock starts on the first commit, so the

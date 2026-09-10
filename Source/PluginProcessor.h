@@ -116,7 +116,7 @@ private:
     std::atomic<float>* pSteps;
     std::atomic<float>* pThreshold;
     std::atomic<float>* pBlend;
-    std::atomic<float>* pRecord;
+    std::atomic<float>* pFreeze;
     std::atomic<float>* pFills;
     std::atomic<float>* pChaos;
     std::atomic<float>* pDirection;

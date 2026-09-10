@@ -32,13 +32,13 @@ namespace
 
     // Four bands under the header: the hero knobs, the dybbuk's row (the lamp
     // in the middle of the plate with a trim on each side), the small knobs,
-    // and the record button on the bottom strip. With nothing stacked above
+    // and the freeze button on the bottom strip. With nothing stacked above
     // or below the dybbuk any more, the bands are spread so the paper between
     // them reads as one rhythm from the rule to the foot of the faders.
     constexpr int kHeroY = 160;   // face centres
     constexpr int kLampY = 310;
     constexpr int kMidY = 442;
-    constexpr int kBottomY = 564; // the record button's box centre
+    constexpr int kBottomY = 564; // the freeze button's box centre
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
     constexpr int kMidX[5] = { 151, 300, 450, 600, 749 };
@@ -284,11 +284,12 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     fullToggle->setBounds (WordToggle::boundsFor ({ kMidX[4], kMidY }));
 
     // --- bottom strip ---------------------------------------------------------
-    // Record alone, dead centre under the dybbuk. The rest of the strip stays
+    // Freeze alone, dead centre under the dybbuk, no caption: the word is
+    // the whole control, lit while it holds. The rest of the strip stays
     // empty: it and the header's CLEAR are the whole performance.
-    recordToggle = std::make_unique<WordToggle> (param (params::id::record), "RECORD", "FROZEN", "ARMED");
-    plate.addAndMakeVisible (*recordToggle);
-    recordToggle->setBounds (WordToggle::boundsFor ({ canvasW / 2, kBottomY }));
+    freezeToggle = std::make_unique<WordToggle> (param (params::id::freeze), juce::String(), "FREEZE", "FREEZE");
+    plate.addAndMakeVisible (*freezeToggle);
+    freezeToggle->setBounds (WordToggle::boundsFor ({ canvasW / 2, kBottomY }));
 
     // The plate spells out every unit, because a bare number under a knob is
     // only readable if you already know what the knob is.

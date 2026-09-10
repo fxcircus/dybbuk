@@ -512,8 +512,8 @@ void readouts()
         { params::id::steps, 16.0f, "16" },
         { params::id::threshold, -30.0f, "-30.0" },
         { params::id::blend, 50.0f, "50" },
-        { params::id::record, 1.0f, "Armed" },
-        { params::id::record, 0.0f, "Off" },
+        { params::id::freeze, 1.0f, "Frozen" },
+        { params::id::freeze, 0.0f, "Off" },
         { params::id::fills, 0.0f, "Off" },
         { params::id::fills, 30.0f, "30 %" },
         { params::id::chaos, 0.0f, "Still" },
@@ -678,19 +678,19 @@ void diceIsMusical()
 
     // What the dice must never touch. Bypass is performance state, In and
     // Out are the two controls that can hurt someone wearing headphones, Sync
-    // is a workflow choice, and Record is the player's hand on the pattern.
+    // is a workflow choice, and Freeze is the player's hand on the pattern.
     DybbukProcessor p;
     auto* bypass = p.apvts.getParameter (params::id::bypass);
     auto* in = p.apvts.getParameter (params::id::input);
     auto* out = p.apvts.getParameter (params::id::out);
     auto* sync = p.apvts.getParameter (params::id::stepsync);
-    auto* record = p.apvts.getParameter (params::id::record);
+    auto* record = p.apvts.getParameter (params::id::freeze);
 
     bypass->setValueNotifyingHost (1.0f);
     in->setValueNotifyingHost (0.2f);
     out->setValueNotifyingHost (0.8f);
     sync->setValueNotifyingHost (1.0f);
-    record->setValueNotifyingHost (0.0f);
+    record->setValueNotifyingHost (1.0f);
 
     const float bypassWas = bypass->getValue(), inWas = in->getValue();
     const float outWas = out->getValue(), syncWas = sync->getValue(), recordWas = record->getValue();
@@ -711,8 +711,8 @@ void diceIsMusical()
                + juce::String (outWas, 3) + " -> " + juce::String (out->getValue(), 3));
     check ("and leaves Sync alone", juce::exactlyEqual (sync->getValue(), syncWas),
            "Sync " + juce::String (syncWas));
-    check ("and leaves Record alone", juce::exactlyEqual (record->getValue(), recordWas),
-           "Record " + juce::String (recordWas));
+    check ("and leaves Freeze alone", juce::exactlyEqual (record->getValue(), recordWas),
+           "Freeze " + juce::String (recordWas));
 
     // And it has to actually roll something different each time, or it is a
     // preset button with a dice on it.
@@ -876,7 +876,7 @@ void ordering()
 
     DybbukProcessor p;
     const char* wanted[] = { params::id::step, params::id::steps, params::id::threshold,
-                             params::id::blend, params::id::record, params::id::fills,
+                             params::id::blend, params::id::freeze, params::id::fills,
                              params::id::chaos, params::id::direction };
 
     const auto all = rangedParams (p);

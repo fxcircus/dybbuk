@@ -96,7 +96,7 @@ private:
     std::unique_ptr<EngravedTrim> lengthTrim, fadeTrim;
     std::unique_ptr<VerticalFader> inFader, outFader;
     std::unique_ptr<DiamondToggle> bypassToggle, syncToggle;
-    std::unique_ptr<WordToggle> fullToggle, recordToggle;
+    std::unique_ptr<WordToggle> fullToggle, freezeToggle;
     ThemeFade themeFade;
     Lamp lamp;
     PresetHeader presetHeader { proc.presetManager };

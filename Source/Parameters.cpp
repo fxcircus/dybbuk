@@ -144,12 +144,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     layout.add (floatParam (4, id::blend, "Blend", { 0.0f, 100.0f, 1.0f }, 50.0f, "%"));
 
-    // 5. Record, the arm. On, every gated event becomes a step; off, the
-    // pattern is frozen and you play over it, with the gate driving Fills.
+    // 5. Freeze. Off (the normal state), every gated event becomes a step;
+    // on, the pattern is frozen and you play over it. Bypass is the way to
+    // stop audio passing, so this is not an arm: armed is the default.
     layout.add (std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { id::record, 5 }, "Record", true,
+        juce::ParameterID { id::freeze, 5 }, "Freeze", false,
         juce::AudioParameterBoolAttributes().withStringFromValueFunction (
-            [] (bool v, int) { return juce::String (v ? "Armed" : "Off"); })));
+            [] (bool v, int) { return juce::String (v ? "Frozen" : "Off"); })));
 
     layout.add (percentWithWord (6, id::fills, "Fills", 30.0f, "Off"));
     layout.add (percentWithWord (7, id::chaos, "Chaos", 0.0f, "Still"));

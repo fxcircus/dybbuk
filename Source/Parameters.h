@@ -10,7 +10,7 @@
 // Order matters twice over. VST3 presents parameters in declaration order and
 // AU sorts them by (version hint, hash of id), so the two only agree if every
 // parameter carries its own ascending hint declared in the same order. The
-// first eight are the Push 3 bank 1: Step, Steps, Threshold, Blend, Record,
+// first eight are the Push 3 bank 1: Time, Steps, Threshold, Blend, Freeze,
 // Fills, Chaos, Direction.
 namespace params
 {
@@ -20,7 +20,7 @@ namespace id
     inline constexpr auto steps     = "steps";
     inline constexpr auto threshold = "threshold";
     inline constexpr auto blend     = "blend";
-    inline constexpr auto record    = "record";
+    inline constexpr auto freeze    = "freeze";
     inline constexpr auto fills     = "fills";
     inline constexpr auto chaos     = "chaos";
     inline constexpr auto direction = "direction";

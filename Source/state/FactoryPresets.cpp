@@ -10,7 +10,7 @@ namespace
     // position (0..1), written through knob01ForStepSeconds so the table
     // says the time it means. Absent parameters are restored to their
     // defaults by PresetManager, so anything a preset does not name is
-    // deliberate: none of these set Record (you decide when to arm) and
+    // deliberate: none of these set Freeze (you decide when to hold) and
     // nothing here sets Bypass, which is performance state.
 
     // Sixteenths: the pattern on the host's grid. Play short muted notes and

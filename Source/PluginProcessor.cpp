@@ -39,7 +39,7 @@ DybbukProcessor::DybbukProcessor()
     pSteps     = apvts.getRawParameterValue (params::id::steps);
     pThreshold = apvts.getRawParameterValue (params::id::threshold);
     pBlend     = apvts.getRawParameterValue (params::id::blend);
-    pRecord    = apvts.getRawParameterValue (params::id::record);
+    pFreeze    = apvts.getRawParameterValue (params::id::freeze);
     pFills     = apvts.getRawParameterValue (params::id::fills);
     pChaos     = apvts.getRawParameterValue (params::id::chaos);
     pDirection = apvts.getRawParameterValue (params::id::direction);
@@ -178,7 +178,7 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     p.outDb = pOut->load();
     p.thresholdDb = pThreshold->load();
     p.maxSteps = juce::jlimit (1, BurstEngine::kMaxSteps, juce::roundToInt (pSteps->load()));
-    p.record = pRecord->load() >= 0.5f;
+    p.record = pFreeze->load() < 0.5f;   // armed unless frozen
     p.replaceOldest = pFull->load() < 0.5f;
     p.blend01 = pBlend->load() * 0.01f;
     p.fills01 = pFills->load() * 0.01f;
