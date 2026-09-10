@@ -100,9 +100,9 @@ private:
     std::unique_ptr<VerticalFader> inFader, outFader;
     std::unique_ptr<DiamondToggle> bypassToggle, syncToggle, barToggle;
     std::unique_ptr<WordToggle> freezeToggle;
-    // Which player has the pattern: a segmented bar between the hero row
-    // and the dybbuk, the one control on the plate that changes what the
-    // creature IS rather than how much of something it does.
+    // Which player has the pattern: a segmented bar along the foot of the
+    // plate, the one control on the plate that changes what the creature IS
+    // rather than how much of something it does.
     std::unique_ptr<ModeToggle> modeToggle;
     ThemeFade themeFade;
     Lamp lamp;

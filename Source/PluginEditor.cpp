@@ -31,18 +31,24 @@ namespace
     constexpr int kActionsX = kHairAfterStation + (kHairBeforeTheme - kHairAfterStation - kActionsW) / 2;
 
     // Four bands under the header, one even rhythm from the rule to the foot
-    // of the faders: the hero knobs, the mode bar directly under their
-    // readouts, the dybbuk's row (the lamp in the middle of the plate with
-    // two knobs on each side: how the pattern plays), and a knob row across
-    // the whole content width with FREEZE in its middle (the hand and the
-    // output). The bar sits between the hero row and the dybbuk because it
-    // is the one control that changes what the creature IS, and it reads as
-    // the heading of the dybbuk's band.
+    // of the faders: the hero knobs, the dybbuk's row (the lamp in the
+    // middle of the plate with two knobs on each side: how the pattern
+    // plays), a knob row across the whole content width with FREEZE in its
+    // middle (the hand and the output), and the mode bar along the bottom
+    // of the plate. The bar is the one control that changes what the
+    // creature IS rather than how much of something it does, so it sits
+    // apart from the knobs, as the plate's foot, where a change of player
+    // reads as a lever thrown under the whole instrument.
+    // The bands are spaced by ink, not by box: about 32 px of paper between
+    // each row's readouts and the top ticks of the row under it, and the
+    // same again between the knob row's readouts and the bar, and between
+    // the bar and the keyline. The dybbuk's longest limb (sixteen steps at
+    // Linger's stretch) reaches 60 px above its centre, which is what sets
+    // its row's distance from the hero readouts.
     constexpr int kHeroY = 160;   // face centres
-    constexpr int kModeY = 290;   // the mode bar's centre line
-    constexpr int kLampY = 392;   // the dybbuk and its four knobs
-    constexpr int kMidY = 516;    // the knob row, with FREEZE in its middle: its
-                                  // top ticks sit 20 px under the row above's readouts
+    constexpr int kLampY = 322;   // the dybbuk and its four knobs
+    constexpr int kMidY = 456;    // the knob row, with FREEZE in its middle
+    constexpr int kModeY = 572;   // the mode bar's centre line
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
 
@@ -79,10 +85,17 @@ namespace
     constexpr int kBarY = kSyncY + 24;
     constexpr float kBarDimAlpha = 0.4f; // the Bar diamond while Sync is off
 
-    // What the dice last rolled is printed just over the dybbuk, in the strip
-    // of paper under the mode bar. Sixteen limbs at Linger's stretch can
-    // brush its lower edge, but the caption is gone in three seconds.
-    const juce::Rectangle<int> kRolledArea (kCentreX - 110, kLampY - kLampSize / 2 - 10, 220, 14);
+    // What the dice last rolled is printed in the strip of clear paper
+    // between the knob row's readouts and the mode bar, on the plate's
+    // centre line under FREEZE. Nothing else is drawn there, so the
+    // caption never brushes a limb or a readout.
+    // Centred on ink, not on boxes: a mid knob's readout ends 72 px under
+    // its face, with 8 px of empty paper under that inside its box.
+    constexpr int kMidReadoutBottom = 72;
+    constexpr int kRolledH = 14;
+    const juce::Rectangle<int> kRolledArea (kCentreX - 110,
+                                            (kMidY + kMidReadoutBottom + kModeY - kModeH / 2) / 2 - kRolledH / 2,
+                                            220, kRolledH);
 
     juce::Image makeGrain (int w, int h, juce::Random& rng)
     {
@@ -156,9 +169,9 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
         for (const int x : { kHairAfterName, kHairBeforeStation, kHairAfterStation, kHairBeforeTheme })
             g.fillRect ((float) x, (float) kHairTop, 1.0f, (float) kHairH);
 
-        // What the dice last rolled, fading out over the dybbuk: the name is
-        // the character the pattern has just been given, so it is printed on
-        // the pattern rather than beside the button.
+        // What the dice last rolled, fading out under the knob row: the name
+        // is the character the whole patch has just been given, so it is
+        // printed on the plate rather than beside the button.
         if (rolledTicks > 0 && rolledName != nullptr)
         {
             const float fade = juce::jmin (1.0f, (float) rolledTicks / 30.0f);
@@ -276,11 +289,11 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     barToggle->setBounds (kSyncX, kBarY, 40, 26);
     barToggle->setAlpha (proc.isSynced() ? 1.0f : kBarDimAlpha);
 
-    // --- the mode bar, under the hero row ------------------------------------
+    // --- the mode bar, along the foot of the plate -------------------------
     // No caption: the five names are the whole control. It is bound to the
     // Mode choice, so the cells are the parameter's own options in order.
-    // Centred between the hero readouts and the dybbuk, with even paper on
-    // each side, so it reads as the heading of the dybbuk's band.
+    // Centred between the knob row's readouts and the bottom keyline, on the
+    // faders' feet, with the fader readouts well outside its ends.
     modeToggle = std::make_unique<ModeToggle> (param (params::id::mode),
                                                juce::StringArray { "POSSESS", "LINGER", "LEGION", "HAUNT", "SEIZE" });
     plate.addAndMakeVisible (*modeToggle);

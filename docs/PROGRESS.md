@@ -90,15 +90,15 @@ disagree with what is written here, this wins.
   and glyph for glyph: nameplate | bypass cap | preset station | RANDOM,
   CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between.
   Four even bands under the rule (Roy, 2026-09-10): the hero row Threshold,
-  Time (+SYNC and BAR diamonds), Steps, Blend; the MODE bar (Teder's
-  segmented toggle, POSSESS / LINGER / LEGION / HAUNT / SEIZE) directly
-  under it; the dybbuk row, "how the pattern plays": Decay, Fade | the
-  dybbuk at (450, 392) | Direction, Pitch; and the bottom row, "the hand
-  and the output": Glue, Fills, the FREEZE button dead centre, Chaos,
-  Spread, so Fills and Chaos sit either side of the switch that gives
-  Fills its meaning and Glue and Spread sit by their faders. Every
-  continuous control is a knob now; the trims are gone. The rolled dice
-  character prints between the bar and the dybbuk for three seconds.
+  Time (+SYNC and BAR diamonds), Steps, Blend; the dybbuk row, "how the
+  pattern plays": Decay, Fade | the dybbuk at (450, 322) | Direction,
+  Pitch; the bottom row, "the hand and the output": Glue, Fills, the
+  FREEZE button dead centre, Chaos, Spread, so Fills and Chaos sit either
+  side of the switch that gives Fills its meaning and Glue and Spread sit
+  by their faders; and the MODE bar (Teder's segmented toggle, POSSESS /
+  LINGER / LEGION / HAUNT / SEIZE) as the plate's foot at y 572. Every
+  continuous control is a knob; the trims are gone. The rolled dice
+  character prints between the bottom row and the bar for three seconds.
 - Export: drag the stamp into a DAW for one cycle of the pattern as a
   32-bit float WAV (~/Music/Dybbuk), or click it for a save dialog
 - Not yet done: played in Ableton (Live only rescans at startup, so quit
