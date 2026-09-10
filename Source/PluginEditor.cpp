@@ -31,24 +31,25 @@ namespace
     constexpr int kActionsX = kHairAfterStation + (kHairBeforeTheme - kHairAfterStation - kActionsW) / 2;
 
     // Four bands under the header, one even rhythm from the rule to the foot
-    // of the faders: the hero knobs, the dybbuk's row (the lamp in the
-    // middle of the plate with two knobs on each side: how the pattern
-    // plays), a knob row across the whole content width with FREEZE in its
-    // middle (the hand and the output), and the mode bar along the bottom
-    // of the plate. The bar is the one control that changes what the
+    // of the faders: the mode bar in the band directly under the rule, then
+    // the hero knobs, the dybbuk's row (the lamp in the middle of the plate
+    // with two knobs on each side: how the pattern plays), and a knob row
+    // across the whole content width with FREEZE in its middle (the hand
+    // and the output). The bar is the one control that changes what the
     // creature IS rather than how much of something it does, so it sits
-    // apart from the knobs, as the plate's foot, where a change of player
-    // reads as a lever thrown under the whole instrument.
-    // The bands are spaced by ink, not by box: about 32 px of paper between
-    // each row's readouts and the top ticks of the row under it, and the
-    // same again between the knob row's readouts and the bar, and between
-    // the bar and the keyline. The dybbuk's longest limb (sixteen steps at
-    // Linger's stretch) reaches 60 px above its centre, which is what sets
-    // its row's distance from the hero readouts.
-    constexpr int kHeroY = 160;   // face centres
-    constexpr int kLampY = 322;   // the dybbuk and its four knobs
-    constexpr int kMidY = 456;    // the knob row, with FREEZE in its middle
-    constexpr int kModeY = 572;   // the mode bar's centre line
+    // apart from the knobs, above them all, where a change of player reads
+    // as the heading over the whole instrument.
+    // The bands are spaced by ink, not by box: about 24 px of paper between
+    // the rule and the bar, then 32 px between the bar and the hero row's
+    // top ticks, the same between each row's readouts and the top ticks of
+    // the row under it, and the same again between the knob row's readouts
+    // and the foot of the faders. The dybbuk's longest limb (sixteen steps
+    // at Linger's stretch) reaches 60 px above its centre, which is what
+    // sets its row's distance from the hero readouts.
+    constexpr int kModeY = 100;   // the mode bar's centre line
+    constexpr int kHeroY = 202;   // face centres
+    constexpr int kLampY = 366;   // the dybbuk and its four knobs
+    constexpr int kMidY = 502;    // the knob row, with FREEZE in its middle
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
 
@@ -86,15 +87,16 @@ namespace
     constexpr float kBarDimAlpha = 0.4f; // the Bar diamond while Sync is off
 
     // What the dice last rolled is printed in the strip of clear paper
-    // between the knob row's readouts and the mode bar, on the plate's
-    // centre line under FREEZE. Nothing else is drawn there, so the
+    // between the knob row's readouts and the foot of the faders, on the
+    // plate's centre line under FREEZE. Nothing else is drawn there, so the
     // caption never brushes a limb or a readout.
     // Centred on ink, not on boxes: a mid knob's readout ends 72 px under
     // its face, with 8 px of empty paper under that inside its box.
     constexpr int kMidReadoutBottom = 72;
+    constexpr int kFaderFootY = DybbukEditor::canvasH - 12; // where the fader boxes end
     constexpr int kRolledH = 14;
     const juce::Rectangle<int> kRolledArea (kCentreX - 110,
-                                            (kMidY + kMidReadoutBottom + kModeY - kModeH / 2) / 2 - kRolledH / 2,
+                                            (kMidY + kMidReadoutBottom + kFaderFootY) / 2 - kRolledH / 2,
                                             220, kRolledH);
 
     juce::Image makeGrain (int w, int h, juce::Random& rng)
@@ -246,6 +248,16 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     plate.addAndMakeVisible (*outFader);
     outFader->setBounds (canvasW - kFaderW - 8, kRuleY + 6, kFaderW, canvasH - kRuleY - 18);
 
+    // --- the mode bar, in the band under the rule ---------------------------
+    // No caption: the five names are the whole control. It is bound to the
+    // Mode choice, so the cells are the parameter's own options in order.
+    // Centred between the rule and the hero row's top ticks, well inside
+    // the faders' caps at either edge.
+    modeToggle = std::make_unique<ModeToggle> (param (params::id::mode),
+                                               juce::StringArray { "POSSESS", "LINGER", "LEGION", "HAUNT", "SEIZE" });
+    plate.addAndMakeVisible (*modeToggle);
+    modeToggle->setBounds (kCentreX - kModeW / 2, kModeY - kModeH / 2, kModeW, kModeH);
+
     // --- hero row -------------------------------------------------------------
     // Threshold first: it is the first thing the signal meets.
     addKnob (thresholdKnob, params::id::threshold, "THRESHOLD", EngravedKnob::heroSpec(),
@@ -288,16 +300,6 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     plate.addAndMakeVisible (*barToggle);
     barToggle->setBounds (kSyncX, kBarY, 40, 26);
     barToggle->setAlpha (proc.isSynced() ? 1.0f : kBarDimAlpha);
-
-    // --- the mode bar, along the foot of the plate -------------------------
-    // No caption: the five names are the whole control. It is bound to the
-    // Mode choice, so the cells are the parameter's own options in order.
-    // Centred between the knob row's readouts and the bottom keyline, on the
-    // faders' feet, with the fader readouts well outside its ends.
-    modeToggle = std::make_unique<ModeToggle> (param (params::id::mode),
-                                               juce::StringArray { "POSSESS", "LINGER", "LEGION", "HAUNT", "SEIZE" });
-    plate.addAndMakeVisible (*modeToggle);
-    modeToggle->setBounds (kCentreX - kModeW / 2, kModeY - kModeH / 2, kModeW, kModeH);
 
     // --- the dybbuk's row -----------------------------------------------------
     // The lamp in the centre of the plate and how the pattern plays around
