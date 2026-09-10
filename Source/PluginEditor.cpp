@@ -37,7 +37,8 @@ namespace
     // them reads as one rhythm from the rule to the foot of the faders.
     constexpr int kHeroY = 160;   // face centres
     constexpr int kLampY = 310;
-    constexpr int kMidY = 462;    // the knob row, with FREEZE in its middle
+    constexpr int kMidY = 452;    // the knob row, with FREEZE in its middle
+    constexpr int kBottomTrimY = 572; // GLUE and SPREAD, a second trim band
 
     constexpr int kHeroX[4] = { 170, 357, 543, 730 };
     constexpr int kMidX[5] = { 151, 300, 450, 600, 749 };
@@ -260,6 +261,27 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     {
         const float v = raw (params::id::fade);
         return v < 0.5f ? juce::String ("NEVER") : juce::String (juce::roundToInt (v)) + " %";
+    });
+
+    // The end of the chain on a second trim band under the knob row: GLUE
+    // under the left pair, SPREAD under the right, the same widths as the
+    // band above so the two bands read as one rhythm.
+    glueTrim = std::make_unique<EngravedTrim> (param (params::id::glue), "GLUE");
+    plate.addAndMakeVisible (*glueTrim);
+    glueTrim->setBounds (76, kBottomTrimY - kTrimH / 2, kTrimW, kTrimH);
+    glueTrim->setValueTextProvider ([this]
+    {
+        const float v = raw (params::id::glue);
+        return v < 0.5f ? juce::String ("CLEAN") : juce::String (juce::roundToInt (v)) + " %";
+    });
+
+    spreadTrim = std::make_unique<EngravedTrim> (param (params::id::spread), "SPREAD");
+    plate.addAndMakeVisible (*spreadTrim);
+    spreadTrim->setBounds (canvasW - 76 - kTrimW, kBottomTrimY - kTrimH / 2, kTrimW, kTrimH);
+    spreadTrim->setValueTextProvider ([this]
+    {
+        const float v = raw (params::id::spread);
+        return v < 0.5f ? juce::String ("MONO") : juce::String (juce::roundToInt (v)) + " %";
     });
 
     // --- the small knobs, under the dybbuk -----------------------------------

@@ -41,6 +41,8 @@ DybbukProcessor::DybbukProcessor()
     pBlend     = apvts.getRawParameterValue (params::id::blend);
     pFreeze    = apvts.getRawParameterValue (params::id::freeze);
     pPitch     = apvts.getRawParameterValue (params::id::pitch);
+    pGlue      = apvts.getRawParameterValue (params::id::glue);
+    pSpread    = apvts.getRawParameterValue (params::id::spread);
     pFills     = apvts.getRawParameterValue (params::id::fills);
     pChaos     = apvts.getRawParameterValue (params::id::chaos);
     pDirection = apvts.getRawParameterValue (params::id::direction);
@@ -187,6 +189,8 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     p.fade01 = pFade->load() * 0.01f;
     p.direction = directionParam();
     p.pitchSemitones = pPitch->load();
+    p.glue01 = pGlue->load() * 0.01f;
+    p.spread01 = pSpread->load() * 0.01f;
 
     // Bypassed the engine keeps running but hears silence: it collects
     // nothing you play while out of circuit, and the pattern keeps its place
@@ -256,8 +260,14 @@ bool DybbukProcessor::writePatternWav (const juce::File& dest) const
         return false;
 
     juce::AudioBuffer<float> rendered;
-    const int samples = BurstEngine::renderPattern (pattern, getStepSeconds(), pLength->load() * 0.01f,
-                                                    directionParam(), pPitch->load(), rendered);
+    BurstEngine::RenderSettings settings;
+    settings.stepSeconds = getStepSeconds();
+    settings.length01 = pLength->load() * 0.01f;
+    settings.direction = directionParam();
+    settings.pitchSemitones = pPitch->load();
+    settings.glue01 = pGlue->load() * 0.01f;
+    settings.spread01 = pSpread->load() * 0.01f;
+    const int samples = BurstEngine::renderPattern (pattern, settings, rendered);
     if (samples <= 0)
         return false;
 

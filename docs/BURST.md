@@ -333,10 +333,10 @@ leaves a glow ring hanging after each step.
 behaviour with numbers, the export rendering with the station applied,
 and a snapshot of the dybbuk in that station.
 
-### B4 — character and stereo
-- Glue (the saturator) as an end-of-chain stage, Colour and Crust folded
-  in as the lo-fi of the Clock reduction.
-- Spread: alternate steps left and right, or the existing widener.
+### B4 — character and stereo. **Shipped 2026-09-09.**
+- Glue (the saturator) as an end-of-chain stage. The Colour and Crust
+  lo-fi ideas are not in it; Pitch's decimated read is the only lo-fi so far.
+- Spread: alternate steps left and right.
 - Radio and Mask stay in IDEAS.md until Burst is finished.
 
 ### Decisions that belong to Roy

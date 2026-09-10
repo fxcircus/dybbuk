@@ -55,8 +55,9 @@ void BurstEngine::prepare (double sampleRate, int maxBlockSize)
     aBaseRise = coeff (kBaselineRiseMs);
     aBaseFall = coeff (kBaselineFallMs);
 
-    for (auto* s : { &inGain, &outGain, &wetMix, &dryMix, &rate })
+    for (auto* s : { &inGain, &outGain, &wetMix, &dryMix, &rate, &glueAmount })
         s->reset (sr, 0.02);
+    glue.prepare (sr);
 
     reset();
 }
@@ -74,6 +75,8 @@ void BurstEngine::reset() noexcept
     outGain.setCurrentAndTargetValue (1.0f);
     rate.setCurrentAndTargetValue (1.0f);
     currentRate = 1.0f;
+    glueAmount.setCurrentAndTargetValue (0.0f);
+    glue.reset();
     wetMix.setCurrentAndTargetValue (std::sin (juce::MathConstants<float>::halfPi * 0.5f));
     dryMix.setCurrentAndTargetValue (std::cos (juce::MathConstants<float>::halfPi * 0.5f));
 }
@@ -260,6 +263,7 @@ void BurstEngine::startStep (int index, int stepSamples, const Deviation& d) noe
     voice.gain = stepGain[(size_t) index] * d.gainMul;
     voice.rateMul = d.rateMulOr1();
     voice.fadeSamples = fadeSamples;
+    panFor (index, cur.spread01, voice.panL, voice.panR);
     ratchetPeriod = d.ratchets > 1 ? window : 0;
     ratchetsLeft = d.ratchets > 1 ? d.ratchets - 1 : 0;
     ratchetCounter = ratchetPeriod;
@@ -417,6 +421,7 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     outGain.setTargetValue (p.outDb <= kOutFloorDb ? 0.0f : dbToGain (p.outDb));
     wetMix.setTargetValue (std::sin (juce::MathConstants<float>::halfPi * blend));
     rate.setTargetValue (rateForSemitones (juce::jlimit (-24.0f, 24.0f, p.pitchSemitones)));
+    glueAmount.setTargetValue (juce::jlimit (0.0f, 1.0f, p.glue01));
     dryMix.setTargetValue (blend >= 1.0f ? 0.0f : std::cos (juce::MathConstants<float>::halfPi * blend));   // cos (pi/2) is not 0 in float
 
     // Synced: the processor says where the next grid line falls in this
@@ -518,11 +523,27 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
         {
             currentRate = rate.getNextValue();
         }
-        outPeak = juce::jmax (outPeak, std::abs (wet));
+        // Glue, end of the pattern's chain and before the blend: the tanh with
+        // its slight bias and DC blocker from the old loop, driven and made
+        // up so a half-scale signal stays near unity. At zero the saturator
+        // is skipped entirely, so Glue off is bit-exact.
+        const float ga = glueAmount.getNextValue();
+        if (ga > 0.0f)
+        {
+            const float drive = glueDrive (ga);
+            glue.setDrive (drive);
+            wet = glue.process (wet) * drive * glueMakeup (drive);
+        }
+        const float pl = voice.data != nullptr ? voice.panL : 1.0f;
+        const float pr = voice.data != nullptr ? voice.panR : 1.0f;
+        outPeak = juce::jmax (outPeak, std::abs (wet) * juce::jmax (pl, pr));
 
         const float wg = wetMix.getNextValue(), dg = dryMix.getNextValue(), og = outGain.getNextValue();
         for (int ch = 0; ch < numCh; ++ch)
-            buffer.setSample (ch, i, (buffer.getSample (ch, i) * ig * dg + wet * wg) * og);
+        {
+            const float pan = numCh < 2 ? 1.0f : (ch == 0 ? pl : (ch == 1 ? pr : 1.0f));
+            buffer.setSample (ch, i, (buffer.getSample (ch, i) * ig * dg + wet * pan * wg) * og);
+        }
     }
 
     uiInputLevel.store (inPeak, std::memory_order_relaxed);
@@ -563,32 +584,37 @@ bool BurstEngine::copyPattern (PatternCopy& out) const
     return false;
 }
 
-int BurstEngine::renderPattern (const PatternCopy& pattern, double stepSeconds, float length01,
-                                Direction direction, float pitchSemitones, juce::AudioBuffer<float>& out)
+int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings& st, juce::AudioBuffer<float>& out)
 {
-    const float playRate = rateForSemitones (juce::jlimit (-24.0f, 24.0f, pitchSemitones));
+    const float playRate = rateForSemitones (juce::jlimit (-24.0f, 24.0f, st.pitchSemitones));
     const int n = (int) pattern.steps.size();
     if (n == 0 || pattern.sampleRate <= 0.0)
     {
         out.setSize (2, 0);
         return 0;
     }
-    const int stepSamples = juce::jmax (1, juce::roundToInt (stepSeconds * pattern.sampleRate));
+    const int stepSamples = juce::jmax (1, juce::roundToInt (st.stepSeconds * pattern.sampleRate));
     const int fade = juce::jmax (1, juce::roundToInt (kFadeMs * 0.001 * pattern.sampleRate));
-    const int choke = juce::jmax (fade * 2, juce::roundToInt ((float) stepSamples * juce::jlimit (0.05f, 1.0f, length01) * playRate));
+    const int choke = juce::jmax (fade * 2, juce::roundToInt ((float) stepSamples * juce::jlimit (0.05f, 1.0f, st.length01) * playRate));
 
     // One cycle in the direction's own order; random and drunk have no
     // cycle, so they export forward.
     std::vector<int> order;
-    if (direction == Direction::reverse)
+    if (st.direction == Direction::reverse)
         for (int i = n - 1; i >= 0; --i) order.push_back (i);
-    else if (direction == Direction::pendulum && n > 1)
+    else if (st.direction == Direction::pendulum && n > 1)
     {
         for (int i = 0; i < n; ++i) order.push_back (i);
         for (int i = n - 2; i >= 1; --i) order.push_back (i);
     }
     else
         for (int i = 0; i < n; ++i) order.push_back (i);
+
+    LoopSaturator sat;
+    sat.prepare (pattern.sampleRate);
+    const float ga = juce::jlimit (0.0f, 1.0f, st.glue01);
+    const float drive = glueDrive (ga), makeup = glueMakeup (drive);
+    sat.setDrive (drive);
 
     const int total = (int) order.size() * stepSamples;
     out.setSize (2, total);
@@ -602,11 +628,16 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, double stepSeconds, 
         v.len = juce::jmin ((int) material.size(), choke);
         v.gain = pattern.gain[(size_t) idx];
         v.fadeSamples = fade;
-        for (int i = 0; i < stepSamples && v.active(); ++i)
+        panFor (idx, st.spread01, v.panL, v.panR);
+        for (int i = 0; i < stepSamples; ++i)
         {
-            const float s = v.next (playRate);
-            out.setSample (0, pos + i, s);
-            out.setSample (1, pos + i, s);
+            // The saturator runs through the gaps too, so its DC blocker
+            // settles exactly as it does live.
+            float s = v.active() ? v.next (playRate) : 0.0f;
+            if (ga > 0.0f)
+                s = sat.process (s) * drive * makeup;
+            out.setSample (0, pos + i, s * v.panL);
+            out.setSample (1, pos + i, s * v.panR);
         }
         pos += stepSamples;
     }

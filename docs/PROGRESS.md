@@ -64,9 +64,9 @@ disagree with what is written here, this wins.
 
 ## Current state (2026-09-09, after the Burst pivot)
 
-- Parameter count: 15, in Push bank order, all automatable: Threshold, Time (id
+- Parameter count: 17, in Push bank order, all automatable: Threshold, Time (id
   `step`), Steps, Blend, Freeze, Fills, Chaos, Direction (bank 1), then Length,
-  Fade, Pitch, Sync, In, Out, Bypass last. Pitch is B3's Clock under the
+  Fade, Pitch, Sync, In, Out, Glue, Spread, Bypass last. Pitch is B3's Clock under the
   name Roy chose: -12..+12 semitones on every step's material, the step
   clock untouched (a departure from the pedal, where CLOCK also slows the
   pattern), a fractional read with linear interpolation so a decimated
@@ -74,9 +74,9 @@ disagree with what is written here, this wins.
   Roy's question "why wouldn't we always replace": a full pattern always
   replaces its oldest step, Freeze is how you stop it taking more
 - Formats: VST3 / AU / Standalone; pluginval strictness 10 and `auval` pass
-- `EngineTest`: 14 scenarios plus `render` (58 checks, 0 failures, 0.1 s):
+- `EngineTest`: 16 scenarios plus `render` (65 checks, 0 failures, 0.1 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
-  levels, cpu, hostile, pitch
+  levels, cpu, hostile, pitch, glue, spread
 - `ProcessorTest`: ordering, readouts, session and preset round-trips, five
   factory presets load and sound, dice, mono to stereo, stereo dry, bypass
   crossfade with the engine deaf, WAV export (0 failures)
@@ -135,6 +135,24 @@ expected, three notes.
    instrument and the room, not the patch; the dice touches only what
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
+
+## B4 shipped (2026-09-09, night)
+
+- **Glue**: the old loop's saturator (tanh with a slight bias and a DC
+  blocker) at the end of the pattern's chain, before the blend. Drive
+  runs 1 to 16 with a makeup that keeps a half-scale signal near unity, so
+  more Glue is more colour, not less level; at zero the saturator is
+  skipped, so Glue off is bit-exact. Measured: a third harmonic at full
+  where the clean path has none, level within 6 dB, peak under full scale.
+- **Spread**: alternate steps sit left and right, step 1 left, step 2
+  right, by index so a step keeps its side whatever the direction. A
+  linear pan with unity in the middle, so Spread at zero is exactly the
+  old mono. Measured: at full, steps 1 and 3 are left only and 2 and 4
+  right only. The export renders both.
+- Both live on a second trim band under the knob row, GLUE left and
+  SPREAD right, the same widths as DECAY and FADE. The dice rolls Glue
+  per character and leaves Spread alone (the stereo image is a mix
+  decision).
 
 ## Second round of notes (2026-09-09, night)
 

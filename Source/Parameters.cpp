@@ -189,6 +189,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.add (trimParam (13, id::input, "In"));
     layout.add (trimParam (14, id::out, "Out"));
 
+    // 15, 16. Glue and Spread, the end of the pattern's chain: the old loop's
+    // saturator as a drive, and alternate steps sat left and right. Both off
+    // by default, with a word at zero.
+    layout.add (percentWithWord (15, id::glue, "Glue", 0.0f, "Clean"));
+    layout.add (percentWithWord (16, id::spread, "Spread", 0.0f, "Mono"));
+
     // LAST, and hint 1000 so anything added later still sorts before it in AU
     // while staying declared last for VST3. 1 means bypassed, which is the
     // polarity the hosts expect.

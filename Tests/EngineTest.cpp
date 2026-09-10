@@ -841,7 +841,10 @@ void exportPattern()
            juce::String ((int) copy.steps.size()) + " steps, first " + juce::String (copy.steps.empty() ? 0 : (int) copy.steps[0].size()) + " samples");
 
     juce::AudioBuffer<float> rendered;
-    const int total = BurstEngine::renderPattern (copy, p.stepSeconds, p.length01, BurstEngine::Direction::forward, 0.0f, rendered);
+    BurstEngine::RenderSettings rs;
+    rs.stepSeconds = p.stepSeconds;
+    rs.length01 = p.length01;
+    const int total = BurstEngine::renderPattern (copy, rs, rendered);
     check ("one cycle is steps times step", total == 4 * juce::roundToInt (0.2 * sr), juce::String (total) + " samples");
 
     std::vector<float> ren ((size_t) total);
@@ -1008,7 +1011,11 @@ void pitch()
         BurstEngine::PatternCopy copy;
         juce::AudioBuffer<float> rendered;
         const bool copied = engine.copyPattern (copy);
-        BurstEngine::renderPattern (copy, p.stepSeconds, p.length01, BurstEngine::Direction::forward, p.pitchSemitones, rendered);
+        BurstEngine::RenderSettings rs;
+        rs.stepSeconds = p.stepSeconds;
+        rs.length01 = p.length01;
+        rs.pitchSemitones = p.pitchSemitones;
+        BurstEngine::renderPattern (copy, rs, rendered);
         std::vector<float> ren ((size_t) rendered.getNumSamples());
         for (int i = 0; i < rendered.getNumSamples(); ++i)
             ren[(size_t) i] = rendered.getSample (0, i);
@@ -1018,13 +1025,88 @@ void pitch()
     }
 }
 
+
+// Glue: off is bit-exact, on is harmonics without a level jump.
+void glueTest()
+{
+    std::printf ("glue: the saturator at the end of the pattern's chain\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 2.0, { { 0.1, 0.400, 330.0, 0.5 } });
+    auto p = wetParams();
+    const auto clean = runBurst (in, p, sr, 128);
+    p.glue01 = 0.0f;
+    const auto off = runBurst (in, p, sr, 128);
+    check ("Glue at zero is bit-exact", fnvHash (clean.out) == fnvHash (off.out), juce::String (fnvHash (off.out)));
+
+    auto g = wetParams();
+    g.glue01 = 1.0f;
+    const auto hot = runBurst (in, g, sr, 128);
+    const int from = (int) (0.8 * sr), n = (int) (0.9 * sr);
+    const double fund0 = goertzelAmp (clean.out, from, n, 330.0, sr), h3c = goertzelAmp (clean.out, from, n, 990.0, sr);
+    const double fund1 = goertzelAmp (hot.out, from, n, 330.0, sr), h3 = goertzelAmp (hot.out, from, n, 990.0, sr);
+    check ("Glue at full adds a third harmonic", h3 / juce::jmax (fund1, 1e-9) > 0.05 && h3 > h3c * 10.0,
+           "3rd harmonic " + juce::String (dbfs (h3 / juce::jmax (fund1, 1e-9)), 1) + " dB under the fundamental (clean: "
+               + juce::String (dbfs (h3c / juce::jmax (fund0, 1e-9)), 1) + ")");
+    const double rmsC = rmsOf (clean.out, from, n), rmsH = rmsOf (hot.out, from, n);
+    check ("and the level stays within 6 dB", std::abs (dbfs (rmsH) - dbfs (rmsC)) < 6.0,
+           juce::String (dbfs (rmsC), 1) + " dBFS clean, " + juce::String (dbfs (rmsH), 1) + " glued");
+    check ("and stays inside full scale", peakOf (hot.out, 0, (int) hot.out.size()) <= 1.0, juce::String (peakOf (hot.out, 0, (int) hot.out.size()), 3));
+}
+
+// Spread: alternate steps left and right; zero is exactly mono.
+void spreadTest()
+{
+    std::printf ("spread: alternate steps sit left and right\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 3.4, kFour);
+    auto run = [&] (float spread) {
+        BurstEngine engine;
+        engine.prepare (sr, 128);
+        auto p = wetParams();
+        p.spread01 = spread;
+        juce::AudioBuffer<float> buf (2, 128);
+        std::vector<float> L (in.size()), R (in.size());
+        for (size_t pos = 0; pos < in.size(); pos += 128)
+        {
+            const int n = (int) juce::jmin ((size_t) 128, in.size() - pos);
+            for (int i = 0; i < n; ++i)
+            {
+                buf.setSample (0, i, in[pos + (size_t) i]);
+                buf.setSample (1, i, in[pos + (size_t) i]);
+            }
+            juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, n);
+            engine.process (view, p);
+            for (int i = 0; i < n; ++i)
+            {
+                L[pos + (size_t) i] = buf.getSample (0, i);
+                R[pos + (size_t) i] = buf.getSample (1, i);
+            }
+        }
+        return std::make_pair (L, R);
+    };
+    const auto mono = run (0.0f);
+    double diff = 0.0;
+    for (size_t i = 0; i < mono.first.size(); ++i)
+        diff = juce::jmax (diff, (double) std::abs (mono.first[i] - mono.second[i]));
+    check ("Spread at zero is mono", diff == 0.0, "largest L minus R " + juce::String (diff, 9));
+
+    const auto wide = run (1.0f);
+    const auto onL = onsetsOf (wide.first, sr, (int) (1.5 * sr));
+    const auto onR = onsetsOf (wide.second, sr, (int) (1.5 * sr));
+    bool leftEven = ! onL.empty(), rightOdd = ! onR.empty();
+    for (const auto& o : onL) leftEven = leftEven && stepOf (o.freq) % 2 == 0;
+    for (const auto& o : onR) rightOdd = rightOdd && stepOf (o.freq) % 2 == 1;
+    check ("at full, steps 1 and 3 are left only", leftEven, stepsHeard (onL, 0, 6));
+    check ("and steps 2 and 4 are right only", rightOdd, stepsHeard (onR, 0, 6));
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
     { "burst", burst },       { "sync", sync },     { "direction", direction }, { "length", length },
     { "fade", fade },         { "fills", fills },   { "chaos", chaos },         { "ceiling", ceiling },
     { "export", exportPattern }, { "deaf", deaf },  { "levels", levels },       { "cpu", cpu },
-    { "hostile", hostile },   { "pitch", pitch },
+    { "hostile", hostile },   { "pitch", pitch },     { "glue", glueTest },       { "spread", spreadTest },
 };
 
 } // namespace

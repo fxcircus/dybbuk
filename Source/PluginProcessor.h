@@ -118,6 +118,8 @@ private:
     std::atomic<float>* pBlend;
     std::atomic<float>* pFreeze;
     std::atomic<float>* pPitch;
+    std::atomic<float>* pGlue;
+    std::atomic<float>* pSpread;
     std::atomic<float>* pFills;
     std::atomic<float>* pChaos;
     std::atomic<float>* pDirection;

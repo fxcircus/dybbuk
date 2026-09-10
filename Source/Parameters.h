@@ -27,6 +27,8 @@ namespace id
     inline constexpr auto length    = "length";
     inline constexpr auto fade      = "fade";
     inline constexpr auto pitch     = "pitch";
+    inline constexpr auto glue      = "glue";
+    inline constexpr auto spread    = "spread";
     inline constexpr auto stepsync  = "stepsync";
     inline constexpr auto input     = "in";
     inline constexpr auto out       = "out";

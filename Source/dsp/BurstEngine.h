@@ -7,6 +7,7 @@
 #include <atomic>
 #include <vector>
 
+#include "LoopSaturator.h"
 #include "Rng.h"
 
 // The Burst engine: a gated step recorder feeding a steady step sequencer.
@@ -50,6 +51,8 @@ public:
         float length01 = 1.0f;        // choke: the fraction of the step a slice may sound
         float fade01 = 0.0f;          // level lost every play; a step that fades out leaves the pattern
         float pitchSemitones = 0.0f;  // resamples every step's material; the step clock is untouched
+        float glue01 = 0.0f;          // the end-of-chain saturator on the pattern: warmth to thrash
+        float spread01 = 0.0f;        // alternate steps left and right, this far
         Direction direction = Direction::forward;
         bool bypass = false;          // deaf: the gate hears silence, the sequencer keeps its place
     };
@@ -75,11 +78,22 @@ public:
     // changing it, returns false if it never settles. Allocates.
     bool copyPattern (PatternCopy& out) const;
 
+    // What the offline render needs to sound like the live sequencer.
+    struct RenderSettings
+    {
+        double stepSeconds = 0.25;
+        float length01 = 1.0f;
+        Direction direction = Direction::forward;
+        float pitchSemitones = 0.0f;
+        float glue01 = 0.0f;
+        float spread01 = 0.0f;
+    };
+
     // One pass through a pattern, offline, with the same voice as the live
-    // sequencer: forward order, the choke and the fades, no chaos or fills.
-    // Stereo out, sized by this call. Returns the number of samples.
-    static int renderPattern (const PatternCopy& pattern, double stepSeconds, float length01,
-                              Direction direction, float pitchSemitones, juce::AudioBuffer<float>& out);
+    // sequencer: the direction's own order, the choke, the fades, the pitch,
+    // the spread and the glue, no chaos or fills. Stereo out, sized by this
+    // call. Returns the number of samples.
+    static int renderPattern (const PatternCopy& pattern, const RenderSettings& settings, juce::AudioBuffer<float>& out);
 
     // Polled by the editor; the lamp is the pattern.
     std::atomic<int> uiStepCount { 0 };
@@ -139,6 +153,7 @@ private:
         bool reverse = false;
         float gain = 1.0f;
         float rateMul = 1.0f; // a per-step pitch on top of the global rate
+        float panL = 1.0f, panR = 1.0f;   // where this step sits, from Spread
         int fadeSamples = 1;
         bool active() const noexcept { return data != nullptr && pos < (double) len; }
         float next (float rate) noexcept;
@@ -167,6 +182,18 @@ private:
     Deviation rollChaos() noexcept;
     void startStep (int index, int stepSamples, const Deviation& d) noexcept;
     static float rateForSemitones (float st) noexcept { return std::pow (2.0f, st / 12.0f); }
+    // Spread: alternate steps sit left and right. Unity in the middle so
+    // Spread at zero is exactly today's mono, the far side falling to nothing.
+    static void panFor (int index, float spread01, float& l, float& r) noexcept
+    {
+        const float pos = (index % 2 == 0 ? -1.0f : 1.0f) * juce::jlimit (0.0f, 1.0f, spread01);
+        l = juce::jmin (1.0f, 1.0f - pos);
+        r = juce::jmin (1.0f, 1.0f + pos);
+    }
+    // Glue: drive into the saturator, and the makeup that keeps a half-scale
+    // signal near unity, so more Glue is more colour rather than less level.
+    static float glueDrive (float glue01) noexcept { return 1.0f + 15.0f * juce::jlimit (0.0f, 1.0f, glue01); }
+    static float glueMakeup (float drive) noexcept { return 0.5f / std::tanh (0.5f * drive); }
     void beginFill() noexcept;
     void doClear() noexcept;
     void publishSteps() noexcept;
@@ -210,8 +237,9 @@ private:
     Params cur;                                 // this block's params, read at commit/tick time
     Rng rng;
 
-    juce::SmoothedValue<float> inGain, outGain, wetMix, dryMix, rate;
+    juce::SmoothedValue<float> inGain, outGain, wetMix, dryMix, rate, glueAmount;
     float currentRate = 1.0f;
+    LoopSaturator glue;
 
     std::atomic<int> clearRequests { 0 };
     int clearsSeen = 0;
