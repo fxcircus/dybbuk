@@ -27,7 +27,7 @@ namespace
         float direction[BurstEngine::kDirectionCount]; // relative weights, Forward, Reverse, Pendulum, Drunk, Random
         Span pitch;         // semitones, integer; half the rolls stay at 0
         Span glue;          // the drive, percent
-        float mode[BurstEngine::kModeCount]; // relative weights, Possess, Linger, Legion, Haunt, Seize
+        float mode[BurstEngine::kModeCount]; // relative weights, Possess, Haunt, Linger, Legion, Seize
     };
 
     const Character kCharacters[] = {
@@ -40,7 +40,7 @@ namespace
           { 0.70f, 0.10f, 0.20f, 0.00f, 0.00f },
           { 0.0f, 0.0f },
           { 0.0f, 15.0f },
-          { 0.70f, 0.10f, 0.10f, 0.05f, 0.05f } },
+          { 0.70f, 0.05f, 0.10f, 0.10f, 0.05f } },
 
         // Short steps, choked, with chaos doing the ratchets: a stutter edit
         // played live.
@@ -51,7 +51,7 @@ namespace
           { 0.40f, 0.20f, 0.20f, 0.00f, 0.20f },
           { -12.0f, 12.0f },
           { 10.0f, 50.0f },
-          { 0.40f, 0.10f, 0.15f, 0.05f, 0.30f } },
+          { 0.40f, 0.05f, 0.10f, 0.15f, 0.30f } },
 
         // A long pattern that forgets. Every step loses level each time round,
         // so it evolves like a delay instead of piling up, and the walk through
@@ -63,7 +63,7 @@ namespace
           { 0.20f, 0.10f, 0.10f, 0.40f, 0.20f },
           { -12.0f, 0.0f },
           { 20.0f, 60.0f },
-          { 0.30f, 0.30f, 0.10f, 0.30f, 0.00f } },
+          { 0.30f, 0.30f, 0.30f, 0.10f, 0.00f } },
 
         // There and back. Pendulum or reverse, never forwards: the turnaround
         // is the rhythm.
@@ -74,7 +74,7 @@ namespace
           { 0.00f, 0.30f, 0.70f, 0.00f, 0.00f },
           { -7.0f, 7.0f },
           { 0.0f, 25.0f },
-          { 0.35f, 0.15f, 0.35f, 0.15f, 0.00f } },
+          { 0.35f, 0.15f, 0.15f, 0.35f, 0.00f } },
 
         // Everything at once. Fills deep, chaos high, the order random or drunk,
         // and the length anywhere: the roll for when the pattern should not be

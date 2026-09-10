@@ -125,7 +125,7 @@ int main()
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
             }
         };
-        const char* modeNames[] = { "possess", "linger", "legion", "haunt", "seize" };
+        const char* modeNames[] = { "possess", "haunt", "linger", "legion", "seize" };
         for (int m = 0; m < 5; ++m)
         {
             setParam (processor, params::id::mode, (float) m);

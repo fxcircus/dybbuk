@@ -208,7 +208,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // as it is; the rest are other players for the same pattern (B5).
     auto pMode = std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { id::mode, 1 }, "Mode",
-        juce::StringArray { "Possess", "Linger", "Legion", "Haunt", "Seize" }, 0);
+        juce::StringArray { "Possess", "Haunt", "Linger", "Legion", "Seize" }, 0);
 
     // 18. Bar: synced, the pattern restarts from its first step on every bar
     // line. Off, it keeps its own phase on the grid.

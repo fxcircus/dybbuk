@@ -98,7 +98,9 @@ disagree with what is written here, this wins.
   CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between.
   Four even bands under the rule (Roy, 2026-09-10, after trying the bar
   in the middle and at the foot): the MODE bar (Teder's segmented toggle,
-  POSSESS / LINGER / LEGION / HAUNT / SEIZE) first, at y 100; the hero
+  POSSESS / HAUNT / LINGER / LEGION / SEIZE, Haunt second because it is
+  Roy's favourite) first, at y 100, with the hover hint and the rolled dice
+  character on the strip directly under it; the hero
   row Threshold, Time (+SYNC and BAR diamonds), Steps, Blend at 202; the
   dybbuk row, "how the pattern plays": Decay, Fade | the dybbuk at (450,
   366) | Direction, Pitch; and the bottom row, "the hand and the output":
@@ -106,7 +108,7 @@ disagree with what is written here, this wins.
   Chaos sit either side of the switch that gives Fills its meaning and
   Glue and Spread sit by their faders. Every continuous control is a
   knob; the trims are gone. The rolled dice character prints under the
-  bottom row for three seconds; the same strip carries a hover hint for
+  mode bar for three seconds; the same strip carries a hover hint for
   every control, one line of tracked caps that fades in and out, worded
   for the current mode. Three knobs change meaning with the mode (Decay in
   Linger and Haunt, Pitch in Legion, Fills in Seize); their captions stay

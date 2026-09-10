@@ -95,9 +95,10 @@ namespace
     constexpr int kMidReadoutBottom = 72;
     constexpr int kFaderFootY = DybbukEditor::canvasH - 12; // where the fader boxes end
     constexpr int kRolledH = 14;
-    const juce::Rectangle<int> kRolledArea (kCentreX - 110,
-                                            (kMidY + kMidReadoutBottom + kFaderFootY) / 2 - kRolledH / 2,
-                                            220, kRolledH);
+    // The rolled name and the hover hint share the strip directly under the
+    // mode bar (Roy, 2026-09-10: the hint reads better next to the modes it
+    // explains than at the foot of the plate).
+    const juce::Rectangle<int> kRolledArea (kCentreX - 110, kModeY + kModeH / 2 + 6, 220, kRolledH);
 
     // The hint line shares that strip: one sentence about the control under
     // the mouse, set in tracked small caps across the content width. The
@@ -279,7 +280,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     // Centred between the rule and the hero row's top ticks, well inside
     // the faders' caps at either edge.
     modeToggle = std::make_unique<ModeToggle> (param (params::id::mode),
-                                               juce::StringArray { "POSSESS", "LINGER", "LEGION", "HAUNT", "SEIZE" });
+                                               juce::StringArray { "POSSESS", "HAUNT", "LINGER", "LEGION", "SEIZE" });
     plate.addAndMakeVisible (*modeToggle);
     modeToggle->setBounds (kCentreX - kModeW / 2, kModeY - kModeH / 2, kModeW, kModeH);
 
@@ -561,9 +562,9 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
     {
         static const char* const cells[] = {
             "The pattern as you played it.",
+            "Every step leaves a frozen moment that keeps sounding under the next ones.",
             "Every step stretched to fill its share of the step, at its own pitch.",
             "Every step sung three times over, Pitch the interval.",
-            "Every step leaves a frozen moment that keeps sounding under the next ones.",
             "Playing over the threshold holds and ratchets the current step.",
         };
         const int cell = modeToggle->cellAt (modeToggle->getLocalPoint (&plate, platePoint).toFloat());
@@ -587,7 +588,7 @@ juce::String DybbukEditor::hintUnderMouse() const
     {
         // The test hook: the named control, probed at its centre, or a
         // mode cell probed in its cell.
-        static const juce::StringArray modeNames { "POSSESS", "LINGER", "LEGION", "HAUNT", "SEIZE" };
+        static const juce::StringArray modeNames { "POSSESS", "HAUNT", "LINGER", "LEGION", "SEIZE" };
         if (const int cell = modeNames.indexOf (pinnedHint); cell >= 0)
         {
             const auto b = modeToggle->getBounds();

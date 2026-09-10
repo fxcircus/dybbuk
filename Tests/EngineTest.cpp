@@ -1349,7 +1349,7 @@ void modesExport()
     BurstEngine::PatternCopy copy;
     check ("a four-step pattern to export", engine.copyPattern (copy) && copy.steps.size() == 4, juce::String ((int) copy.steps.size()));
 
-    const char* names[] = { "Possess", "Linger", "Legion", "Haunt", "Seize" };
+    const char* names[] = { "Possess", "Haunt", "Linger", "Legion", "Seize" };
     for (int m = 0; m < BurstEngine::kModeCount; ++m)
     {
         BurstEngine::RenderSettings rs;

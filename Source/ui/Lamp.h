@@ -47,7 +47,7 @@ public:
     // snapping: Linger stretches the limbs, Legion splits every tip into a
     // fan of bulbs, Haunt leaves a ghost of each limb that sounded, Seize
     // gives the ember a tremor and the sounding limb a twitch.
-    enum Mode { possess = 0, linger, legion, haunt, seize, kModeCount };
+    enum Mode { possess = 0, haunt, linger, legion, seize, kModeCount };   // mirrors BurstEngine::Mode
     void setMode (int mode) noexcept { modeWanted = juce::jlimit (0, kModeCount - 1, mode); }
 
     void tick();
