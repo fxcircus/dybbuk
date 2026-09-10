@@ -21,10 +21,24 @@ namespace
     constexpr float kCollapseDecay = 0.85f;
     constexpr float kJitterPx = 1.6f;
 
-    // Geometry for the 128 px box: housing ring, fixture rays, the pip ring.
+    // Geometry for the 128 px box: housing ring, fixture rays.
     constexpr float kHousingR = 30.0f;
     constexpr float kRayInnerR = 34.0f, kRayOuterR = 40.0f;
-    constexpr float kRingR = 50.0f;
+
+    // The tentacles. They root just inside the housing and reach out toward
+    // the old ring radius; a loud step reaches further, a spent one withers.
+    constexpr float kTentacleRoot = kHousingR - 3.0f;
+    constexpr float kTentacleMin = 11.0f, kTentacleMax = 24.0f;
+    constexpr float kWaveAmp = 2.6f;
+    constexpr float kWritheRate = 0.055f;            // radians per tick at rest
+    constexpr int kSpineSegments = 12;
+
+    juce::Point<float> rayDir (float slot, float slots) noexcept
+    {
+        const float a = juce::MathConstants<float>::twoPi * slot / juce::jmax (1.0f, slots);
+        return { std::sin (a), -std::cos (a) };
+    }
+
 
     juce::Point<float> onRing (juce::Point<float> c, float radius, float slot, float slots) noexcept
     {
@@ -148,9 +162,19 @@ void Lamp::tick()
 
     if (warmth > 0.01f)
     {
-        // A fill shakes the pips, a little more the deeper into it we are.
+        // A fill makes the tentacles thrash, a little more the deeper into it.
         for (auto& j : jitter)
             j = (rng.nextFloat() - 0.5f) * 2.0f * kJitterPx * warmth;
+        ringDirty = true;
+    }
+
+    // The tentacles are never still while there are any: slow at rest,
+    // quicker on the tick, and thrashing during a fill.
+    if (count > 0 || collapse > 0.0f || (gate && ! bypassed))
+    {
+        writhe += kWritheRate * (1.0f + 1.5f * pulse + 3.0f * warmth);
+        if (writhe > juce::MathConstants<float>::twoPi * 64.0f)
+            writhe -= juce::MathConstants<float>::twoPi * 64.0f;
         ringDirty = true;
     }
 
@@ -194,10 +218,6 @@ void Lamp::paint (juce::Graphics& g)
         g.drawLine ({ c + dir * kRayInnerR, c + dir * kRayOuterR }, 1.0f);
     }
 
-    // The guide circle the pips sit on: an engraved hairline, there even
-    // when the ring is empty so the listening state has a shape.
-    g.setColour (p.ink.withAlpha ((listening ? 0.16f : 0.22f) * dim));
-    g.drawEllipse (c.x - kRingR, c.y - kRingR, kRingR * 2.0f, kRingR * 2.0f, 0.8f);
 
     // The glow sits under the glass and grows with the ember.
     const float glowRadius = 22.0f + 26.0f * live;
@@ -238,64 +258,93 @@ void Lamp::paint (juce::Graphics& g)
     g.setColour (p.red.withAlpha (juce::jmin (1.0f, alpha + 0.2f)));
     g.drawEllipse (glass, 1.0f);
 
-    // The pips. Each is an engraved ring with red inside it: the ink says the
-    // slot is taken, the red says how much is left of what was put there.
+    // The tentacles. Each step is a limb growing out of the housing: its
+    // reach says how loud the material is, its red says how much of it is
+    // left, and it never quite holds still. The sounding step is the one
+    // that lights up and lunges.
     const auto red = pipColour (p);
-    auto drawPip = [&] (juce::Point<float> at, float lv, float gn, bool sounding, float fade)
+    auto drawTentacle = [&] (float slot, float slots, float lv, float gn, bool sounding, float fade,
+                             float lengthScale, int phaseIndex)
     {
-        const float pr = pipRadius (lv, sounding);
-        const juce::Rectangle<float> disc (at.x - pr, at.y - pr, pr * 2.0f, pr * 2.0f);
+        const auto dir = rayDir (slot, slots);
+        const juce::Point<float> perp (-dir.y, dir.x);
+        const float reach = (kTentacleMin + (kTentacleMax - kTentacleMin) * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)))
+                                * (0.55f + 0.45f * gn) * lengthScale
+                            + (sounding ? 4.0f * (0.6f + 0.4f * pulse) : 0.0f);
+        if (reach < 2.0f)
+            return;
+
+        // Each limb has its own phase and pace, so they do not row in unison.
+        const float phase = (float) phaseIndex * 2.399f;
+        const float pace = 0.7f + 0.5f * std::fmod ((float) phaseIndex * 0.618f, 1.0f);
+        const float amp = kWaveAmp + std::abs (jitter[(size_t) (phaseIndex % kMaxPips)]) * 2.0f
+                          + (sounding ? 1.5f * pulse : 0.0f);
+        const float wRoot = 4.2f + 1.8f * lv + (sounding ? 0.8f : 0.0f);
+        const float wTip = 1.3f;
+
+        juce::Point<float> spine[kSpineSegments + 1];
+        float width[kSpineSegments + 1];
+        for (int k = 0; k <= kSpineSegments; ++k)
+        {
+            const float t = (float) k / (float) kSpineSegments;
+            // The wave grows toward the tip so the root stays anchored.
+            const float wobble = amp * t * t * std::sin (juce::MathConstants<float>::twoPi * 1.15f * t + phase + writhe * pace);
+            spine[k] = c + dir * (kTentacleRoot + reach * t) + perp * wobble;
+            width[k] = wRoot * (1.0f - t) + wTip * t;
+        }
+
+        juce::Path limb;
+        limb.startNewSubPath (spine[0] + perp * (width[0] * 0.5f));
+        for (int k = 1; k <= kSpineSegments; ++k)
+            limb.lineTo (spine[k] + perp * (width[k] * 0.5f));
+        for (int k = kSpineSegments; k >= 0; --k)
+            limb.lineTo (spine[k] - perp * (width[k] * 0.5f));
+        limb.closeSubPath();
+
+        // The bulb at the tip: the virus's knob.
+        const float tipR = 2.0f + 1.6f * std::sqrt (juce::jlimit (0.0f, 1.0f, lv)) + (sounding ? 0.8f : 0.0f);
+        const auto tip = spine[kSpineSegments];
+        const juce::Rectangle<float> bulb (tip.x - tipR, tip.y - tipR, tipR * 2.0f, tipR * 2.0f);
 
         if (sounding)
         {
-            // A halo, so the sounding step reads from across the room.
-            g.setColour (red.withAlpha (0.35f * fade * dim));
-            g.drawEllipse (disc.expanded (3.0f), 1.0f);
+            g.setColour (red.withAlpha (0.3f * fade * dim));
+            g.strokePath (limb, juce::PathStrokeType (3.0f));
+            g.drawEllipse (bulb.expanded (2.5f), 1.0f);
             g.setColour (red.withAlpha (fade * dim));
         }
         else
         {
-            // Size already says how loud; the red says how much is left.
-            g.setColour (red.withAlpha ((0.55f + 0.45f * lv) * gn * fade * dim));
+            g.setColour (red.withAlpha ((0.45f + 0.55f * lv) * gn * fade * dim));
         }
-        g.fillEllipse (disc);
+        g.fillPath (limb);
+        g.fillEllipse (bulb);
 
-        // The ink outline fades with the step, but never below what a stroke
-        // on the plate needs to be seen: a nearly spent step is a hollow pip.
-        g.setColour (p.ink.withAlpha ((0.4f + 0.6f * gn) * fade * dim));
-        g.drawEllipse (disc, sounding ? 1.2f : 1.0f);
+        // The ink outline fades with the step but never below what a stroke
+        // on the plate needs: a spent limb is a hollow, withered one.
+        g.setColour (p.ink.withAlpha ((0.45f + 0.55f * gn) * fade * dim));
+        g.strokePath (limb, juce::PathStrokeType (sounding ? 1.1f : 0.9f));
+        g.drawEllipse (bulb, sounding ? 1.1f : 0.9f);
     };
 
     for (int i = 0; i < count; ++i)
     {
         const auto idx = (size_t) i;
-        auto at = onRing (c, kRingR + jitter[idx], (float) i, shownSlots);
-        drawPip (at, level[idx], gain[idx], i == current, 1.0f);
+        drawTentacle ((float) i, shownSlots, level[idx], gain[idx], i == current, 1.0f, 1.0f, i);
     }
 
-    // The pip being written: an outline at the slot the new step will take,
-    // with the gate's own flare inside it.
+    // The limb being written: a nub pushing out of the housing at the slot
+    // the new step will take, growing with the gate's flare.
     const bool writing = gate && ! bypassed && (count < ceiling || ! hold);
     if (writing)
     {
         const int slot = count < ceiling ? count : 0;
-        const auto at = onRing (c, kRingR, (float) slot, shownSlots);
-        const float wr = pipRadius (0.5f, false) + 1.5f;
-        g.setColour (red.withAlpha (0.5f * flare));
-        g.fillEllipse (at.x - wr * 0.6f, at.y - wr * 0.6f, wr * 1.2f, wr * 1.2f);
-        g.setColour (p.ink.withAlpha (0.9f));
-        g.drawEllipse (at.x - wr, at.y - wr, wr * 2.0f, wr * 2.0f, 1.0f);
+        drawTentacle ((float) slot, shownSlots, 0.5f, 0.6f, false, 0.35f + 0.65f * flare, 0.25f + 0.55f * flare, slot + 7);
     }
 
-    // The ring as it was, falling into the ember after a clear.
+    // The limbs as they were, drawn back into the ember after a clear.
     if (collapse > 0.0f && ghostCount > 0)
-    {
-        const float ghostR = kRingR * std::sqrt (collapse);
         for (int i = 0; i < ghostCount; ++i)
-        {
-            const auto idx = (size_t) i;
-            const auto at = onRing (c, ghostR, (float) i, (float) ghostCount);
-            drawPip (at, ghostLevel[idx], ghostGain[idx], false, collapse);
-        }
-    }
+            drawTentacle ((float) i, (float) ghostCount, ghostLevel[(size_t) i], ghostGain[(size_t) i], false,
+                          collapse, collapse, i);
 }

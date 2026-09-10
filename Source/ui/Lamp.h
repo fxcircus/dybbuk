@@ -7,7 +7,7 @@
 #include "Theme.h"
 
 // The centrepiece: the red ember behind hatched glass is now the dybbuk
-// itself, and the pattern lives around it. One pip per step on a ring, laid
+// itself, and the pattern lives around it as tentacles. One per step, laid
 // clockwise from twelve o'clock over the whole circle whatever the count (four
 // steps make a square, sixteen a full ring); each pip's size follows the peak
 // of its material and its ink follows its fade, the sounding one is bright
@@ -65,6 +65,7 @@ private:
     float collapse = 0.0f;                      // 1 at the clear, 0 when the ring is gone
     int ghostCount = 0;                         // the ring as it was at the clear
     std::array<float, kMaxPips> ghostLevel {}, ghostGain {}, jitter {};
+    float writhe = 0.0f;                        // the tentacles' slow motion, in radians
     bool ringDirty = true;
     juce::Random rng;
 

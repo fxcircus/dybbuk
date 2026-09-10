@@ -79,10 +79,13 @@ disagree with what is written here, this wins.
   Blend; trims Length and Fade; mid row Fills, Chaos, the dybbuk, Direction,
   Full rail; Clear stamp under the dybbuk and the Export stamp above it,
   mirrored; the Record rail on the bottom strip. The light sheet is the
-  default since Roy's first look (2026-09-09). The dybbuk is the pattern: a ring of pips, one per
-  step, the sounding one bright, the ember pulsing on the tick, breathing
-  while listening, flaring while the gate is open, an outlined pip where the
-  next step will land, amber and jittering during a fill
+  default since Roy's first look (2026-09-09). The dybbuk is the pattern, as a
+  monster: one tentacle per step growing out of the housing (Roy's call
+  after the first look: pips read as a DAW LED ring, tentacles read as a
+  virus), its reach the step's level, its red what is left of it, the
+  sounding one lit and lunging on the tick, all of them writhing slowly,
+  thrashing during a fill, a nub pushing out where the next step will land,
+  withered and hollow when faded, drawn back into the ember on a clear
 - Export: drag the stamp into a DAW for one cycle of the pattern as a
   32-bit float WAV (~/Music/Dybbuk), or click it for a save dialog
 - Not yet done: played in Ableton (Live only rescans at startup, so quit
