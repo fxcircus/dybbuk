@@ -29,6 +29,8 @@
 //     freeze or unfreeze would be a dice that erases things.
 //   Threshold, because it is set to the instrument and the room, not to the
 //     patch: a roll that deafened the gate would look like a broken plugin.
+//   Blend, because it is the mix you set for the room: a roll at 8 % would
+//     make the pattern inaudible and one at 100 % would silence your playing.
 class Randomiser
 {
 public:

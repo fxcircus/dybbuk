@@ -131,9 +131,10 @@ expected, three notes.
 4. **Spent tentacles showed the housing ring through themselves.** Each
    limb now has an opaque paper underlay, so however faded its red, it
    sits on the ring rather than behind it.
-5. **The dice no longer rolls Threshold.** It is set to the instrument, not
-   the patch; the dice touches only what shapes the pattern (Time, Steps,
-   Blend, Fills, Chaos, Direction, Length, Fade, Pitch).
+5. **The dice no longer rolls Threshold or Blend.** Both are set to the
+   instrument and the room, not the patch; the dice touches only what
+   shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
+   Pitch).
 
 ## Before the pivot
 

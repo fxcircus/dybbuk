@@ -688,8 +688,10 @@ void diceIsMusical()
     auto* sync = p.apvts.getParameter (params::id::stepsync);
     auto* record = p.apvts.getParameter (params::id::freeze);
     auto* threshold = p.apvts.getParameter (params::id::threshold);
+    auto* blend = p.apvts.getParameter (params::id::blend);
 
     threshold->setValueNotifyingHost (0.33f);
+    blend->setValueNotifyingHost (0.61f);
     bypass->setValueNotifyingHost (1.0f);
     in->setValueNotifyingHost (0.2f);
     out->setValueNotifyingHost (0.8f);
@@ -698,7 +700,7 @@ void diceIsMusical()
 
     const float bypassWas = bypass->getValue(), inWas = in->getValue();
     const float outWas = out->getValue(), syncWas = sync->getValue(), recordWas = record->getValue();
-    const float thresholdWas = threshold->getValue();
+    const float thresholdWas = threshold->getValue(), blendWas = blend->getValue();
 
     for (int i = 0; i < 40; ++i)
         p.randomiseParameters();
@@ -718,6 +720,8 @@ void diceIsMusical()
            "Sync " + juce::String (syncWas));
     check ("and leaves Threshold alone", juce::exactlyEqual (threshold->getValue(), thresholdWas),
            "Threshold " + juce::String (thresholdWas, 3));
+    check ("and leaves Blend alone", juce::exactlyEqual (blend->getValue(), blendWas),
+           "Blend " + juce::String (blendWas, 3));
     check ("and leaves Freeze alone", juce::exactlyEqual (record->getValue(), recordWas),
            "Freeze " + juce::String (recordWas));
 
