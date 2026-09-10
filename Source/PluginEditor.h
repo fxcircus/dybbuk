@@ -37,6 +37,11 @@ public:
     void toggleTheme();
     void rollDice();
 
+    // The hint line without a mouse: pins the hint for the control whose
+    // caption this is ("DECAY", "HAUNT", "EXPORT", "DYBBUK"...), so a
+    // snapshot can review the line as it is drawn. An empty name unpins.
+    void showHintForTests (const juce::String& controlName);
+
     static constexpr int canvasW = 900;
     static constexpr int canvasH = 620;
 
@@ -75,6 +80,14 @@ private:
 
     void timerCallback() override;
     void applyTheme();
+
+    // The hint line: what the control under the mouse does, in one sentence,
+    // printed on the plate under the knob row. Looked up by component (and,
+    // for the mode bar, by cell) and by the current mode, because a few
+    // knobs mean different things to different players.
+    juce::String hintFor (juce::Component* component, juce::Point<int> platePoint) const;
+    juce::String hintUnderMouse() const;
+    void updateHint();
     juce::RangedAudioParameter& param (const char* id) const;
     EngravedKnob& addKnob (std::unique_ptr<EngravedKnob>& slot, const char* id, const char* label,
                            EngravedKnob::Spec spec, juce::Point<int> faceCentre,
@@ -113,6 +126,14 @@ private:
     ThemeMark themeMark;
     const char* rolledName = nullptr;
     int rolledTicks = 0;
+
+    // The hint line. `wantedHint` is what the mouse is over this frame,
+    // `shownHint` the sentence on the plate, which fades out before it is
+    // swapped so neighbours never flicker into each other. `pinnedHint`
+    // is the test hook's name for a control, overriding the mouse.
+    juce::String wantedHint, shownHint, pinnedHint;
+    float hintAlpha = 0.0f;
+    int lastMode = -1;
 
     int lastClearsServed = 0;
     bool lastSynced = false;

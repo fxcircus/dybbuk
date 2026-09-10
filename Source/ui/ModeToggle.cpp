@@ -83,6 +83,15 @@ void ModeToggle::paint (juce::Graphics& g)
                             i == selected ? p.ink : p.faded);
 }
 
+int ModeToggle::cellAt (juce::Point<float> localPoint) const noexcept
+{
+    if (! getLocalBounds().toFloat().contains (localPoint))
+        return -1;
+    const int n = labels.size();
+    const float segW = (float) getWidth() / (float) juce::jmax (1, n);
+    return juce::jlimit (0, n - 1, (int) (localPoint.x / segW));
+}
+
 void ModeToggle::setIndexFromX (float x)
 {
     const int n = labels.size();

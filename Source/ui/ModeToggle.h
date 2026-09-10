@@ -22,6 +22,11 @@ public:
 
     int index() const noexcept { return selected; }
 
+    // Which cell a point (in this component's coordinates) is over, or -1
+    // outside the bar. The editor's hint line asks, so a hover over the bar
+    // can describe the player under the mouse rather than the bar as a whole.
+    int cellAt (juce::Point<float> localPoint) const noexcept;
+
     void paint (juce::Graphics& g) override;
     void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
     void mouseExit (const juce::MouseEvent&) override { hovering = false; repaint(); }

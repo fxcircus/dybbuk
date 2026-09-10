@@ -132,6 +132,18 @@ int main()
             playFor (1.5);
             report (modeNames[m]);
             snapAfter ("editor_snapshot_mode_" + juce::String (modeNames[m]) + ".png", 30);
+
+            // The hint line, pinned on the plate without a mouse: Decay's
+            // sentence in Haunt, where it means something else than in
+            // Possess, printed in the strip under the knob row. This frame
+            // reviews that it fits the strip and touches no readout.
+            if (m == 3)
+                if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
+                {
+                    d->showHintForTests ("DECAY");
+                    snapAfter ("editor_snapshot_hint.png", 30);
+                    d->showHintForTests ({});
+                }
         }
         setParam (processor, params::id::mode, 0.0f);
         playFor (1.0);

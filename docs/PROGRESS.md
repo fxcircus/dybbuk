@@ -99,7 +99,12 @@ disagree with what is written here, this wins.
   Chaos sit either side of the switch that gives Fills its meaning and
   Glue and Spread sit by their faders. Every continuous control is a
   knob; the trims are gone. The rolled dice character prints under the
-  bottom row for three seconds.
+  bottom row for three seconds; the same strip carries a hover hint for
+  every control, one line of tracked caps that fades in and out, worded
+  for the current mode. Three knobs change meaning with the mode (Decay in
+  Linger and Haunt, Pitch in Legion, Fills in Seize); their captions stay
+  put and their readouts say so instead ("fills 50 %", "lasts 4 steps",
+  "+7 st apart", "x3").
 - Export: drag the stamp into a DAW for one cycle of the pattern as a
   32-bit float WAV (~/Music/Dybbuk), or click it for a save dialog
 - Not yet done: played in Ableton (Live only rescans at startup, so quit

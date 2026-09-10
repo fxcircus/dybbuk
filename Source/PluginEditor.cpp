@@ -99,6 +99,16 @@ namespace
                                             (kMidY + kMidReadoutBottom + kFaderFootY) / 2 - kRolledH / 2,
                                             220, kRolledH);
 
+    // The hint line shares that strip: one sentence about the control under
+    // the mouse, set in tracked small caps across the content width. The
+    // rolled name keeps the strip for its three seconds; the hint fades in
+    // and out over about 150 ms so neighbours never flicker into each other.
+    // Tracked at this size the longest sentence just fits; a longer one
+    // shrinks to the width rather than clipping.
+    const juce::Rectangle<int> kHintArea (100, kRolledArea.getY(), 700, kRolledH);
+    constexpr float kHintPx = 8.5f, kHintTracking = 0.12f;
+    constexpr float kHintFadePerTick = 1.0f / 4.5f; // 150 ms at 30 Hz
+
     juce::Image makeGrain (int w, int h, juce::Random& rng)
     {
         // A still field of noise over the whole plate. The canvas overlays it
@@ -134,6 +144,7 @@ EngravedKnob& DybbukEditor::addKnob (std::unique_ptr<EngravedKnob>& slot, const 
                                      const char* maxLegend)
 {
     slot = std::make_unique<EngravedKnob> (param (id), label, spec);
+    slot->setName (label); // the test hook finds controls by their caption
     plate.addAndMakeVisible (*slot);
     slot->setBounds (EngravedKnob::boundsFor (spec, faceCentre));
     slot->setLegends (minLegend, maxLegend);
@@ -180,6 +191,20 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
             theme::drawTracked (g, juce::String (rolledName).toUpperCase(), kRolledArea.toFloat(),
                                 juce::Justification::centred, theme::Face::semibold, 9.0f,
                                 0.18f, pal.ink.withAlpha (0.75f * fade));
+        }
+
+        // The hint line, on the same strip, faded ink so it reads as a
+        // footnote to the plate rather than a control on it.
+        if (hintAlpha > 0.0f && shownHint.isNotEmpty())
+        {
+            const auto text = shownHint.toUpperCase();
+            const auto area = kHintArea.toFloat();
+            float px = kHintPx;
+            const float w = theme::trackedWidth (theme::Face::text, px, kHintTracking, text);
+            if (w > area.getWidth())
+                px *= area.getWidth() / w;
+            theme::drawTracked (g, text, area, juce::Justification::centred, theme::Face::text,
+                                px, kHintTracking, pal.faded.withAlpha (hintAlpha));
         }
 
         // The rule under the header, stopping short of the plate edges.
@@ -356,7 +381,6 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
         return [this, id] { return juce::String (juce::roundToInt (raw (id))) + " %"; };
     };
     blendKnob->setValueTextProvider (percent (params::id::blend));
-    lengthKnob->setValueTextProvider (percent (params::id::length));
 
     // Fills, Chaos, Glue, Spread and Fade say a word at the bottom of their
     // travel rather than "0 %", because "Off", "Still", "Clean", "Mono" and
@@ -370,11 +394,63 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
             return v < 0.5f ? juce::String (word) : juce::String (juce::roundToInt (v)) + " %";
         };
     };
-    fillsKnob->setValueTextProvider (percentOrWord (params::id::fills, "Off"));
     chaosKnob->setValueTextProvider (percentOrWord (params::id::chaos, "Still"));
     glueKnob->setValueTextProvider (percentOrWord (params::id::glue, "Clean"));
     spreadKnob->setValueTextProvider (percentOrWord (params::id::spread, "Mono"));
     fadeKnob->setValueTextProvider (percentOrWord (params::id::fade, "Never"));
+
+    // Mode changes what three of the knobs mean, and the captions stay put
+    // (a caption that changes is a knob you cannot find again), so the
+    // readout says it instead: Decay is how much of a step a haunting keeps
+    // sounding, in steps; Pitch is Legion's interval; Fills is Seize's
+    // ratchet count. The scales are the engine's own (raw / 100), so the
+    // number printed is the number the engine uses.
+    auto mode = [this] { return juce::roundToInt (raw (params::id::mode)); };
+    lengthKnob->setValueTextProvider ([this, mode]
+    {
+        const float v = raw (params::id::length);
+        switch (mode())
+        {
+            case Lamp::linger: return "fills " + juce::String (juce::roundToInt (v)) + " %";
+            case Lamp::haunt:
+            {
+                // Mirrors BurstEngine::hauntDecayPerTick: one to kHauntMaxTicks (8) ticks.
+                const int kept = 1 + juce::roundToInt (7.0f * v * 0.01f);
+                return "lasts " + juce::String (kept) + (kept == 1 ? " step" : " steps");
+            }
+            default: return juce::String (juce::roundToInt (v)) + " %";
+        }
+    });
+    pitchKnob->setValueTextProvider ([this, mode]
+    {
+        const int v = juce::roundToInt (raw (params::id::pitch));
+        const auto st = (v > 0 ? "+" : "") + juce::String (v) + " st";
+        if (mode() != Lamp::legion)
+            return st;
+        return v == 0 ? juce::String ("chorus") : st + " apart";
+    });
+    fillsKnob->setValueTextProvider ([this, mode]
+    {
+        const float v = raw (params::id::fills);
+        if (mode() == Lamp::seize)
+            return "x" + juce::String (1 + juce::roundToInt (3.0f * v * 0.01f));
+        return v < 0.5f ? juce::String ("Off") : juce::String (juce::roundToInt (v)) + " %";
+    });
+
+    // Names for the test hook, which finds a control by its caption.
+    modeToggle->setName ("MODE");
+    freezeToggle->setName ("FREEZE");
+    syncToggle->setName ("SYNC");
+    barToggle->setName ("BAR");
+    bypassToggle->setName ("BYPASS");
+    inFader->setName ("IN");
+    outFader->setName ("OUT");
+    lamp.setName ("DYBBUK");
+    presetHeader.setName ("PRESET");
+    diceAction.setName ("RANDOM");
+    clearAction.setName ("CLEAR");
+    exportAction.setName ("EXPORT");
+    themeMark.setName ("THEME");
 
     plate.addChildComponent (themeFade);
     themeFade.setBounds (0, 0, canvasW, canvasH);
@@ -423,7 +499,116 @@ void DybbukEditor::rollDice()
     // information that makes the patch make sense.
     rolledName = proc.lastRandomCharacter();
     rolledTicks = 90; // about three seconds at the editor's tick rate
-    plate.repaint (kRolledArea);
+    hintAlpha = 0.0f; // the name takes the strip at once; two lines on it is a smudge
+    plate.repaint (kHintArea);
+}
+
+void DybbukEditor::showHintForTests (const juce::String& controlName)
+{
+    pinnedHint = controlName;
+    updateHint();
+    // Land at once: a snapshot should not have to wait out the fade.
+    shownHint = wantedHint;
+    hintAlpha = shownHint.isNotEmpty() ? 1.0f : 0.0f;
+    plate.repaint (kHintArea);
+}
+
+juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int> platePoint) const
+{
+    // Walk up to the child of the plate the mouse is in, so a hit inside
+    // a control's own children (none today, but a popup list would be one)
+    // still names the control.
+    const juce::Component* c = component;
+    while (c != nullptr && c != &plate && c->getParentComponent() != &plate)
+        c = c->getParentComponent();
+    if (c == nullptr)
+        return {};
+
+    // The dybbuk lets the mouse through to the plate, so it is found by
+    // its box rather than by the mouse landing on it.
+    if (c == &plate)
+        c = lamp.getBounds().contains (platePoint) ? &lamp : nullptr;
+    if (c == nullptr)
+        return {};
+
+    const int mode = juce::roundToInt (raw (params::id::mode));
+
+    if (c == thresholdKnob.get()) return "Gate level. A note over it is captured as a step; under it, nothing is.";
+    if (c == stepKnob.get())      return "How long each step lasts. Synced, a note division on the host's grid.";
+    if (c == syncToggle.get())    return "Steps follow the host's grid instead of Time's milliseconds.";
+    if (c == barToggle.get())     return "Synced, the pattern restarts from its first step on every bar line.";
+    if (c == stepsKnob.get())     return "How many steps play, 1 to 16. Down loops the first few; up brings the rest back.";
+    if (c == blendKnob.get())     return "Dry against the pattern, equal power.";
+    if (c == lengthKnob.get())
+    {
+        if (mode == Lamp::linger) return "How much of each step the stretched material fills.";
+        if (mode == Lamp::haunt)  return "How many steps a frozen moment keeps sounding, 1 to 8.";
+        return "How much of each step sounds before it is cut.";
+    }
+    if (c == fadeKnob.get())      return "Level a step loses every play. A step that fades out leaves the pattern.";
+    if (c == directionKnob.get()) return "The order the steps play: forward, reverse, pendulum, drunk, random.";
+    if (c == pitchKnob.get())
+        return mode == Lamp::legion ? "The interval between the three voices, in semitones."
+                                    : "Transposes every step's material, in semitones.";
+    if (c == glueKnob.get())      return "Saturation on the pattern, level matched: colour and squash, not volume.";
+    if (c == fillsKnob.get())
+        return mode == Lamp::seize ? "How many times the held step repeats within each step, 1 to 4."
+                                   : "Frozen, a note over the threshold scrambles the order for one cycle, this deeply.";
+    if (c == freezeToggle.get())  return "Off, every note you play becomes a step. On, the pattern is held and you play over it.";
+    if (c == chaosKnob.get())     return "Per step: skips, ratchets, reverses, jumps, intervals, offsets, chokes, accents. More is more at once.";
+    if (c == spreadKnob.get())    return "Alternate steps left and right.";
+    if (c == modeToggle.get())
+    {
+        static const char* const cells[] = {
+            "The pattern as you played it.",
+            "Every step stretched to fill its share of the step, at its own pitch.",
+            "Every step sung three times over, Pitch the interval.",
+            "Every step leaves a frozen moment that keeps sounding under the next ones.",
+            "Playing over the threshold holds and ratchets the current step.",
+        };
+        const int cell = modeToggle->cellAt (modeToggle->getLocalPoint (&plate, platePoint).toFloat());
+        return cell >= 0 && cell < Lamp::kModeCount ? cells[cell] : "";
+    }
+    if (c == &diceAction)         return "Roll a patch: a character, then every pattern knob inside it.";
+    if (c == &clearAction)        return "Start over: the pattern is emptied and the dybbuk listens.";
+    if (c == &exportAction)       return "Drag one cycle of the pattern into your DAW as a WAV, or click to save it.";
+    if (c == inFader.get())       return "Input level, also what the gate hears.";
+    if (c == outFader.get())      return "Output level.";
+    if (c == bypassToggle.get())  return "Bypass. The dybbuk goes deaf and keeps its pattern.";
+    if (c == &themeMark)          return "Light or dark sheet.";
+    if (c == &presetHeader)       return "Presets: click the name for the list, the arrows to step.";
+    if (c == &lamp)               return "The pattern: one limb per step, the sounding one lit.";
+    return {};
+}
+
+juce::String DybbukEditor::hintUnderMouse() const
+{
+    if (pinnedHint.isNotEmpty())
+    {
+        // The test hook: the named control, probed at its centre, or a
+        // mode cell probed in its cell.
+        static const juce::StringArray modeNames { "POSSESS", "LINGER", "LEGION", "HAUNT", "SEIZE" };
+        if (const int cell = modeNames.indexOf (pinnedHint); cell >= 0)
+        {
+            const auto b = modeToggle->getBounds();
+            return hintFor (modeToggle.get(), { b.getX() + (2 * cell + 1) * b.getWidth() / (2 * modeNames.size()), b.getCentreY() });
+        }
+        for (auto* child : plate.getChildren())
+            if (child->getName() == pinnedHint)
+                return hintFor (child, child->getBounds().getCentre());
+        return {};
+    }
+
+    const auto& mouse = juce::Desktop::getInstance().getMainMouseSource();
+    auto* under = mouse.getComponentUnderMouse();
+    if (under == nullptr || (under != &plate && ! plate.isParentOf (under)))
+        return {};
+    return hintFor (under, plate.getLocalPoint (nullptr, mouse.getScreenPosition()).roundToInt());
+}
+
+void DybbukEditor::updateHint()
+{
+    wantedHint = hintUnderMouse();
 }
 
 void DybbukEditor::dragPatternOut()
@@ -479,6 +664,33 @@ void DybbukEditor::timerCallback()
     if (rolledTicks > 0 && --rolledTicks >= 0)
         plate.repaint (kRolledArea);
     lamp.tick();
+
+    // Three readouts change their wording with the mode, not only with
+    // their own value, so a change of player repaints them.
+    const int mode = juce::roundToInt (raw (params::id::mode));
+    if (mode != lastMode)
+    {
+        lastMode = mode;
+        for (auto* knob : { lengthKnob.get(), pitchKnob.get(), fillsKnob.get() })
+            knob->repaint();
+    }
+
+    // The hint line: the sentence fades out before it is swapped, so a
+    // hand crossing from one knob to its neighbour sees one line give way
+    // to the next rather than the two flickering. The rolled name keeps
+    // the strip while it shows.
+    updateHint();
+    {
+        const bool swap = shownHint != wantedHint;
+        const float target = (swap || rolledTicks > 0 || shownHint.isEmpty()) ? 0.0f : 1.0f;
+        const float before = hintAlpha;
+        hintAlpha = target > hintAlpha ? juce::jmin (target, hintAlpha + kHintFadePerTick)
+                                       : juce::jmax (target, hintAlpha - kHintFadePerTick);
+        if (swap && hintAlpha <= 0.0f)
+            shownHint = wantedHint;
+        if (std::abs (hintAlpha - before) > 0.0f)
+            plate.repaint (kHintArea);
+    }
 
     inFader->setLevel (proc.getInputLevel());
     outFader->setLevel (proc.getOutputLevel());
