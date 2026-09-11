@@ -38,6 +38,7 @@ float BurstEngine::Voice::next (float playRate) noexcept
 
 void BurstEngine::Grains::begin (const float* d, int n, double headStart, double adv, int grainSize, int outSamples, Rng& rng) noexcept
 {
+    scatter = false;
     data = d;
     len = n;
     head = juce::jlimit (0.0, (double) juce::jmax (0, n - 1), headStart);
@@ -56,7 +57,6 @@ void BurstEngine::Grains::begin (const float* d, int n, double headStart, double
 
 float BurstEngine::Grains::next (float rate, Rng& rng) noexcept
 {
-    juce::ignoreUnused (rng);   // the search replaced the jitter; the signature stays for the callers
     if (! active())
         return 0.0f;
     float out = 0.0f;
@@ -75,11 +75,11 @@ float BurstEngine::Grains::next (float rate, Rng& rng) noexcept
             // the two stay in phase with each other, not each with its own past.
             const int other = k ^ 1;
             const double continuing = start[other] + (double) age[other] * (double) (rate * rateMul);
-            double best = head;
+            double best = scatter ? (double) (rng.unit() * (float) juce::jmax (1, len - size - 1)) : head;
             const int win = juce::jmin (256, size / 2);
             const int reach = size / 4;
             const int cEnd = (int) continuing;            // the sample the other grain reads now
-            if (std::abs (advance) < 0.999 && len > size * 2 && cEnd - win >= 0 && cEnd <= len)
+            if (! scatter && std::abs (advance) < 0.999 && len > size * 2 && cEnd - win >= 0 && cEnd <= len)
             {
                 float bestScore = -1.0e30f;
                 for (int off = -reach; off <= reach; off += 2)
@@ -123,7 +123,7 @@ float BurstEngine::Grains::next (float rate, Rng& rng) noexcept
 
 bool BurstEngine::StepVoice::sounding() const noexcept
 {
-    if (stretch.active())
+    if (stretch.active() || rattleLeft > 0)
         return true;
     for (int k = 0; k < voices; ++k)
         if (v[k].active())
@@ -149,12 +149,20 @@ void BurstEngine::StepVoice::stop() noexcept
         x = {};
     voices = 0;
     stretch = {};
+    rattleLeft = 0;
 }
 
 float BurstEngine::StepVoice::next (float rate, Rng& rng) noexcept
 {
     if (stretch.data != nullptr)
         return stretch.next (rate, rng);
+    if (rattleLeft > 0)
+    {
+        // The buzz: the slice again the moment it ends, for as long as the step lasts.
+        if (! v[0].active() && v[0].data != nullptr)
+            v[0].pos = v[0].start;
+        --rattleLeft;
+    }
     float out = 0.0f;
     for (int k = 0; k < voices; ++k)
         if (v[k].active())
@@ -482,6 +490,22 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
     const int offset = juce::jlimit (0, juce::jmax (0, len - s.fadeSamples * 4), juce::roundToInt ((float) len * d.offset01));
     const float gain = stepGain * d.gainMul;
 
+    if (s.mode == Mode::miasma)
+    {
+        // A cloud: grains from anywhere in the material, for the whole
+        // share of the step. Decay is the grain, 10 to 80 ms: short is a
+        // crackle, long is a wash.
+        const float dec = juce::jlimit (0.0f, 1.0f, (s.length01 - 0.05f) / 0.95f);
+        const int grain = juce::jmax (juce::roundToInt (0.002 * s.sampleRate),
+                                      juce::jmin (len / 2, juce::roundToInt ((0.010 + 0.070 * dec) * s.sampleRate)));
+        const int outSamples = juce::jmax (s.fadeSamples * 2, window);
+        sv.stretch.begin (material, len, (double) offset, 0.0, grain, outSamples, rng);
+        sv.stretch.scatter = true;
+        sv.stretch.gain = gain;
+        sv.stretch.rateMul = d.rateMulOr1();
+        return;
+    }
+
     if (s.mode == Mode::trance)
     {
         // A slowdown from the start of the material: Decay says how many
@@ -509,9 +533,14 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
     // times over at intervals. Wraith is never choked: the whole moment is
     // what will be left behind.
     const float stepRate = s.rate * d.rateMulOr1();
+    // Rattle: the slice is Decay's 10 to 60 ms of material, and it loops
+    // for the whole step (see StepVoice::next).
+    const int rattleSlice = juce::roundToInt ((0.010 + 0.050 * juce::jlimit (0.0f, 1.0f, (s.length01 - 0.05f) / 0.95f)) * s.sampleRate);
     const int choke = s.mode == Mode::wraith
                           ? len
-                          : juce::jmax (s.fadeSamples * 2, juce::roundToInt ((float) window * share * (s.mode == Mode::trance ? 1.0f : stepRate)));
+                          : (s.mode == Mode::rattle
+                                 ? juce::jmax (s.fadeSamples * 2, rattleSlice)
+                                 : juce::jmax (s.fadeSamples * 2, juce::roundToInt ((float) window * share * (s.mode == Mode::trance ? 1.0f : stepRate))));
     const int n = s.mode == Mode::legion ? 3 : 1;
     sv.voices = n;
     for (int k = 0; k < n; ++k)
@@ -522,7 +551,7 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
         v.start = (double) offset;
         v.pos = v.start;
         v.len = juce::jmin (len, offset + choke);
-        v.reverse = d.reverse;
+        v.reverse = s.mode == Mode::mirror ? ! d.reverse : d.reverse;   // Mirror: everything backwards; chaos flips it back now and then
         v.fadeSamples = s.fadeSamples;
         v.gain = gain;
         v.rateMul = d.rateMulOr1();
@@ -541,6 +570,7 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
                 v.len = 0;
         }
     }
+    sv.rattleLeft = s.mode == Mode::rattle ? window : 0;
 }
 
 void BurstEngine::startStep (int index, int stepSamples, const Deviation& d) noexcept

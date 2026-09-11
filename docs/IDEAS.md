@@ -19,13 +19,13 @@ every step, ranked by distinctness against what exists, cost, and fun:
 1. **Faint** (tape stop; Blooper Stopper, Effectrix Vinyl, Glitch Tape
    Stop): each step decelerates to a halt within its step, pitch falling
    with it. Decay = how fast it stops. Cheap (a rate ramp on the voice).
-2. **Rattle** (Blooper Stutter, Tensor Rand, Effectrix Scratchloop): a
+2. **Rattle** (shipped 2026-09-10) (Blooper Stutter, Tensor Rand, Effectrix Scratchloop): a
    tiny slice of the step, 10 to 60 ms, repeated for the whole step, a
    buzz roll. Unlike Tremor it needs no input. Decay = slice length.
-3. **Mirror**: every step's material backwards, swelling attacks. Direction
+3. **Mirror** (shipped 2026-09-10): every step's material backwards, swelling attacks. Direction
    reverses the order and Chaos reverses a step now and then; this is all
    of them, all the time. No knob.
-4. **Miasma** (Microcosm Haze, Particle density): each step as a cloud of
+4. **Miasma** (shipped 2026-09-10) (Microcosm Haze, Particle density): each step as a cloud of
    grains from random points in its material, a blur rather than Trance's
    ordered stretch. Decay = density. Pairs with Wraith.
 5. **Levitate** (Microcosm Arp): each step as a rising arpeggio of itself,

@@ -98,7 +98,7 @@ disagree with what is written here, this wins.
   CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between.
   Four even bands under the rule (Roy, 2026-09-10, after trying the bar
   in the middle and at the foot): the MODE bar (Teder's segmented toggle,
-  GOLEM / WRAITH / TRANCE / LEGION / TREMOR, Haunt second because it is
+  GOLEM / WRAITH / TRANCE / LEGION / TREMOR / RATTLE / MIRROR / MIASMA, Haunt second because it is
   Roy's favourite) first, at y 100, with the hover hint and the rolled dice
   character on the strip directly under it; the hero
   row Threshold, Time (+SYNC and BAR diamonds), Steps, Blend at 202; the
@@ -147,6 +147,25 @@ expected, three notes.
    instrument and the room, not the patch; the dice touches only what
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
+
+## Three more modes from the survey (2026-09-10)
+
+Roy picked Rattle, Mirror and Miasma from the survey's candidates. Eight
+modes on the bar now. **Rattle** loops Decay's 10 to 60 ms of each step
+for the whole step, a buzz roll that needs no input (unlike Tremor);
+proven by counting the envelope's dips at every join, 21 in 200 ms for a
+10 ms slice, 5 in 300 ms for a 60 ms slice, none for Golem. **Mirror**
+plays every step backwards (a two-tone note comes out last tone first).
+**Miasma** is the grain player with its head scattered: every grain spawns
+somewhere random in the material and the phase search is off, Decay the
+grain from 10 to 80 ms; both tones of a two-tone note hang in the cloud
+late in the step. All three export. The dice's characters weight them.
+On the plate: the bar is 600 wide for eight cells; Decay's caption goes
+red in Rattle and Miasma and reads "12 ms slice" or "40 ms grains"; the
+dybbuk trembles finely in Rattle (the sounding limb hardest, the glass
+hatching jittering), curls its limbs back and writhes in reverse in
+Mirror, and drifts a haze of faint motes around itself in Miasma,
+densest by the sounding limb.
 
 ## Fills dims while it can do nothing (2026-09-10)
 

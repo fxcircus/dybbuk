@@ -243,6 +243,9 @@ Roy's names, in the plate's register, on Teder's segmented toggle:
 | **LEGION** (Orchestral) | three voices: unison, up and down by Pitch's interval (octaves at zero, since a few cents of chorus could not be heard); the extra two come and go | Pitch = the interval, not a transpose |
 | **WRAITH** (Shoegaze) | the material plays whole, then its last moment is frozen as a held grain that keeps sounding under the steps that follow, up to four stacked, each fading 18 dB over Decay's share of eight ticks | Decay = how long a haunting lasts |
 | **TREMOR** (MKII Env) | while the input is over the threshold the current step is held and ratcheted, then the pattern carries on | Fills = how densely it ratchets (the scramble is off in this mode) |
+| **RATTLE** (Blooper Stutter, Tensor Rand) | a slice of the step, 10 to 60 ms, looped for the whole step: a buzz roll | Decay = the slice |
+| **MIRROR** | every step's material backwards; Chaos's reverse flips one forward now and then | none |
+| **MIASMA** (Microcosm Haze, Particle density) | a cloud of grains from anywhere in the material, for the whole step; the grain player's scatter, no phase search | Decay = the grain, 10 to 80 ms |
 
 Also in this pass: **Bar**, a toggle beside Sync: synced, the pattern
 restarts from its first step on every bar line, even one that falls

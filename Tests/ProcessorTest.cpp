@@ -571,6 +571,9 @@ void readouts()
         { params::id::mode, 0.0f, "Golem" },
         { params::id::mode, 1.0f, "Wraith" },
         { params::id::mode, 4.0f, "Tremor" },
+        { params::id::mode, 5.0f, "Rattle" },
+        { params::id::mode, 6.0f, "Mirror" },
+        { params::id::mode, 7.0f, "Miasma" },
         { params::id::barreset, 1.0f, "On" },
         { params::id::barreset, 0.0f, "Off" },
         { params::id::fills, 0.0f, "Off" },
@@ -976,7 +979,7 @@ void ordering()
         check ("every parameter is automatable", notAutomatable.isEmpty(), notAutomatable.isEmpty() ? "all 19" : notAutomatable.trim());
         check ("the stepped ones are discrete", notDiscrete.isEmpty(), notDiscrete.isEmpty() ? "mode, direction, steps, pitch, the switches" : notDiscrete.trim());
         if (auto* mode = p.apvts.getParameter (params::id::mode))
-            check ("Mode reports its five steps", mode->getNumSteps() == 5 && mode->getAllValueStrings().size() == 5,
+            check ("Mode reports its eight steps", mode->getNumSteps() == 8 && mode->getAllValueStrings().size() == 8,
                    juce::String (mode->getNumSteps()) + " steps: " + mode->getAllValueStrings().joinIntoString (", "));
     }
 

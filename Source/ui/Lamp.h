@@ -51,8 +51,11 @@ public:
     // changes its bearing to match, easing between bearings rather than
     // snapping: Trance stretches the limbs, Legion splits every tip into a
     // fan of bulbs, Wraith leaves a ghost of each limb that sounded, Tremor
-    // gives the ember a tremor and the sounding limb a twitch.
-    enum Mode { golem = 0, wraith, trance, legion, tremor, kModeCount };   // mirrors BurstEngine::Mode
+    // gives the ember a tremor and the sounding limb a twitch, Rattle sets
+    // every limb trembling along its length, Mirror curls the limbs the
+    // other way and runs the writhe backwards, Miasma hangs a haze of ink
+    // around the ring and thins the limbs to a cloud.
+    enum Mode { golem = 0, wraith, trance, legion, tremor, rattle, mirror, miasma, kModeCount };   // mirrors BurstEngine::Mode
     void setMode (int mode) noexcept { modeWanted = juce::jlimit (0, kModeCount - 1, mode); }
 
     void tick();
@@ -111,6 +114,20 @@ private:
     // Tremor: where the ember has shaken to this frame, and how hard the
     // sounding limb is twitching.
     float tremorX = 0.0f, tremorY = 0.0f, twitch = 0.0f;
+
+    // Rattle: the phase of the fine tremble along every limb, advancing
+    // every frame, and where the ember's hatching has jittered to.
+    float tremble = 0.0f;
+    float hatchJitterX = 0.0f, hatchJitterY = 0.0f;
+
+    // Miasma: a haze of ink dots drifting around the ring. Each has its own
+    // bearing, radius and pace, set once; the frame only moves them.
+    struct Mote
+    {
+        float angle = 0.0f, radius = 40.0f, pace = 0.0f, bob = 0.0f, size = 1.0f;
+    };
+    static constexpr int kMotes = 24;
+    std::array<Mote, kMotes> motes {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Lamp)
 };

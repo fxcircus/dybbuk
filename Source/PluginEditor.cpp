@@ -2,6 +2,8 @@
 
 #include "dsp/TimeMap.h"
 
+#include <iterator>
+
 namespace
 {
     // Layout, read off the canvas. The plate is a fixed sheet; nothing here is
@@ -77,9 +79,10 @@ namespace
     static_assert (kMidX[1] + kMidKnobBoxW / 2 <= kCentreX - kLampSize / 2 - 30,
                    "the dybbuk-row knobs clear the dybbuk's box");
 
-    // The mode bar: five cells, sized so GOLEM sits comfortably in its
-    // cell at the caption size.
-    constexpr int kModeW = 440, kModeH = 28;
+    // The mode bar: eight cells, sized so MIASMA (the widest name) sits
+    // comfortably in its cell at the caption size. It spans 150..750, well
+    // inside the content band (76..824) and the hint strip under it.
+    constexpr int kModeW = 600, kModeH = 28;
 
     // The Bar diamond hangs directly under the Sync diamond beside Time.
     constexpr int kSyncX = kHeroX[1] + 46, kSyncY = kHeroY - 12;
@@ -275,12 +278,13 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     outFader->setBounds (canvasW - kFaderW - 8, kRuleY + 6, kFaderW, canvasH - kRuleY - 18);
 
     // --- the mode bar, in the band under the rule ---------------------------
-    // No caption: the five names are the whole control. It is bound to the
+    // No caption: the eight names are the whole control. It is bound to the
     // Mode choice, so the cells are the parameter's own options in order.
     // Centred between the rule and the hero row's top ticks, well inside
     // the faders' caps at either edge.
     modeToggle = std::make_unique<ModeToggle> (param (params::id::mode),
-                                               juce::StringArray { "GOLEM", "WRAITH", "TRANCE", "LEGION", "TREMOR" });
+                                               juce::StringArray { "GOLEM", "WRAITH", "TRANCE", "LEGION", "TREMOR",
+                                                                   "RATTLE", "MIRROR", "MIASMA" });
     plate.addAndMakeVisible (*modeToggle);
     modeToggle->setBounds (kCentreX - kModeW / 2, kModeY - kModeH / 2, kModeW, kModeH);
 
@@ -407,9 +411,10 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     // Mode changes what three of the knobs mean, and the captions stay put
     // (a caption that changes is a knob you cannot find again), so the
     // readout says it instead: Decay is how much of a step a haunting keeps
-    // sounding, in steps; Pitch is Legion's interval; Fills is Tremor's
-    // ratchet count. The scales are the engine's own (raw / 100), so the
-    // number printed is the number the engine uses.
+    // sounding, in steps, Rattle's slice and Miasma's grain, in ms; Pitch
+    // is Legion's interval; Fills is Tremor's ratchet count. The scales are
+    // the engine's own (raw / 100), so the number printed is the number the
+    // engine uses.
     auto mode = [this] { return juce::roundToInt (raw (params::id::mode)); };
     lengthKnob->setValueTextProvider ([this, mode]
     {
@@ -426,6 +431,18 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
                 // Mirrors BurstEngine::hauntDecayPerTick: one to kWraithMaxTicks (8) ticks.
                 const int kept = 1 + juce::roundToInt (7.0f * v * 0.01f);
                 return "lasts " + juce::String (kept) + (kept == 1 ? " step" : " steps");
+            }
+            case Lamp::rattle:
+            {
+                // Mirrors the engine's rattleSlice: 10 ms at the floor, 60 at the top.
+                const float dec = juce::jlimit (0.0f, 1.0f, (v * 0.01f - 0.05f) / 0.95f);
+                return juce::String (juce::roundToInt (10.0f + 50.0f * dec)) + " ms slice";
+            }
+            case Lamp::miasma:
+            {
+                // Mirrors the engine's grain length: 10 ms at the floor, 80 at the top.
+                const float dec = juce::jlimit (0.0f, 1.0f, (v * 0.01f - 0.05f) / 0.95f);
+                return juce::String (juce::roundToInt (10.0f + 70.0f * dec)) + " ms grains";
             }
             default: return juce::String (juce::roundToInt (v)) + " %";
         }
@@ -552,6 +569,8 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
     {
         if (mode == Lamp::trance) return "How many times slower the material plays, from its start; the step holds what fits.";
         if (mode == Lamp::wraith)  return "How many steps a frozen moment keeps sounding, 1 to 8.";
+        if (mode == Lamp::rattle)  return "The slice of the step that loops, 10 to 60 ms.";
+        if (mode == Lamp::miasma)  return "The grain the cloud is made of, 10 to 80 ms.";
         return "How much of each step sounds before it is cut.";
     }
     if (c == fadeKnob.get())      return "Level a step keeps every play, like a delay's feedback. Under Inf a step fades and leaves the pattern.";
@@ -574,7 +593,11 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
             "Every step played slower from its start, at its own pitch; Decay how much.",
             "Every step sung three times over, Pitch the interval.",
             "Playing over the threshold holds and ratchets the current step.",
+            "A slice of every step looped for the whole step, a buzz roll; Decay the slice.",
+            "Every step backwards.",
+            "Every step as a cloud of grains from anywhere in its material; Decay the grain.",
         };
+        static_assert (std::size (cells) == (size_t) Lamp::kModeCount, "one sentence per player");
         const int cell = modeToggle->cellAt (modeToggle->getLocalPoint (&plate, platePoint).toFloat());
         return cell >= 0 && cell < Lamp::kModeCount ? cells[cell] : "";
     }
@@ -596,7 +619,9 @@ juce::String DybbukEditor::hintUnderMouse() const
     {
         // The test hook: the named control, probed at its centre, or a
         // mode cell probed in its cell.
-        static const juce::StringArray modeNames { "GOLEM", "WRAITH", "TRANCE", "LEGION", "TREMOR" };
+        static const juce::StringArray modeNames { "GOLEM", "WRAITH", "TRANCE", "LEGION", "TREMOR",
+                                                   "RATTLE", "MIRROR", "MIASMA" };
+        jassert (modeNames.size() == Lamp::kModeCount);
         if (const int cell = modeNames.indexOf (pinnedHint); cell >= 0)
         {
             const auto b = modeToggle->getBounds();
@@ -685,7 +710,8 @@ void DybbukEditor::timerCallback()
     {
         lastMode = mode;
         // The knob a mode reinterprets wears a red caption while it does.
-        lengthKnob->setAccent (mode == (int) Lamp::trance || mode == (int) Lamp::wraith);
+        lengthKnob->setAccent (mode == (int) Lamp::trance || mode == (int) Lamp::wraith
+                               || mode == (int) Lamp::rattle || mode == (int) Lamp::miasma);
         pitchKnob->setAccent (mode == (int) Lamp::legion);
         fillsKnob->setAccent (mode == (int) Lamp::tremor);
         for (auto* knob : { lengthKnob.get(), pitchKnob.get(), fillsKnob.get() })

@@ -47,6 +47,14 @@ namespace
     constexpr float kTrailAgePerFrame = 0.985f;      // ... and fades on its own once the pattern stops
     constexpr float kTrailDrift = 0.35f;             // ... drifting back a third of a slot as it goes
     constexpr float kTremorPx = 2.2f;                // Tremor: how far the ember shakes with the gate open
+    constexpr float kTrembleAmp = 1.5f;              // Rattle: the tremble's width at a limb's tip, in px
+    constexpr float kTrembleSounding = 1.2f;         // ... and how much more the sounding one has
+    constexpr float kTrembleCycles = 4.5f;           // ... waves along a limb
+    constexpr float kTrembleRate = 2.3f;             // ... radians per frame: a buzz, not a wave
+    constexpr float kMirrorCurl = 0.55f;             // Mirror: how far the tip has turned back, radians
+    constexpr float kMoteInnerR = 35.0f, kMoteOuterR = 60.0f;   // Miasma: the band the haze drifts in
+    constexpr float kMoteBob = 2.5f;                 // ... how far a mote wanders in and out
+    constexpr float kMiasmaThin = 0.35f;             // ... how translucent the limbs go
 
     // Slot i of the ceiling, clockwise from twelve o'clock over the whole
     // circle: a limb's place depends on the ceiling, not on how many there are.
@@ -61,6 +69,18 @@ Lamp::Lamp()
 {
     setInterceptsMouseClicks (false, false);
     grow.fill (1.0f);
+
+    // The haze is laid out once, all over the ring and at every pace, half
+    // of it drifting against the clock, so it never settles into a pattern.
+    juce::Random seed (0x4d1a5); // the same cloud in every window
+    for (auto& m : motes)
+    {
+        m.angle = seed.nextFloat() * juce::MathConstants<float>::twoPi;
+        m.radius = kMoteInnerR + (kMoteOuterR - kMoteInnerR) * seed.nextFloat();
+        m.pace = (0.004f + 0.010f * seed.nextFloat()) * (seed.nextBool() ? 1.0f : -1.0f);
+        m.bob = seed.nextFloat() * juce::MathConstants<float>::twoPi;
+        m.size = 0.8f + 0.8f * seed.nextFloat();
+    }
 }
 
 void Lamp::setPattern (int stepCount, int currentStep, int ticks) noexcept
@@ -208,6 +228,9 @@ void Lamp::tick()
     const float tranceMix = modeMix[(size_t) trance];
     const float wraithMix = modeMix[(size_t) wraith];
     const float tremorMix = modeMix[(size_t) tremor];
+    const float rattleMix = modeMix[(size_t) rattle];
+    const float mirrorMix = modeMix[(size_t) mirror];
+    const float miasmaMix = modeMix[(size_t) miasma];
 
     // Wraith: on every tick the limb that has just started sounding leaves a
     // ghost of itself; the older ghosts step back a generation.
@@ -256,6 +279,41 @@ void Lamp::tick()
         ringDirty = true;
     }
 
+    // Rattle: the tremble buzzes along every limb, its phase jumping most
+    // of a cycle a frame so it reads as a vibration rather than a wave, and
+    // the ember's hatching jitters a pixel with it. Still once frozen.
+    if (rattleMix > 0.01f && ! bypassed && frost < 1.0f)
+    {
+        tremble += kTrembleRate;
+        if (tremble > juce::MathConstants<float>::twoPi * 64.0f)
+            tremble -= juce::MathConstants<float>::twoPi * 64.0f;
+        hatchJitterX = (float) (rng.nextInt (3) - 1) * rattleMix;
+        hatchJitterY = (float) (rng.nextInt (3) - 1) * rattleMix;
+        ringDirty = true;
+    }
+    else if (hatchJitterX != 0.0f || hatchJitterY != 0.0f)
+    {
+        hatchJitterX = hatchJitterY = 0.0f;
+        ringDirty = true;
+    }
+
+    // Miasma: the haze drifts, each mote at its own pace around the ring
+    // and wandering in and out a little, never still while it shows.
+    if (miasmaMix > 0.01f && ! bypassed)
+    {
+        const float still = 1.0f - 0.85f * frost; // the frost slows the cloud almost to a stop
+        for (auto& m : motes)
+        {
+            m.angle += m.pace * still;
+            if (m.angle > juce::MathConstants<float>::twoPi)
+                m.angle -= juce::MathConstants<float>::twoPi;
+            else if (m.angle < 0.0f)
+                m.angle += juce::MathConstants<float>::twoPi;
+            m.bob += 0.03f * still;
+        }
+        ringDirty = true;
+    }
+
     // The ring's layout follows the Steps knob. Ease most of the way, then
     // land exactly so the limbs never sit a hair off their slots for want of
     // a last step; the same for the shift after a replacement.
@@ -301,11 +359,14 @@ void Lamp::tick()
     // the frost has set.
     if ((count > 0 || collapse > 0.0f || (gate && ! bypassed)) && frost < 1.0f)
     {
-        // Stretched (Trance), the limbs row slower as well as wider.
+        // Stretched (Trance), the limbs row slower as well as wider; reflected
+        // (Mirror), they row the other way.
         writhe += kWritheRate * (1.0f + 1.5f * pulse + 3.0f * warmth) * (1.0f - frost)
-                  * (1.0f - kTranceSlow * tranceMix);
+                  * (1.0f - kTranceSlow * tranceMix) * (1.0f - 2.0f * mirrorMix);
         if (writhe > juce::MathConstants<float>::twoPi * 64.0f)
             writhe -= juce::MathConstants<float>::twoPi * 64.0f;
+        else if (writhe < -juce::MathConstants<float>::twoPi * 64.0f)
+            writhe += juce::MathConstants<float>::twoPi * 64.0f;
         ringDirty = true;
     }
 
@@ -352,6 +413,9 @@ void Lamp::paint (juce::Graphics& g)
     const float legionMix = modeMix[(size_t) legion];
     const float wraithMix = modeMix[(size_t) wraith];
     const float tremorMix = modeMix[(size_t) tremor];
+    const float rattleMix = modeMix[(size_t) rattle];
+    const float mirrorMix = modeMix[(size_t) mirror];
+    const float miasmaMix = modeMix[(size_t) miasma];
 
     // The fixture: sixteen rays around the housing, fainter while there is
     // nothing to hold.
@@ -394,12 +458,13 @@ void Lamp::paint (juce::Graphics& g)
 
         g.setColour (ember.withAlpha (alpha));
         const float spacing = 5.0f;
+        // Rattling, the hatching jitters a pixel inside the glass; the
+        // outline holds, so it is the light that buzzes, not the lamp.
+        const float gx = glass.getX() + hatchJitterX, gy = glass.getY() + hatchJitterY;
         for (float d = -r * 2.0f; d < r * 4.0f; d += spacing)
         {
-            g.drawLine (glass.getX() + d, glass.getY(), glass.getX() + d - r * 2.0f,
-                        glass.getY() + r * 2.0f, 1.6f);
-            g.drawLine (glass.getX() + d - r * 2.0f, glass.getY(), glass.getX() + d,
-                        glass.getY() + r * 2.0f, 1.6f);
+            g.drawLine (gx + d, gy, gx + d - r * 2.0f, gy + r * 2.0f, 1.6f);
+            g.drawLine (gx + d - r * 2.0f, gy, gx + d, gy + r * 2.0f, 1.6f);
         }
     }
 
@@ -446,14 +511,29 @@ void Lamp::paint (juce::Graphics& g)
         const float wRoot = (4.4f + 1.8f * lv + (sounding ? 0.8f : 0.0f)) * (0.6f + 0.4f * growth);
         const float wTip = tipR;
 
+        // Rattling, a fine fast wave rides on the slow one, growing toward
+        // the tip like it, hardest on the sounding limb.
+        const float trembleAmp = rattleMix * kTrembleAmp * (sounding ? 1.0f + kTrembleSounding : 1.0f);
+        // Reflected, the limb curls: its heading turns steadily along its
+        // length, every limb the same way round, so the tip ends up facing
+        // back toward the housing and the whole creature reads as spun.
+        const float curl = kMirrorCurl * mirrorMix;
+
         juce::Point<float> spine[kSpineSegments + 1];
         float width[kSpineSegments + 1];
         for (int k = 0; k <= kSpineSegments; ++k)
         {
             const float t = (float) k / (float) kSpineSegments;
             // The wave grows toward the tip so the root stays anchored.
-            const float wobble = amp * t * t * std::sin (juce::MathConstants<float>::twoPi * 1.15f * t + phase + writheAt * pace);
-            spine[k] = c + dir * (kTentacleRoot + reach * t) + perp * wobble;
+            const float wobble = amp * t * t * std::sin (juce::MathConstants<float>::twoPi * 1.15f * t + phase + writheAt * pace)
+                                 + trembleAmp * t * std::sin (juce::MathConstants<float>::twoPi * kTrembleCycles * t + tremble + phase);
+            // The curl bends the ray itself: the point at t sits where a
+            // heading that has turned by curl * t * t by then would put it.
+            const float turn = curl * t * t;
+            const juce::Point<float> along (dir.x * std::cos (turn) - dir.y * std::sin (turn),
+                                            dir.x * std::sin (turn) + dir.y * std::cos (turn));
+            const juce::Point<float> across (-along.y, along.x);
+            spine[k] = c + dir * kTentacleRoot + along * (reach * t) + across * wobble;
             width[k] = wRoot * (1.0f - t) + wTip * t;
         }
 
@@ -555,11 +635,13 @@ void Lamp::paint (juce::Graphics& g)
 
     // Each limb at its own slot of the ceiling. After a replacement the older
     // ones are still sliding back from a slot on; the newest grows in place.
+    // In a miasma the limbs thin to a cloud: the ring shows through them.
+    const float limbFade = 1.0f - kMiasmaThin * miasmaMix;
     for (int i = 0; i < count; ++i)
     {
         const auto idx = (size_t) i;
         const float slot = (float) i + (i < count - 1 ? shift : 0.0f);
-        drawTentacle (slot, shownCeiling, level[idx], gain[idx], i == current, 1.0f, 1.0f, i, writhe, grow[idx]);
+        drawTentacle (slot, shownCeiling, level[idx], gain[idx], i == current, limbFade, 1.0f, i, writhe, grow[idx]);
     }
 
     // The limb being written: a nub pushing out of the housing at the slot
@@ -578,4 +660,30 @@ void Lamp::paint (juce::Graphics& g)
         for (int i = 0; i < ghostCount; ++i)
             drawTentacle ((float) i, shownCeiling, ghostLevel[(size_t) i], ghostGain[(size_t) i], false,
                           collapse, collapse, i, writhe, 1.0f);
+
+    // Miasma: the haze, over everything, in the faded ink at low alpha: a
+    // cloud of grains hanging about the ring, thickest about the limb that
+    // is sounding, since that is where the grains are coming from.
+    if (miasmaMix > 0.01f)
+    {
+        const bool haveSounding = current >= 0 && current < count;
+        const float soundingAngle = haveSounding
+                                        ? juce::MathConstants<float>::twoPi * ((float) current + (current < count - 1 ? shift : 0.0f))
+                                              / juce::jmax (1.0f, shownCeiling)
+                                        : 0.0f;
+        for (const auto& m : motes)
+        {
+            float near = 0.45f;
+            if (haveSounding)
+            {
+                const float cosD = std::cos (m.angle - soundingAngle);
+                near = 0.25f + 0.75f * juce::jmax (0.0f, cosD) * juce::jmax (0.0f, cosD);
+            }
+            const float rr = m.radius + kMoteBob * std::sin (m.bob);
+            const juce::Point<float> at (fixture.x + std::sin (m.angle) * rr, fixture.y - std::cos (m.angle) * rr);
+            const float sz = m.size * (1.0f + 0.3f * pulse * near);
+            g.setColour (p.faded.withAlpha ((0.22f + 0.5f * near) * miasmaMix * dim));
+            g.fillEllipse (at.x - sz, at.y - sz, sz * 2.0f, sz * 2.0f);
+        }
+    }
 }

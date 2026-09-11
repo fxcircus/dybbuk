@@ -9,6 +9,7 @@
 #include "../Source/PluginProcessor.h"
 
 #include <cstdio>
+#include <iterator>
 
 namespace
 {
@@ -136,8 +137,9 @@ int main()
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
             }
         };
-        const char* modeNames[] = { "golem", "wraith", "trance", "legion", "tremor" };
-        for (int m = 0; m < 5; ++m)
+        const char* modeNames[] = { "golem", "wraith", "trance", "legion", "tremor", "rattle", "mirror", "miasma" };
+        static_assert (std::size (modeNames) == (size_t) Lamp::kModeCount, "one frame per player");
+        for (int m = 0; m < Lamp::kModeCount; ++m)
         {
             setParam (processor, params::id::mode, (float) m);
             playFor (1.5);
@@ -145,10 +147,10 @@ int main()
             snapAfter ("editor_snapshot_mode_" + juce::String (modeNames[m]) + ".png", 30);
 
             // The hint line, pinned on the plate without a mouse: Decay's
-            // sentence in Wraith, where it means something else than in
-            // Golem, printed in the strip under the knob row. This frame
+            // sentence in Miasma, where it means something else than in
+            // Golem, printed in the strip under the mode bar. This frame
             // reviews that it fits the strip and touches no readout.
-            if (m == 3)
+            if (m == Lamp::miasma)
                 if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
                 {
                     d->showHintForTests ("DECAY");

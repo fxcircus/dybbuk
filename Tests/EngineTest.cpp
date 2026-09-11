@@ -1348,7 +1348,7 @@ void modesExport()
     BurstEngine::PatternCopy copy;
     check ("a four-step pattern to export", engine.copyPattern (copy) && copy.steps.size() == 4, juce::String ((int) copy.steps.size()));
 
-    const char* names[] = { "Golem", "Wraith", "Trance", "Legion", "Tremor" };
+    const char* names[] = { "Golem", "Wraith", "Trance", "Legion", "Tremor", "Rattle", "Mirror", "Miasma" };
     for (int m = 0; m < BurstEngine::kModeCount; ++m)
     {
         BurstEngine::RenderSettings rs;
@@ -1373,6 +1373,114 @@ void modesExport()
     }
 }
 
+
+// A two-tone note: 220 Hz for its first 40 ms, 880 Hz for its last 40 ms,
+// so which part of the material a mode plays, and in what order, can be read
+// off the output.
+std::vector<float> twoToneInput (double sr)
+{
+    return burstInput (sr, 2.6, { { 0.10, 0.040, 220.0, 0.5 }, { 0.14, 0.040, 880.0, 0.5 } });
+}
+
+// How many times the envelope dips under a third of its peak inside a
+// window: a looped slice dips at every join, a note played whole does not.
+int envelopeDips (const std::vector<float>& x, int start, int n, double sr)
+{
+    const float a = 1.0f - std::exp (-1.0f / (0.003f * (float) sr));   // slower than a 220 Hz half period, faster than a join
+    float env = 0.0f, peak = 0.0f;
+    std::vector<float> e ((size_t) n);
+    for (int i = 0; i < n; ++i)
+    {
+        const float r = std::abs (x[(size_t) (start + i)]);
+        env = juce::jmax (r, env + (r - env) * a);
+        e[(size_t) i] = env;
+        peak = juce::jmax (peak, env);
+    }
+    int dips = 0;
+    bool low = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const bool isLow = e[(size_t) i] < peak * 0.33f;
+        if (isLow && ! low) ++dips;
+        low = isLow;
+    }
+    return dips;
+}
+
+void rattle()
+{
+    std::printf ("rattle: a slice of the step looped for the whole step\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 2.6, { { 0.10, 0.080, 220.0, 0.5 } });
+    auto p = wetParams();
+    p.mode = BurstEngine::Mode::rattle;
+    p.stepSeconds = 0.4;
+    p.length01 = 0.05f;   // a 10 ms slice: a 100 Hz buzz
+    const auto r = runBurst (in, p, sr, 128);
+    const auto on = onsetsOf (r.out, sr);
+    const int t0 = on.empty() ? 0 : on[0].sample;
+    const double late = rmsOf (r.out, t0 + (int) (0.30 * sr), (int) (0.06 * sr));
+    const int dips = envelopeDips (r.out, t0 + (int) (0.05 * sr), (int) (0.2 * sr), sr);
+    check ("the buzz lasts the whole step", ! on.empty() && late > 0.05, "rms " + juce::String (late, 3) + " at 300 ms of a 400 ms step");
+    check ("and is the slice looped: a dip at every join", dips >= 15 && dips <= 25,
+           juce::String (dips) + " dips in 200 ms (a 10 ms slice makes 20)");
+
+    auto golem = wetParams();
+    golem.stepSeconds = 0.4;
+    const auto g = runBurst (in, golem, sr, 128);
+    const auto ong = onsetsOf (g.out, sr);
+    const int g0 = ong.empty() ? 0 : ong[0].sample;
+    check ("Golem plays the note whole, no joins", envelopeDips (g.out, g0 + (int) (0.005 * sr), (int) (0.06 * sr), sr) == 0,
+           juce::String (envelopeDips (g.out, g0 + (int) (0.005 * sr), (int) (0.06 * sr), sr)) + " dips");
+
+    auto wide = wetParams();
+    wide.mode = BurstEngine::Mode::rattle;
+    wide.stepSeconds = 0.4;
+    wide.length01 = 1.0f;   // a 60 ms slice
+    const auto w = runBurst (in, wide, sr, 128);
+    const auto onw = onsetsOf (w.out, sr);
+    const int w0 = onw.empty() ? 0 : onw[0].sample;
+    const int dipsW = envelopeDips (w.out, w0 + (int) (0.05 * sr), (int) (0.3 * sr), sr);
+    check ("Decay sets the slice: 60 ms makes far fewer joins", dipsW >= 3 && dipsW <= 7, juce::String (dipsW) + " dips in 300 ms (a 60 ms slice makes 5)");
+}
+
+void mirror()
+{
+    std::printf ("mirror: every step backwards\n");
+    const double sr = 48000.0;
+    const auto in = twoToneInput (sr);
+    auto p = wetParams();
+    p.mode = BurstEngine::Mode::mirror;
+    const auto r = runBurst (in, p, sr, 128);
+    const auto on = onsetsOf (r.out, sr, (int) (1.0 * sr));
+    const int t0 = on.empty() ? 0 : on[0].sample, n = (int) (0.03 * sr);
+    const double firstHigh = goertzelAmp (r.out, t0, n, 880.0, sr), firstLow = goertzelAmp (r.out, t0, n, 220.0, sr);
+    const double laterLow = goertzelAmp (r.out, t0 + (int) (0.045 * sr), n, 220.0, sr);
+    check ("the last tone comes first", ! on.empty() && firstHigh > firstLow * 3.0 && laterLow > 0.05,
+           "first 30 ms: 880 Hz " + juce::String (firstHigh, 3) + ", 220 Hz " + juce::String (firstLow, 3) + "; 220 Hz later " + juce::String (laterLow, 3));
+}
+
+void miasma()
+{
+    std::printf ("miasma: a cloud of grains from anywhere in the material\n");
+    const double sr = 48000.0;
+    const auto in = twoToneInput (sr);
+    auto p = wetParams();
+    p.mode = BurstEngine::Mode::miasma;
+    p.stepSeconds = 0.4;
+    p.length01 = 0.5f;
+    const auto r = runBurst (in, p, sr, 128, [] (BurstEngine& e, BurstEngine::Params&, double t) { if (t == 0.0) e.seedForTests (9); });
+    const auto on = onsetsOf (r.out, sr);
+    const int t0 = on.empty() ? 0 : on[0].sample;
+    // Late in the step both tones are still in the air: the cloud draws
+    // from the whole note, not from where a read head happens to be.
+    const int from = t0 + (int) (0.25 * sr), n = (int) (0.12 * sr);
+    const double low = goertzelAmp (r.out, from, n, 220.0, sr), high = goertzelAmp (r.out, from, n, 880.0, sr);
+    check ("both tones hang in the cloud late in the step", ! on.empty() && low > 0.02 && high > 0.02,
+           "220 Hz " + juce::String (low, 3) + ", 880 Hz " + juce::String (high, 3) + " at 250..370 ms");
+    check ("and it fills the step", rmsOf (r.out, from, n) > 0.05 && allFinite (r.out), "rms " + juce::String (rmsOf (r.out, from, n), 3));
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -1382,6 +1490,7 @@ const Scenario kScenarios[] = {
     { "hostile", hostile },   { "pitch", pitch },     { "glue", glueTest },       { "spread", spreadTest },
     { "bar", barreset },      { "trance", trance },   { "legion", legion },       { "wraith", wraith },
     { "tremor", tremor },       { "modesexport", modesExport },
+    { "rattle", rattle },     { "mirror", mirror },   { "miasma", miasma },
 };
 
 } // namespace

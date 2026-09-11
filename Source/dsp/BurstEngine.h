@@ -40,8 +40,11 @@ public:
     //   legion   three voices, Pitch the interval between them, coming and going
     //   wraith    each step leaves a frozen moment that keeps sounding under the next ones
     //   seize    while the input is over the threshold, the current step is held and ratcheted
-    enum class Mode { golem = 0, wraith, trance, legion, tremor };   // Wraith second: Roy's favourite, beside the default
-    static constexpr int kModeCount = 5;
+    //   rattle   a slice of the step, 10 to 60 ms, looped for the whole step: a buzz roll
+    //   mirror   every step's material backwards
+    //   miasma   a cloud of grains from anywhere in the material
+    enum class Mode { golem = 0, wraith, trance, legion, tremor, rattle, mirror, miasma };   // Wraith second: Roy's favourite, beside the default
+    static constexpr int kModeCount = 8;
 
     struct Params
     {
@@ -193,6 +196,7 @@ private:
         int age[2] { 0, 0 };
         float gain = 1.0f, rateMul = 1.0f;
         int left = 0;              // output samples still to play
+        bool scatter = false;      // Miasma: every grain spawns somewhere random in the material
         bool active() const noexcept { return data != nullptr && left > 0 && gain > 0.0f; }
         void begin (const float* d, int n, double headStart, double adv, int grainSize, int outSamples, Rng& rng) noexcept;
         float next (float rate, Rng& rng) noexcept;
@@ -205,6 +209,7 @@ private:
         Voice v[3];
         int voices = 0;
         Grains stretch;
+        int rattleLeft = 0;        // Rattle: output samples of buzz still to play; the slice restarts when it ends
         float panL = 1.0f, panR = 1.0f;
         bool sounding() const noexcept;
         void restart() noexcept;   // the ratchet: from the start again
