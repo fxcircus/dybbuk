@@ -1481,6 +1481,53 @@ void miasma()
     check ("and it fills the step", rmsOf (r.out, from, n) > 0.05 && allFinite (r.out), "rms " + juce::String (rmsOf (r.out, from, n), 3));
 }
 
+
+// A haunting is the only voice with no end of its own: it is fed by the
+// step clock and only stops when the clock decays it. So it must let go when
+// nothing is feeding it any more, or it hangs forever over every other mode
+// (Roy, playing it).
+void wraithRelease()
+{
+    std::printf ("wraith release: a haunting does not outlive what sustains it\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 6.0, kFour);
+
+    struct Case { bool leaveMode; const char* name; };
+    const Case cases[] = { { true,  "leaving Wraith lets the hauntings go" },
+                           { false, "and so does a pattern that empties inside it" } };
+    for (const auto& c : cases)
+    {
+        auto p = wetParams();
+        p.mode = BurstEngine::Mode::wraith;
+        p.stepSeconds = 0.3;
+        p.length01 = 1.0f;        // eight ticks of haunting
+        const auto r = runBurst (in, p, sr, 128, [&c] (BurstEngine&, BurstEngine::Params& q, double t) {
+            if (t >= 2.0)
+            {
+                // Empty the pattern, so nothing but a haunting can still be
+                // sounding, and in one case leave the mode as well.
+                q.feedback01 = 0.0f;
+                if (c.leaveMode)
+                    q.mode = BurstEngine::Mode::golem;
+            }
+        });
+        const double tail = rmsOf (r.out, (int) (5.0 * sr), (int) (1.0 * sr));
+        check (c.name, tail == 0.0, "rms over the last second is " + juce::String (tail, 9));
+    }
+
+    // And it is not a mute: in Wraith, with the pattern running, the gap
+    // after a step still has the moments before it in it.
+    auto p = wetParams();
+    p.mode = BurstEngine::Mode::wraith;
+    p.stepSeconds = 0.3;
+    p.length01 = 1.0f;
+    const auto r = runBurst (in, p, sr, 128);
+    const auto on = onsetsOf (r.out, sr);
+    const double gap = on.size() >= 2 ? rmsOf (r.out, on[1].sample + (int) (0.15 * sr), (int) (0.1 * sr)) : 0.0;
+    check ("a haunting still sounds through the gaps while Wraith holds it", gap > 0.02,
+           "rms in the gap after the second step is " + juce::String (gap, 4));
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -1490,6 +1537,7 @@ const Scenario kScenarios[] = {
     { "hostile", hostile },   { "pitch", pitch },     { "glue", glueTest },       { "spread", spreadTest },
     { "bar", barreset },      { "trance", trance },   { "legion", legion },       { "wraith", wraith },
     { "tremor", tremor },       { "modesexport", modesExport },
+    { "wraithrelease", wraithRelease },
     { "rattle", rattle },     { "mirror", mirror },   { "miasma", miasma },
 };
 

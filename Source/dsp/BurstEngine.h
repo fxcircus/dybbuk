@@ -149,8 +149,10 @@ private:
     // still gets two grains; the jitter that keeps two grains from combing.
     static constexpr float kGrainMs = 40.0f;
     static constexpr float kGrainJitterMs = 2.0f;
-    // Wraith: a moment lasts this many ticks at Decay full, one at Decay's floor.
+    // Wraith: a moment lasts this many ticks at Decay full, one at Decay's
+    // floor, and takes this long to let go once nothing sustains it.
     static constexpr int kWraithMaxTicks = 8;
+    static constexpr float kWraithReleaseMs = 250.0f;
     static constexpr float kWraithGain = 0.7f;
 
     // Feedback: a step's gain is multiplied by it every play, so 100 % keeps
@@ -231,6 +233,11 @@ private:
         void clear() noexcept;
         void spawn (const float* material, int len, double reached, int grainSize, float gain, float pl, float pr, Rng& rng) noexcept;
         void tick (float decayPerTick) noexcept;
+        // Let go: a haunting is fed by the step clock and has no end of its
+        // own, so when nothing is sustaining it any more (the player left
+        // Wraith, or the pattern emptied and the ticks stopped) it must
+        // release by itself or it hangs over everything that follows.
+        void release (float perSample) noexcept;
         void next (float rate, Rng& rng, float& l, float& r) noexcept;
     };
 
@@ -330,6 +337,7 @@ private:
     int capacity = 0;                       // samples per slice
     int preRollSamples = 0, fadeSamples = 1, holdOffSamples = 0;
     float aRelease = 0.0f, aBaseRise = 0.0f, aBaseFall = 0.0f;
+    float aWraithRelease = 0.0f;
 
     // One spare slot beyond the ceiling so capture never writes into a slice
     // the sequencer may be reading.

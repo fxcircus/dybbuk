@@ -150,6 +150,28 @@ expected, three notes.
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
 
+## A haunting that outlived its mode (2026-09-11)
+
+Roy, playing: in Wraith and then switching to another mode you can be left
+with a stuck frozen sound that continues in every other mode. Real, and
+found by ear rather than by the suite.
+
+The cause: a haunting is the only voice in the engine with no end of its
+own. `Haunts::tick` decays each layer and drops it, but it was called only
+inside `advance()` and only while the mode was Wraith, while
+`Haunts::next` played them unconditionally on every sample. Leaving Wraith
+froze their gain and they sounded forever. The same hang came from a
+second direction: an empty pattern stops calling `advance()` at all, so a
+pattern that died away inside Wraith (Feedback under Inf) left its
+hauntings hanging too. Only Clear stopped them.
+
+The fix is a release of their own: 250 ms to -60 dB per sample whenever
+nothing is sustaining them (`mode != wraith || count == 0`), so they let
+go rather than hang, and returning to Wraith simply stops the release.
+`EngineTest wraithrelease` measures 0.34 RMS three seconds after the
+transition before the fix and exactly nothing after, and checks that the
+gaps between steps still sing while Wraith holds them.
+
 ## The preset bank, redone for the modes (2026-09-11)
 
 Roy: Init stays as it is, and every mode needs an interesting starting

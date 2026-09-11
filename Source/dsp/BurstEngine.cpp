@@ -228,6 +228,18 @@ void BurstEngine::Haunts::tick (float decayPerTick) noexcept
     }
 }
 
+void BurstEngine::Haunts::release (float perSample) noexcept
+{
+    for (int k = 0; k < kMax; ++k)
+    {
+        if (layer[k].data == nullptr)
+            continue;
+        layer[k].gain *= perSample;
+        if (layer[k].gain < 0.0005f)
+            layer[k] = {};
+    }
+}
+
 void BurstEngine::Haunts::next (float rate, Rng& rng, float& l, float& r) noexcept
 {
     for (int k = 0; k < kMax; ++k)
@@ -257,6 +269,8 @@ void BurstEngine::prepare (double sampleRate, int maxBlockSize)
     const auto coeff = [this] (float ms) { return 1.0f - std::exp (-1.0f / (ms * 0.001f * (float) sr)); };
     aRelease = coeff (kReleaseMs);
     aBaseRise = coeff (kBaselineRiseMs);
+    // A per-sample multiplier that reaches -60 dB in kWraithReleaseMs.
+    aWraithRelease = std::pow (0.001f, 1.0f / (kWraithReleaseMs * 0.001f * (float) sr));
     aBaseFall = coeff (kBaselineFallMs);
 
     for (auto* s : { &inGain, &outGain, &wetMix, &dryMix, &rate, &glueAmount })
@@ -878,6 +892,11 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
                 wetR = w * voice.panR;
             }
         }
+        // Nothing sustains a haunting once the mode has moved on or the
+        // pattern has emptied: there are no more ticks to decay it, so it
+        // lets go here instead of hanging over every mode that follows.
+        if (p.mode != Mode::wraith || count == 0)
+            wraiths.release (aWraithRelease);
         wraiths.next (currentRate, rng, wetL, wetR);
 
         // Glue, end of the pattern's chain and before the blend: the old
