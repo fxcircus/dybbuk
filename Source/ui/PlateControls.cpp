@@ -315,6 +315,15 @@ void HeaderAction::drawGlyph (juce::Graphics& g, Glyph glyph, juce::Rectangle<fl
             g.strokePath (p, stroke);
             break;
         }
+        case Glyph::sliders:
+        {
+            // Three faders (Feather's sliders, MIT, on its 24-unit grid), as
+            // Shalal draws its RANDOM settings.
+            auto icon = juce::Drawable::parseSVGPath ("M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6");
+            icon.applyTransform (juce::AffineTransform::scale (s / 24.0f).translated (box.getX(), box.getY()));
+            g.strokePath (icon, stroke);
+            break;
+        }
     }
 }
 
@@ -322,8 +331,12 @@ void HeaderAction::paint (juce::Graphics& g)
 {
     const auto& p = theme::palette();
     const float w = (float) getWidth();
-    const float boxH = juce::jmin (26.0f, (float) getHeight() - 14.0f);
-    juce::Rectangle<float> box ((w - boxH) * 0.5f, 2.0f, boxH, boxH);
+    // The full-size box sets the line the glyphs sit on; a smaller glyph
+    // is centred on that line so RANDOM's settings mark sits level with
+    // the die, not with its label.
+    const float fullBoxH = juce::jmin (26.0f, (float) getHeight() - 14.0f);
+    const float boxH = juce::jmin (glyphSize, fullBoxH);
+    juce::Rectangle<float> box ((w - boxH) * 0.5f, 2.0f + (fullBoxH - boxH) * 0.5f, boxH, boxH);
     if (pulseAnim > 0.01f)
     {
         box = box.expanded (boxH * 0.12f * pulseAnim);
@@ -340,8 +353,9 @@ void HeaderAction::paint (juce::Graphics& g)
     const float alpha = hovering ? 1.0f : 0.8f;
     const auto ink = (flashTicks > 0 ? p.red : (hovering ? p.bright : p.ink)).withAlpha (alpha);
     drawGlyph (g, glyph, box.reduced (1.0f), ink, 1.1f);
-    theme::drawTracked (g, label, { 0.0f, (float) getHeight() - 12.0f, w, 11.0f },
-                        juce::Justification::centred, theme::Face::semibold, kActionLabelPx, 0.14f, ink);
+    if (label.isNotEmpty())
+        theme::drawTracked (g, label, { 0.0f, (float) getHeight() - 12.0f, w, 11.0f },
+                            juce::Justification::centred, theme::Face::semibold, kActionLabelPx, 0.14f, ink);
 
     if (dimmed)
         g.endTransparencyLayer();

@@ -116,12 +116,19 @@ private:
 //   die     RANDOM  -- an isometric hairline die: roll a patch
 //   trash   CLEAR   -- the wastebasket, for every "throw away"
 //   wavOut  EXPORT  -- a filing tray with an arrow dropping into it
+//   sliders         -- three faders (the standard settings icon): what
+//                      RANDOM may touch. Drawn small and unlabelled, as an
+//                      appendix to the die rather than a fourth peer.
 class HeaderAction : public juce::Component
 {
 public:
-    enum class Glyph { die, trash, wavOut };
+    enum class Glyph { die, trash, wavOut, sliders };
 
     HeaderAction (Glyph glyph, juce::String label);
+
+    // The glyph box, 26 px by default (Shalal's). A smaller box keeps its
+    // centre on the same line as the full-size glyphs beside it.
+    void setGlyphSize (float px) noexcept { glyphSize = px; repaint(); }
 
     std::function<void()> onClick;
     std::function<void()> onDragStart;
@@ -147,6 +154,7 @@ private:
     bool hovering = false, dragStarted = false;
     int flashTicks = 0;
     float pulseAnim = 0.0f;
+    float glyphSize = 26.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeaderAction)
 };

@@ -159,4 +159,54 @@ namespace theme
             x += w + spacing;
         }
     }
+
+    // --- PlateLookAndFeel ---------------------------------------------------
+
+    PlateLookAndFeel::PlateLookAndFeel()
+    {
+        applyPalette();
+    }
+
+    void PlateLookAndFeel::applyPalette()
+    {
+        // Paper and ink, the hovered row inverted like a selected line of
+        // type, the section header in the captions' faded ink. The tick is
+        // drawn in the row's text colour, so it needs nothing of its own.
+        const auto& p = palette();
+        setColour (juce::PopupMenu::backgroundColourId, p.paper);
+        setColour (juce::PopupMenu::textColourId, p.ink);
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, p.ink);
+        setColour (juce::PopupMenu::highlightedTextColourId, p.paper);
+        setColour (juce::PopupMenu::headerTextColourId, p.faded);
+    }
+
+    juce::Font PlateLookAndFeel::getPopupMenuFont()
+    {
+        return font (Face::text, 15.0f);
+    }
+
+    void PlateLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g, const juce::Rectangle<int>& area,
+                                                       const juce::String& sectionName)
+    {
+        // A tracked small-caps caption, like every heading on the plate,
+        // with a hairline under it so the list reads as a labelled column.
+        const auto& p = palette();
+        drawTracked (g, sectionName.toUpperCase(), area.toFloat().reduced (12.0f, 0.0f),
+                     juce::Justification::centredLeft, Face::semibold, 9.5f, 0.16f, p.faded);
+        g.setColour (p.ink.withAlpha (0.28f));
+        g.fillRect ((float) area.getX() + 8.0f, (float) area.getBottom() - 1.0f, (float) area.getWidth() - 16.0f, 1.0f);
+    }
+
+    void PlateLookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator,
+                                                      int standardMenuItemHeight, int& idealWidth, int& idealHeight)
+    {
+        LookAndFeel_V4::getIdealPopupMenuItemSize (text, isSeparator, standardMenuItemHeight, idealWidth, idealHeight);
+        // A little more air per row than the stock list, and enough width
+        // that a ticklist of one-word names does not come out as a sliver.
+        if (! isSeparator)
+        {
+            idealHeight = juce::jmax (idealHeight, 24);
+            idealWidth = juce::jmax (idealWidth, 150);
+        }
+    }
 } // namespace theme

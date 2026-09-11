@@ -35,9 +35,24 @@
 class Randomiser
 {
 public:
+    // What a roll may touch: one bit per pattern knob, so the player can keep
+    // the ones that are set (Shalal's RANDOM settings). The controls the
+    // dice never rolls (Threshold, Blend, Spread, In, Out, Sync, Bar, Freeze,
+    // Bypass) have no bit.
+    enum Field : unsigned int
+    {
+        fieldTime = 1u << 0,  fieldSteps = 1u << 1,     fieldFills = 1u << 2,  fieldChaos = 1u << 3,
+        fieldDecay = 1u << 4, fieldFeedback = 1u << 5,  fieldDirection = 1u << 6, fieldPitch = 1u << 7,
+        fieldGlue = 1u << 8,  fieldMode = 1u << 9,
+        fieldAll = (1u << 10) - 1u
+    };
+    static constexpr int kFieldCount = 10;
+    static const char* fieldName (int index) noexcept;   // in bit order, for a menu
+
     // Every parameter is set as its own complete gesture, so a host that
-    // records automation sees a normal edit and its undo works.
-    static void randomise (juce::AudioProcessorValueTreeState& apvts, juce::Random& rng);
+    // records automation sees a normal edit and its undo works. Only the
+    // fields in the mask are touched.
+    static void randomise (juce::AudioProcessorValueTreeState& apvts, juce::Random& rng, unsigned int mask = fieldAll);
 
     // The name of the character that was rolled, for the readout. Valid until
     // the next call.
@@ -48,5 +63,5 @@ public:
     // For the test harness: roll a specific character rather than a random one,
     // so every one of them can be proven to make sound and stay bounded.
     static void randomiseCharacter (juce::AudioProcessorValueTreeState& apvts, juce::Random& rng,
-                                    int characterIndex);
+                                    int characterIndex, unsigned int mask = fieldAll);
 };

@@ -36,6 +36,9 @@ public:
     // can exercise the cross-fade and the rolled caption without a mouse.
     void toggleTheme();
     void rollDice();
+    // RANDOM's ticklist (what a roll may touch), opened under its settings
+    // mark. Public so UISnapshot can photograph the list.
+    void openRandomSettings();
 
     // The hint line without a mouse: pins the hint for the control whose
     // caption this is ("DECAY", "WRAITH", "EXPORT", "DYBBUK"...), so a
@@ -121,9 +124,14 @@ private:
     Lamp lamp;
     PresetHeader presetHeader { proc.presetManager };
     HeaderAction diceAction { HeaderAction::Glyph::die, "RANDOM" };
+    HeaderAction settingsAction { HeaderAction::Glyph::sliders, juce::String() };
     HeaderAction clearAction { HeaderAction::Glyph::trash, "CLEAR" };
     HeaderAction exportAction { HeaderAction::Glyph::wavOut, "EXPORT" };
     ThemeMark themeMark;
+    // The plate's look for the stock widgets it cannot avoid (the popup
+    // lists). Declared after every component that uses it, so it outlives
+    // them; the editor unhooks itself from it in the destructor.
+    theme::PlateLookAndFeel plateLaf;
     const char* rolledName = nullptr;
     int rolledTicks = 0;
 

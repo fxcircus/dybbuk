@@ -7,6 +7,7 @@
 //   cd /tmp && .../UISnapshot   ->  editor_snapshot_*.png
 #include "../Source/PluginEditor.h"
 #include "../Source/PluginProcessor.h"
+#include "../Source/state/Randomiser.h"
 
 #include <cstdio>
 #include <iterator>
@@ -209,6 +210,92 @@ int main()
     snap ("editor_snapshot_synced.png");
     setParam (processor, params::id::stepsync, 0.0f);
     setParam (processor, params::id::barreset, 0.0f);
+
+    // 4b. RANDOM's ticklist, with the settings mark's hint pinned on the
+    // plate (before the roll, whose name would otherwise share the strip). The real list is a popup window of its own, and a headless run
+    // cannot keep one open: the window dismisses itself within 10 ms when no
+    // JUCE component has keyboard focus (MenuWindow::handleMousePosition,
+    // "menuWasHiddenBecauseOfAppChange"), and nothing here can have focus.
+    // So the list is drawn through the same LookAndFeel hooks the window
+    // paints with (background, section header, one row per item, at the
+    // sizes the hooks ask for), from the same names and mask the editor
+    // uses, and composed under the mark where the window opens in a host.
+    // Two fields are unticked so both states of the tick are on the frame,
+    // and one row is drawn highlighted to review the inverted row.
+    if (auto* d = dynamic_cast<DybbukEditor*> (editor.get()))
+    {
+        processor.setRandomField (Randomiser::fieldTime, false);
+        processor.setRandomField (Randomiser::fieldMode, false);
+        d->showHintForTests ("SETTINGS");
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (30);
+
+        auto& lf = editor->getLookAndFeel();
+        const juce::PopupMenu::Options options;
+        const int border = lf.getPopupMenuBorderSizeWithOptions (options);
+        juce::Array<juce::PopupMenu::Item> items;
+        {
+            juce::PopupMenu::Item header ("RANDOM rolls");
+            header.isSectionHeader = true;
+            items.add (header);
+        }
+        for (int i = 0; i < Randomiser::kFieldCount; ++i)
+        {
+            juce::PopupMenu::Item item (Randomiser::fieldName (i));
+            item.itemID = i + 1;
+            item.isTicked = (processor.randomFields() & (1u << i)) != 0;
+            items.add (item);
+        }
+        int listW = 0, listH = 0;
+        juce::Array<int> rowH;
+        for (const auto& item : items)
+        {
+            int w = 0, h = 0;
+            if (item.isSectionHeader)
+                lf.getIdealPopupMenuSectionHeaderSizeWithOptions (item.text, -1, w, h, options);
+            else
+                lf.getIdealPopupMenuItemSizeWithOptions (item.text, false, options.getStandardItemHeight(), w, h, options);
+            listW = juce::jmax (listW, w);
+            rowH.add (h);
+            listH += h;
+        }
+        juce::Image list (juce::Image::ARGB, listW + 2 * border, listH + 2 * border, true);
+        {
+            juce::Graphics g (list);
+            lf.drawPopupMenuBackgroundWithOptions (g, list.getWidth(), list.getHeight(), options);
+            int y = border;
+            for (int i = 0; i < items.size(); ++i)
+            {
+                const juce::Rectangle<int> row (border, y, listW, rowH[i]);
+                juce::Graphics::ScopedSaveState state (g);
+                g.setOrigin (row.getPosition());
+                if (items[i].isSectionHeader)
+                    lf.drawPopupMenuSectionHeaderWithOptions (g, row.withZeroOrigin(), items[i].text, options);
+                else
+                    lf.drawPopupMenuItemWithOptions (g, row.withZeroOrigin(), i == 4, items[i], options);
+                y += rowH[i];
+            }
+        }
+
+        juce::Image frame = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
+        juce::Rectangle<int> at (642, 2, 28, 44);
+        for (auto* c : editor->getChildComponent (0)->getChildren())
+            if (c->getName() == "SETTINGS")
+                at = c->getBounds();
+        {
+            juce::Graphics g (frame);
+            g.drawImageAt (list, at.getX() - 8, at.getBottom() + 4);
+        }
+        const auto file = juce::File::getCurrentWorkingDirectory().getChildFile ("editor_snapshot_randommenu.png");
+        file.deleteFile();
+        juce::FileOutputStream stream (file);
+        juce::PNGImageFormat().writeImageToStream (frame, stream);
+        std::printf ("wrote %s (%d x %d, list %d x %d)\n", file.getFileName().toRawUTF8(), frame.getWidth(),
+                     frame.getHeight(), list.getWidth(), list.getHeight());
+
+        d->showHintForTests ({});
+        processor.setRandomField (Randomiser::fieldTime, true);
+        processor.setRandomField (Randomiser::fieldMode, true);
+    }
 
     // 5. A roll of the dice: the patch changes and the character's name is
     // printed over the dybbuk for a few seconds. This frame reviews that the

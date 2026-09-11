@@ -78,7 +78,12 @@ void DybbukProcessor::releaseResources() {}
 
 void DybbukProcessor::randomiseParameters()
 {
-    Randomiser::randomise (apvts, randomiserRng);
+    Randomiser::randomise (apvts, randomiserRng, randomMask);
+}
+
+void DybbukProcessor::setRandomField (unsigned int field, bool enabled) noexcept
+{
+    randomMask = enabled ? (randomMask | field) : (randomMask & ~field);
 }
 
 const char* DybbukProcessor::lastRandomCharacter() const noexcept
@@ -309,6 +314,7 @@ juce::File DybbukProcessor::renderPatternToFile() const
 void DybbukProcessor::stampExtraState (juce::ValueTree& state) const
 {
     state.setProperty ("stateVersion", currentStateVersion, nullptr);
+    state.setProperty ("randomFields", (int) randomMask, nullptr);
     // No engine-side extra state. The pattern's contents are deliberately not
     // saved: a reloaded session starts listening, as the hardware would after
     // power up. Theme and window scale are editor properties already on the
@@ -317,6 +323,7 @@ void DybbukProcessor::stampExtraState (juce::ValueTree& state) const
 
 void DybbukProcessor::applyExtraState (const juce::ValueTree& state)
 {
+    randomMask = (unsigned int) (int) state.getProperty ("randomFields", (int) Randomiser::fieldAll);
     juce::ignoreUnused (state);
 }
 

@@ -940,6 +940,40 @@ void exportPattern()
     written.deleteFile();
 }
 
+// RANDOM's settings: a field the player has unticked is never rolled, and
+// the mask survives a session.
+void randomFields()
+{
+    std::printf ("random fields: an unticked knob stays put, and the choice is saved\n");
+    DybbukProcessor p;
+    p.prepareToPlay (kRate, kBlock);
+    auto raw = [] (DybbukProcessor& proc, const char* id) { return proc.apvts.getRawParameterValue (id)->load(); };
+    p.setRandomField (Randomiser::fieldTime, false);
+    p.setRandomField (Randomiser::fieldMode, false);
+    setRaw (p, params::id::step, 0.4321f);
+    setRaw (p, params::id::mode, 2.0f);
+    bool timeHeld = true, modeHeld = true, othersMoved = false;
+    const float chaosWas = raw (p, params::id::chaos);
+    for (int i = 0; i < 30; ++i)
+    {
+        p.randomiseParameters();
+        timeHeld = timeHeld && std::abs (raw (p, params::id::step) - 0.4321f) < 1.0e-6f;
+        modeHeld = modeHeld && juce::roundToInt (raw (p, params::id::mode)) == 2;
+        othersMoved = othersMoved || std::abs (raw (p, params::id::chaos) - chaosWas) > 0.5f;
+    }
+    check ("Time and Mode, unticked, never move", timeHeld && modeHeld, "");
+    check ("the rest still roll", othersMoved, "");
+
+    juce::MemoryBlock blob;
+    p.getStateInformation (blob);
+    DybbukProcessor q;
+    q.setStateInformation (blob.getData(), (int) blob.getSize());
+    check ("the mask comes back with the session", q.randomFields() == p.randomFields()
+                                                        && (q.randomFields() & Randomiser::fieldTime) == 0
+                                                        && (q.randomFields() & Randomiser::fieldChaos) != 0,
+           juce::String::toHexString ((int) q.randomFields()));
+}
+
 void ordering()
 {
     std::printf ("parameter order: Push bank 1 is the eight that matter\n");
@@ -1004,6 +1038,7 @@ int main (int argc, char* argv[])
     juce::ScopedJuceInitialiser_GUI juceInit;
 
     ordering();
+    randomFields();
     readouts();
     sessionRoundTrip();
     presetRoundTrip();

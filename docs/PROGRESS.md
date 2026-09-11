@@ -148,6 +148,21 @@ expected, three notes.
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
 
+## RANDOM's settings, and the whole knob lit (2026-09-10)
+
+- **What RANDOM may touch** is now the player's choice, as in Shalal: a
+  bitmask over the ten pattern knobs the dice rolls (Time, Steps, Fills,
+  Chaos, Decay, Feedback, Direction, Pitch, Glue, Mode), Shalal's sliders
+  glyph beside RANDOM opening a tick menu styled to the plate (a
+  PlateLookAndFeel in Theme.cpp, paper and ink), the mask saved with the session
+  (`randomFields` in the extra state). Every field is still drawn on every
+  roll so a seed's outcome does not depend on the mask; only the set is
+  gated. `ProcessorTest randomFields` proves an unticked knob never moves
+  and the mask survives a save.
+- **An accented knob lights whole**: ring, ticks, needle and caption all
+  in the plate's red, not the caption alone, when a mode has given it
+  another meaning.
+
 ## Three more modes from the survey (2026-09-10)
 
 Roy picked Rattle, Mirror and Miasma from the survey's candidates. Eight

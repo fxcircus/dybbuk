@@ -147,13 +147,20 @@ int Randomiser::numCharacters() noexcept { return kCharacterCount; }
 
 const char* Randomiser::lastCharacterName() noexcept { return kCharacters[lastRolled].name; }
 
-void Randomiser::randomise (juce::AudioProcessorValueTreeState& apvts, juce::Random& rng)
+const char* Randomiser::fieldName (int index) noexcept
 {
-    randomiseCharacter (apvts, rng, rng.nextInt (kCharacterCount));
+    static const char* const names[kFieldCount] = { "Time", "Steps", "Fills", "Chaos", "Decay",
+                                                     "Feedback", "Direction", "Pitch", "Glue", "Mode" };
+    return index >= 0 && index < kFieldCount ? names[index] : "";
+}
+
+void Randomiser::randomise (juce::AudioProcessorValueTreeState& apvts, juce::Random& rng, unsigned int mask)
+{
+    randomiseCharacter (apvts, rng, rng.nextInt (kCharacterCount), mask);
 }
 
 void Randomiser::randomiseCharacter (juce::AudioProcessorValueTreeState& apvts, juce::Random& rng,
-                                     int characterIndex)
+                                     int characterIndex, unsigned int mask)
 {
     lastRolled = juce::jlimit (0, kCharacterCount - 1, characterIndex);
     const Character& c = kCharacters[lastRolled];
@@ -161,16 +168,28 @@ void Randomiser::randomiseCharacter (juce::AudioProcessorValueTreeState& apvts, 
     // Step is written as the free knob position. If Sync is on the same
     // position lands on a division in the same part of the travel, which is
     // the right musical neighbourhood, and the switch itself is not touched.
-    setParam (apvts, id::step, params::knob01ForStepSeconds ((double) pickLog (c.stepSeconds, rng)));
-    setParam (apvts, id::steps, (float) pickInt (c.steps, rng));
-    setParam (apvts, id::fills, std::round (pick (c.fills, rng)));
-    setParam (apvts, id::chaos, std::round (pick (c.chaos, rng)));
-    setParam (apvts, id::length, std::round (pick (c.length, rng)));
-    setParam (apvts, id::feedback, std::round (pick (c.feedback, rng)));
-    setParam (apvts, id::direction, (float) pickWeighted (c.direction, BurstEngine::kDirectionCount, rng));
-    setParam (apvts, id::pitch, rng.nextFloat() < 0.5f ? 0.0f : (float) pickInt (c.pitch, rng));
-    setParam (apvts, id::glue, std::round (pick (c.glue, rng)));
-    setParam (apvts, id::mode, (float) pickWeighted (c.mode, BurstEngine::kModeCount, rng));
+    // Every field is drawn whether or not it is set, so the sequence of draws
+    // (and a seed's outcome) does not depend on the mask.
+    const float vTime = params::knob01ForStepSeconds ((double) pickLog (c.stepSeconds, rng));
+    if (mask & fieldTime) setParam (apvts, id::step, vTime);
+    const float vSteps = (float) pickInt (c.steps, rng);
+    if (mask & fieldSteps) setParam (apvts, id::steps, vSteps);
+    const float vFills = std::round (pick (c.fills, rng));
+    if (mask & fieldFills) setParam (apvts, id::fills, vFills);
+    const float vChaos = std::round (pick (c.chaos, rng));
+    if (mask & fieldChaos) setParam (apvts, id::chaos, vChaos);
+    const float vDecay = std::round (pick (c.length, rng));
+    if (mask & fieldDecay) setParam (apvts, id::length, vDecay);
+    const float vFeedback = std::round (pick (c.feedback, rng));
+    if (mask & fieldFeedback) setParam (apvts, id::feedback, vFeedback);
+    const float vDirection = (float) pickWeighted (c.direction, BurstEngine::kDirectionCount, rng);
+    if (mask & fieldDirection) setParam (apvts, id::direction, vDirection);
+    const float vPitch = rng.nextFloat() < 0.5f ? 0.0f : (float) pickInt (c.pitch, rng);
+    if (mask & fieldPitch) setParam (apvts, id::pitch, vPitch);
+    const float vGlue = std::round (pick (c.glue, rng));
+    if (mask & fieldGlue) setParam (apvts, id::glue, vGlue);
+    const float vMode = (float) pickWeighted (c.mode, BurstEngine::kModeCount, rng);
+    if (mask & fieldMode) setParam (apvts, id::mode, vMode);
 
     // threshold, blend, spread, in, out, stepsync, barreset, freeze and bypass
     // are deliberately untouched: they are set to the instrument and the room, not

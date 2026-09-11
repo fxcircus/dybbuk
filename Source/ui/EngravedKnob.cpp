@@ -147,7 +147,9 @@ void EngravedKnob::paint (juce::Graphics& g)
     const bool hot = dangerFrom >= 0.0f && av > dangerAngle;
     const bool active = hovering || dragging;
 
-    const auto lineInk = hot ? p.red : (active ? p.bright : p.ink);
+    // Accented (a mode has given this knob another meaning), the whole face
+    // goes red: ring, ticks, needle and caption, not just the caption.
+    const auto lineInk = (hot || accented) ? p.red : (active ? p.bright : p.ink);
 
     // Eleven index ticks around the travel, red past the danger mark.
     for (int t = 0; t < kIndexTicks; ++t)

@@ -57,6 +57,9 @@ public:
     // The dice. Message thread only, like every other parameter edit.
     void randomiseParameters();
     const char* lastRandomCharacter() const noexcept;
+    // What RANDOM may touch (Randomiser::Field bits); saved with the session.
+    unsigned int randomFields() const noexcept { return randomMask; }
+    void setRandomField (unsigned int field, bool enabled) noexcept;
 
     // UI -> engine. Momentary, lock free, never a parameter and never saved:
     // a Clear in a session recall would empty the pattern on load.
@@ -135,6 +138,7 @@ private:
     std::atomic<float>* pBypass;
 
     juce::Random randomiserRng;
+    unsigned int randomMask = 0xffffffffu;   // every field, until the player says otherwise
 
     double currentSampleRate = 48000.0;
     std::atomic<double> knownBpm { 120.0 };

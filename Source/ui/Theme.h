@@ -59,4 +59,22 @@ namespace theme
 
     float trackedWidth (Face face, float px, float tracking, const juce::String& text);
     float textWidth (const juce::Font& f, const juce::String& text);
+
+    // The look-and-feel for the few stock JUCE widgets the plate has to use:
+    // today only the popup lists (RANDOM's ticklist), in the plate's paper
+    // and ink and its text face. Colours are read from the palette when
+    // applyPalette() is called, so the editor calls it again on a theme
+    // toggle; nothing else on the plate goes through a LookAndFeel.
+    class PlateLookAndFeel : public juce::LookAndFeel_V4
+    {
+    public:
+        PlateLookAndFeel();
+        void applyPalette();
+
+        juce::Font getPopupMenuFont() override;
+        void drawPopupMenuSectionHeader (juce::Graphics& g, const juce::Rectangle<int>& area,
+                                         const juce::String& sectionName) override;
+        void getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator, int standardMenuItemHeight,
+                                        int& idealWidth, int& idealHeight) override;
+    };
 } // namespace theme

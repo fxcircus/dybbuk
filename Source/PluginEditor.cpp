@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 
 #include "dsp/TimeMap.h"
+#include "state/Randomiser.h"
 
 #include <iterator>
 
@@ -17,20 +18,26 @@ namespace
     constexpr int kFaderW = 60;
 
     // The header in Shalal's zones, with a hairline between each pair: the
-    // nameplate, the bypass cap, the station, the three actions, the theme.
-    // Each control is centred in its zone. The station stays 260 wide on the
-    // plate's centre line and its hairlines sit 16 px outside it, as they do
-    // on Shalal's sheet.
+    // nameplate, the bypass cap, the station, the actions, the theme. Each
+    // control is centred in its zone. The station stays 260 wide on the
+    // plate's centre line; its hairlines sat 16 px outside it as on Shalal's
+    // sheet, and moved in to 4 px when RANDOM grew its settings mark, so the
+    // actions zone (584..780) holds the three labelled buttons and the small
+    // mark between RANDOM and CLEAR at one 4 px gap, 6 px inside each
+    // hairline.
     constexpr int kStationW = 260;
     constexpr int kHairAfterName = 198;
-    constexpr int kHairBeforeStation = (kCanvasW - kStationW) / 2 - 16;
-    constexpr int kHairAfterStation = (kCanvasW + kStationW) / 2 + 16;
+    constexpr int kHairBeforeStation = (kCanvasW - kStationW) / 2 - 4;
+    constexpr int kHairAfterStation = (kCanvasW + kStationW) / 2 + 4;
     constexpr int kHairBeforeTheme = 780;
     constexpr int kHairTop = 8, kHairH = 38;
     constexpr int kBypassW = 70, kThemeW = 70;
-    constexpr int kActionW = 52, kActionH = 44, kActionGap = 4;     // RANDOM, CLEAR, EXPORT
-    constexpr int kActionsW = 3 * kActionW + 2 * kActionGap;
+    constexpr int kActionW = 48, kActionH = 44, kActionGap = 4;     // RANDOM, CLEAR, EXPORT
+    constexpr int kSettingsW = 28;                                   // RANDOM's settings mark
+    constexpr float kSettingsGlyphPx = 18.0f;
+    constexpr int kActionsW = 3 * kActionW + kSettingsW + 3 * kActionGap;
     constexpr int kActionsX = kHairAfterStation + (kHairBeforeTheme - kHairAfterStation - kActionsW) / 2;
+    static_assert (kActionsX - kHairAfterStation >= 6, "the actions keep their air inside the hairlines");
 
     // Four bands under the header, one even rhythm from the rule to the foot
     // of the faders: the mode bar in the band directly under the rule, then
@@ -248,14 +255,19 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     plate.addAndMakeVisible (presetHeader);
     presetHeader.setBounds ((canvasW - kStationW) / 2, kHeaderH / 2 - 14, kStationW, 28);
 
+    // RANDOM, its settings mark, CLEAR, EXPORT, at one gap. The mark is a
+    // small glyph with no label, so it reads as belonging to the die.
+    settingsAction.setGlyphSize (kSettingsGlyphPx);
     int actionX = kActionsX;
-    for (auto* action : { &diceAction, &clearAction, &exportAction })
+    for (auto* action : { &diceAction, &settingsAction, &clearAction, &exportAction })
     {
         plate.addAndMakeVisible (*action);
-        action->setBounds (actionX, 2, kActionW, kActionH);
-        actionX += kActionW + kActionGap;
+        const int w = action == &settingsAction ? kSettingsW : kActionW;
+        action->setBounds (actionX, 2, w, kActionH);
+        actionX += w + kActionGap;
     }
     diceAction.onClick = [this] { rollDice(); };
+    settingsAction.onClick = [this] { openRandomSettings(); };
     clearAction.onClick = [this] { proc.requestClear(); };
     // EXPORT: drag the tray and the pattern leaves as a WAV; click it for a
     // save dialog. Nothing to drag while there is nothing in the pattern.
@@ -474,6 +486,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     lamp.setName ("DYBBUK");
     presetHeader.setName ("PRESET");
     diceAction.setName ("RANDOM");
+    settingsAction.setName ("SETTINGS");
     clearAction.setName ("CLEAR");
     exportAction.setName ("EXPORT");
     themeMark.setName ("THEME");
@@ -481,6 +494,7 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     plate.addChildComponent (themeFade);
     themeFade.setBounds (0, 0, canvasW, canvasH);
 
+    setLookAndFeel (&plateLaf);
     applyTheme();
     startTimerHz (kUiHz);
 
@@ -490,7 +504,12 @@ DybbukEditor::DybbukEditor (DybbukProcessor& p)
     setSize (canvasW, canvasH);
 }
 
-DybbukEditor::~DybbukEditor() = default;
+DybbukEditor::~DybbukEditor()
+{
+    // The look-and-feel is a member and dies with the editor; nothing may
+    // still point at it afterwards.
+    setLookAndFeel (nullptr);
+}
 
 void DybbukEditor::toggleTheme()
 {
@@ -512,6 +531,7 @@ void DybbukEditor::toggleTheme()
 
 void DybbukEditor::applyTheme()
 {
+    plateLaf.applyPalette();
     plate.repaint();
     for (auto* child : plate.getChildren())
         child->repaint();
@@ -527,6 +547,30 @@ void DybbukEditor::rollDice()
     rolledTicks = 90; // about three seconds at the editor's tick rate
     hintAlpha = 0.0f; // the name takes the strip at once; two lines on it is a smudge
     plate.repaint (kHintArea);
+}
+
+void DybbukEditor::openRandomSettings()
+{
+    // A ticklist of what RANDOM may touch, in the Randomiser's bit order;
+    // a click flips one field and closes, as on Shalal's sheet. The list is
+    // its own window and outlives an editor a host closes under it, so the
+    // completion checks that `this` is still alive.
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (&plateLaf);
+    menu.addSectionHeader ("RANDOM rolls");
+    const auto mask = proc.randomFields();
+    for (int i = 0; i < Randomiser::kFieldCount; ++i)
+        menu.addItem (i + 1, Randomiser::fieldName (i), true, (mask & (1u << i)) != 0);
+
+    juce::Component::SafePointer<DybbukEditor> safe (this);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&settingsAction),
+                        [safe] (int choice)
+                        {
+                            if (safe == nullptr || choice <= 0 || choice > Randomiser::kFieldCount)
+                                return;
+                            const auto field = 1u << (choice - 1);
+                            safe->proc.setRandomField (field, (safe->proc.randomFields() & field) == 0);
+                        });
 }
 
 void DybbukEditor::showHintForTests (const juce::String& controlName)
@@ -602,6 +646,7 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
         return cell >= 0 && cell < Lamp::kModeCount ? cells[cell] : "";
     }
     if (c == &diceAction)         return "Roll a patch: a character, then every pattern knob inside it.";
+    if (c == &settingsAction)     return "What RANDOM may touch: tick the knobs it rolls, untick the ones you have set.";
     if (c == &clearAction)        return "Start over: the pattern is emptied and the dybbuk listens.";
     if (c == &exportAction)       return "Drag one cycle of the pattern into your DAW as a WAV, or click to save it.";
     if (c == inFader.get())       return "Input level, also what the gate hears.";
