@@ -4,6 +4,45 @@ Park ideas here instead of derailing the current phase. Ranked by musical
 payoff against implementation cost. Things are marked DONE with a date rather
 than deleted: knowing what was considered and rejected is useful later.
 
+## Mode candidates from the survey (2026-09-10)
+
+A survey of what MOOD MKII, Habit, Blooper, Microcosm, Chroma Console,
+Tensor, Particle 2 and the step-effect plugins (Effectrix, Stutter Edit,
+Glitch, Beat Repeat) do with a captured fragment. The behaviours that recur
+everywhere: reverse, stutter the current instant, tape stop, freeze, pitch
+by octaves, time-stretch, granular smear, filter sweep, gate/chop, shuffle
+the order, stepped speed, layered overdub. We already have reverse (order
+and per step), freeze (Wraith), stretch (Trance), octaves (Legion), hold
+(Tremor), shuffle (Fills), stepped pitch. Candidates as new players for
+every step, ranked by distinctness against what exists, cost, and fun:
+
+1. **Faint** (tape stop; Blooper Stopper, Effectrix Vinyl, Glitch Tape
+   Stop): each step decelerates to a halt within its step, pitch falling
+   with it. Decay = how fast it stops. Cheap (a rate ramp on the voice).
+2. **Rattle** (Blooper Stutter, Tensor Rand, Effectrix Scratchloop): a
+   tiny slice of the step, 10 to 60 ms, repeated for the whole step, a
+   buzz roll. Unlike Tremor it needs no input. Decay = slice length.
+3. **Mirror**: every step's material backwards, swelling attacks. Direction
+   reverses the order and Chaos reverses a step now and then; this is all
+   of them, all the time. No knob.
+4. **Miasma** (Microcosm Haze, Particle density): each step as a cloud of
+   grains from random points in its material, a blur rather than Trance's
+   ordered stretch. Decay = density. Pairs with Wraith.
+5. **Levitate** (Microcosm Arp): each step as a rising arpeggio of itself,
+   sub-steps at 0, +P, +2P... Pitch = the interval, Fills = notes per step.
+6. **Revenant** (Habit's Scan): steps the ring has dropped are kept in a
+   graveyard and come back at random in place of a live one. Needs the slot
+   pool to hold the dead; the most on-theme idea here.
+7. **Flicker** (Blooper Dropper, Glitch Gater): each step chopped by a
+   sub-step gate with random holes. Fills = hole density. Medium.
+
+Not modes but worth having globally: a **filter** (Blooper Filter, Effectrix
+Filter; the plugin has no tone control at all, and `TptSvf.h` is still in
+the tree), and **tape ageing** (Blooper Stability, Chroma Texture: wow,
+flutter, dropouts on the material), which is the Crust idea from the delay
+days. Not worth it: Mosaic (Legion covers it), Swapper (Freeze covers it),
+Habit's Collect (that is overdubbing, which the ring already is).
+
 ## Parked by the Burst pivot (2026-09-09)
 
 - **Radio mode** is now B5 in `docs/BURST.md` (six stations proposed, with
