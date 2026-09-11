@@ -322,6 +322,9 @@ void presetsMakeSound()
 {
     std::printf ("factory presets: each one captures the phrase and plays it back\n");
 
+    // Every mode must have a starting point: the whole point of the bank.
+    std::vector<bool> modeCovered ((size_t) BurstEngine::kModeCount, false);
+
     for (int i = 0; i < numFactoryPresets(); ++i)
     {
         DybbukProcessor p;
@@ -331,6 +334,10 @@ void presetsMakeSound()
         for (const auto& info : p.presetManager.getPresets())
             if (info.factory && info.name == fp.name)
                 p.presetManager.loadPreset (info);
+
+        const int mode = juce::jlimit (0, BurstEngine::kModeCount - 1,
+                                       juce::roundToInt (p.apvts.getRawParameterValue (params::id::mode)->load()));
+        modeCovered[(size_t) mode] = true;
 
         Meter m;
         m.windowStart = 1.8;
@@ -342,6 +349,16 @@ void presetsMakeSound()
                juce::String (fp.name) + ": " + juce::String (p.getStepCount()) + " steps, pattern "
                    + juce::String (m.rmsDb(), 1) + " dBFS after the phrase, peak " + juce::String (m.peak, 3));
     }
+
+    juce::String missing;
+    auto* modeParam = dynamic_cast<juce::AudioParameterChoice*> (DybbukProcessor().apvts.getParameter (params::id::mode));
+    for (int m = 0; m < BurstEngine::kModeCount; ++m)
+        if (! modeCovered[(size_t) m])
+            missing += (modeParam != nullptr ? modeParam->choices[m] : juce::String (m)) + " ";
+    check ("every mode has a preset", missing.isEmpty(),
+           missing.isEmpty() ? juce::String (numFactoryPresets()) + " presets over "
+                                   + juce::String (BurstEngine::kModeCount) + " modes"
+                             : "no preset for " + missing.trim());
 }
 
 // A mono track feeding a stereo effect is the common Ableton case, and it must

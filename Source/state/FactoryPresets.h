@@ -1,7 +1,7 @@
 #pragma once
 
 // Starting points for the pattern maker. They ship as tables in code rather
-// than embedded XML: five presets are a dozen numbers each, a typo in a
+// than embedded XML: a preset is a dozen numbers, a typo in a
 // parameter id fails to compile, the values are reviewable in a diff, and
 // there is no binary-data target to keep in sync across three build targets.
 //

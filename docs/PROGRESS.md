@@ -92,7 +92,9 @@ disagree with what is written here, this wins.
 - `ProcessorTest`: ordering, readouts, session and preset round-trips, five
   factory presets load and sound, dice, mono to stereo, stereo dry, bypass
   crossfade with the engine deaf, WAV export (0 failures)
-- Five factory presets: Sixteenths, Stutter, Erosion, Pendulum, Deadpan
+- Eleven factory presets, plainest first and strangest last, every mode
+  covered: Deadpan, Footfall, Unsay, Overhang, Stack, Drag, Undertow, Lean,
+  Drill, Dust, Misfire (Init is the parameter defaults and is untouched)
 - UI: the same plate, both sheets. The header is Shalal's, zone for zone
   and glyph for glyph: nameplate | bypass cap | preset station | RANDOM,
   CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between.
@@ -147,6 +149,37 @@ expected, three notes.
    instrument and the room, not the patch; the dice touches only what
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
+
+## The preset bank, redone for the modes (2026-09-11)
+
+Roy: Init stays as it is, and every mode needs an interesting starting
+point. Eleven presets now, designed by a fan-out (one designer and one
+adversarial critic per mode, then a player, the DSP engineer and a curator
+judging the set, then a synthesis). Ordered plainest first and strangest
+last, because that is how the list is read, and no two neighbours share an
+organising idea:
+
+| Preset | Mode | What it is |
+|---|---|---|
+| Deadpan | Golem | the gate and nothing else, the one to learn the threshold on |
+| Footfall | Golem | sixteenths on the host's grid, choked to their strikes, Bar on |
+| Unsay | Mirror | six steps backwards over a reversed order |
+| Overhang | Wraith | Decay at four ticks, exactly what the haunt slots hold |
+| Stack | Legion | three voices a fourth apart, Glue structural for the 3 dB |
+| Drag | Trance | 4.8x slower, attacks held rather than notes slowed, sinking |
+| Undertow | Golem | sixteen steps an octave down, drunk, forgetting |
+| Lean | Tremor | the plain sequencer until you lean on a note |
+| Drill | Rattle | three steps of buzz thrown side to side |
+| Dust | Miasma | a small grain, a dry crackle rather than a wash |
+| Misfire | Golem | Chaos past half depth, two and three events a step, all on the clock |
+
+Golem holds four because it is the base player and each is a different
+argument. The old five are gone by name: Deadpan kept unchanged, Sixteenths
+absorbed into Footfall (which also ships Bar demonstrated), Erosion into
+Undertow (which adds the octave), Pendulum's direction into Drill, and
+Stutter cut outright as a tremolo rather than a sequencer. `ProcessorTest`
+now also asserts that every mode has a preset, so a mode added later
+without one fails the suite.
 
 ## RANDOM's settings, and the whole knob lit (2026-09-10)
 
