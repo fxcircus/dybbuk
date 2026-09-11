@@ -158,7 +158,11 @@ expected, three notes.
   (`randomFields` in the extra state). Every field is still drawn on every
   roll so a seed's outcome does not depend on the mask; only the set is
   gated. `ProcessorTest randomFields` proves an unticked knob never moves
-  and the mask survives a save.
+  and the mask survives a save. 2026-09-11: the menu also lists what the
+  dice never rolled (Threshold, Blend, Spread, Sync, Bar), unticked by
+  default, and Feedback is unticked by default too; In, Out, Freeze and
+  Bypass stay out of it for good (headphones, performance state). The
+  mask travels in presets as well as sessions, through the extra state.
 - **An accented knob lights whole**: ring, ticks, needle and caption all
   in the plate's red, not the caption alone, when a mode has given it
   another meaning.

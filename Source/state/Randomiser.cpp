@@ -150,7 +150,8 @@ const char* Randomiser::lastCharacterName() noexcept { return kCharacters[lastRo
 const char* Randomiser::fieldName (int index) noexcept
 {
     static const char* const names[kFieldCount] = { "Time", "Steps", "Fills", "Chaos", "Decay",
-                                                     "Feedback", "Direction", "Pitch", "Glue", "Mode" };
+                                                     "Feedback", "Direction", "Pitch", "Glue", "Mode",
+                                                     "Threshold", "Blend", "Spread", "Sync", "Bar" };
     return index >= 0 && index < kFieldCount ? names[index] : "";
 }
 
@@ -191,8 +192,22 @@ void Randomiser::randomiseCharacter (juce::AudioProcessorValueTreeState& apvts, 
     const float vMode = (float) pickWeighted (c.mode, BurstEngine::kModeCount, rng);
     if (mask & fieldMode) setParam (apvts, id::mode, vMode);
 
-    // threshold, blend, spread, in, out, stepsync, barreset, freeze and bypass
-    // are deliberately untouched: they are set to the instrument and the room, not
+    // Off by default, on the menu for whoever wants them. Threshold stays
+    // in the useful band for a guitar or a synth, Blend never hides the
+    // pattern or the player, Spread anywhere, the switches a coin toss.
+    const float vThreshold = std::round (-45.0f + 25.0f * rng.nextFloat());
+    if (mask & fieldThreshold) setParam (apvts, id::threshold, vThreshold);
+    const float vBlend = std::round (30.0f + 50.0f * rng.nextFloat());
+    if (mask & fieldBlend) setParam (apvts, id::blend, vBlend);
+    const float vSpread = std::round (100.0f * rng.nextFloat());
+    if (mask & fieldSpread) setParam (apvts, id::spread, vSpread);
+    const float vSync = rng.nextBool() ? 1.0f : 0.0f;
+    if (mask & fieldSync) setParam (apvts, id::stepsync, vSync);
+    const float vBar = rng.nextBool() ? 1.0f : 0.0f;
+    if (mask & fieldBar) setParam (apvts, id::barreset, vBar);
+
+    // in, out, freeze and bypass are deliberately untouched, and the rest
+    // only when their field is ticked: they are set to the instrument and the room, not
     // to the patch.
     // See the header.
 }

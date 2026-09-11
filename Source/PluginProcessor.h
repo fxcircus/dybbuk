@@ -7,6 +7,7 @@
 #include "Parameters.h"
 #include "dsp/BurstEngine.h"
 #include "state/PresetManager.h"
+#include "state/Randomiser.h"
 
 class DybbukProcessor : public juce::AudioProcessor
 {
@@ -138,7 +139,7 @@ private:
     std::atomic<float>* pBypass;
 
     juce::Random randomiserRng;
-    unsigned int randomMask = 0xffffffffu;   // every field, until the player says otherwise
+    unsigned int randomMask = Randomiser::fieldDefault;   // the pattern knobs, until the player says otherwise
 
     double currentSampleRate = 48000.0;
     std::atomic<double> knownBpm { 120.0 };

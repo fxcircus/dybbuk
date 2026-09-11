@@ -323,7 +323,7 @@ void DybbukProcessor::stampExtraState (juce::ValueTree& state) const
 
 void DybbukProcessor::applyExtraState (const juce::ValueTree& state)
 {
-    randomMask = (unsigned int) (int) state.getProperty ("randomFields", (int) Randomiser::fieldAll);
+    randomMask = (unsigned int) (int) state.getProperty ("randomFields", (int) Randomiser::fieldDefault);
     juce::ignoreUnused (state);
 }
 

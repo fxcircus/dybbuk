@@ -972,6 +972,38 @@ void randomFields()
                                                         && (q.randomFields() & Randomiser::fieldTime) == 0
                                                         && (q.randomFields() & Randomiser::fieldChaos) != 0,
            juce::String::toHexString ((int) q.randomFields()));
+
+    // The defaults: Feedback and the room's controls off, the rest on.
+    DybbukProcessor d;
+    const auto def = d.randomFields();
+    check ("Feedback, Threshold, Blend, Spread, Sync and Bar are off by default",
+           (def & (Randomiser::fieldFeedback | Randomiser::fieldThreshold | Randomiser::fieldBlend | Randomiser::fieldSpread
+                   | Randomiser::fieldSync | Randomiser::fieldBar)) == 0
+               && (def & Randomiser::fieldChaos) && (def & Randomiser::fieldMode),
+           juce::String::toHexString ((int) def));
+    d.prepareToPlay (kRate, kBlock);
+    d.setRandomField (Randomiser::fieldBlend, true);
+    bool blendMoved = false;
+    const float blendWas = raw (d, params::id::blend);
+    for (int i = 0; i < 30 && ! blendMoved; ++i)
+    {
+        d.randomiseParameters();
+        blendMoved = std::abs (raw (d, params::id::blend) - blendWas) > 0.5f;
+    }
+    check ("ticked, Blend rolls too", blendMoved, "");
+
+    // And the mask travels in a preset.
+    const juce::String name ("mask-test-" + juce::String (juce::Random::getSystemRandom().nextInt (100000)));
+    auto file = d.presetManager.userFolder().getChildFile (juce::File::createLegalFileName (name) + ".preset");
+    check ("preset with the mask saved", d.presetManager.saveCurrent (name), file.getFullPathName());
+    d.setRandomField (Randomiser::fieldBlend, false);
+    bool loaded = false;
+    for (const auto& info : d.presetManager.getPresets())
+        if (info.name == name)
+            loaded = d.presetManager.loadPreset (info);
+    check ("the mask comes back with the preset", loaded && (d.randomFields() & Randomiser::fieldBlend) != 0,
+           juce::String::toHexString ((int) d.randomFields()));
+    file.deleteFile();
 }
 
 void ordering()
