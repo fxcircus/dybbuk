@@ -36,6 +36,33 @@ namespace timemap
         { "1/2D", 3.0, false },        { "1 bar", 1.0, true }
     };
 
+    // Where the next grid line and the next bar line fall, in beats from
+    // here, given the position within the bar. Pure, because the arithmetic
+    // is the whole of the sync feature and a wrong ceil is inaudible in code
+    // review and very audible in a DAW.
+    //
+    // Both are "the next multiple at or after here", and the bar line is
+    // itself always a grid line: a division that does not divide the bar
+    // (1/16D in 4/4) would otherwise step over it and stretch one step.
+    struct Offsets { double toGrid; double toBar; };
+
+    inline Offsets offsetsFrom (double relBeats, double divBeats, double barBeats) noexcept
+    {
+        if (! (divBeats > 0.0) || ! (barBeats > 0.0))
+            return { 0.0, 0.0 };
+
+        // A host that reports no bar start leaves rel growing without bound;
+        // wrapping it keeps every answer inside one bar.
+        double rel = std::fmod (relBeats, barBeats);
+        if (rel < 0.0)
+            rel += barBeats;
+
+        const double k = std::ceil (rel / divBeats - 1.0e-6);
+        const double nextLine = std::min (k * divBeats, barBeats);
+        const double toBar = rel < 1.0e-6 ? 0.0 : barBeats - rel;
+        return { std::max (0.0, nextLine - rel), std::max (0.0, toBar) };
+    }
+
     // Sync keeps the Time knob's 0..1 range and quantises it to 14 detents.
     inline int divisionIndexForTime01 (float t) noexcept
     {

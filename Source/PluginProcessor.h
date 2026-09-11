@@ -29,6 +29,7 @@ public:
     float getInputLevel() const noexcept { return engine.uiInputLevel.load (std::memory_order_relaxed); }
     float getOutputLevel() const noexcept { return engine.uiOutputLevel.load (std::memory_order_relaxed); }
     int getStepCount() const noexcept { return engine.uiStepCount.load (std::memory_order_relaxed); }
+    int getActiveStepCount() const noexcept { return engine.uiActiveSteps.load (std::memory_order_relaxed); }
     int getCurrentStep() const noexcept { return engine.uiCurrentStep.load (std::memory_order_relaxed); }
     int getTicks() const noexcept { return engine.uiTicks.load (std::memory_order_relaxed); }
     int getCommits() const noexcept { return engine.uiCommits.load (std::memory_order_relaxed); }

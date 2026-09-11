@@ -85,7 +85,7 @@ disagree with what is written here, this wins.
   input is copied to both sides before the engine), and mono in to mono out
   for hosts that run mono tracks mono; stereo in to mono out is refused.
   `ProcessorTest` covers all three
-- `EngineTest`: 22 scenarios plus `render` (89 checks, 0 failures, 0.2 s):
+- `EngineTest`: 30 scenarios plus `render` (119 checks, 0 failures, 0.4 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
   levels, cpu, hostile, pitch, glue, spread, bar, linger, legion, haunt,
   tremor, modesexport
@@ -149,6 +149,69 @@ expected, three notes.
    instrument and the room, not the patch; the dice touches only what
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
+
+## A hunt for the same class of bug (2026-09-11)
+
+The Wraith hang was state owned by one situation that another neither
+reset nor kept feeding, so the whole engine was swept for that shape: six
+lenses, every finding refuted twice by skeptics, and what survived was
+then measured in the harness before anything was changed. Nine were real.
+Two survivors did not reproduce when measured and were left alone.
+
+**Stuck state, the same shape as the reported bug**
+- *A capture survived Freeze and Bypass.* The gate-open branch consulted
+  neither, so freezing or bypassing mid-note banked the truncated step
+  anyway, and at the ceiling evicted step 1 to do it. It now abandons the
+  capture and shuts the gate.
+- *Preparing again looked like a Clear.* `reset()` zeroed
+  `uiClearsServed`, a monotone acknowledgement the editor compares against
+  its own last value, so a device change flashed the plate unprompted.
+- *At Steps 1 every note re-phased the clock.* `commit()` read "the
+  pattern just came alive" as `count == 1`, but at a ceiling of 1 the drop
+  loop empties the pattern first, so it was true on every commit. It now
+  reads emptiness before the drop.
+- *A ratchet rewound the read heads but not the budgets.* Trance, Miasma
+  and Rattle carry a budget of output samples sized to one ratchet window,
+  so restarting without giving it back left them silent from the second
+  window on. Miasma recovered 2.4 dB of a chaotic pattern.
+
+**A haunting reading a slice that capture had taken back**
+The worst of them. A haunting outlives its step by several ticks and
+keeps a raw pointer into the pool, but only the sounding voice was
+protected: `dropStep` and the free-slot rescan both handed a haunted
+slice straight to capture, and the next note was written into a sounding
+ghost. The pool now has a slot per haunt layer and a `slotBusy` that
+counts them as readers. `EngineTest wraithslots` polls the invariant over
+ten captures at Steps 1; it fails on the old code.
+
+**Things that were lying**
+- *Wraith ignored Feedback.* Every haunting was born at full level
+  whatever its step was sounding at, so the pattern faded while its ghosts
+  did not: measured, the wet RSE went UP 4 dB over eight plays. Born at
+  the step's own level it now falls 15 dB. The prune became relative to
+  the birth gain in the same edit.
+- *The OUT meter was the wet bus, taken before Blend and Out.* Pull OUT to
+  -Inf and the column still climbed; at Blend 0 it metered a pattern
+  nobody could hear. It is now taken from what is written to the rail.
+- *`reset()` snapped In, Out and Blend to invented values*, so every
+  re-prepare opened with 20 ms of a mix the player never set. The
+  smoothers hold parameters, so `reset()` has no business writing them.
+- *The export wrote steps that do not play.* `renderPattern` used the
+  whole pattern while playback uses the ceiling, so a pattern holding
+  eight with Steps at 3 exported eight. The lamp had the same bug in
+  pictures, stacking two limbs on one ray. Both now read a published
+  `uiActiveSteps`.
+- *The bar line was not taken modulo the bar*, so a host that reports no
+  bar start made the reset fire every block, and a division that does not
+  divide the bar (1/16D in 4/4) stepped over the bar line and stretched one
+  step. The arithmetic is now a pure `timemap::offsetsFrom` with its own
+  checks, because a wrong ceil is invisible in review and very audible in
+  a DAW.
+
+**Claimed but not reproduced**, so not changed: a fill outliving the
+pattern it was scrambling (the flag clears), and the reserve steps
+sliding back in at full gain when Steps is raised (that is the documented
+design: a step that does not play does not pay Feedback).
 
 ## A haunting that outlived its mode (2026-09-11)
 

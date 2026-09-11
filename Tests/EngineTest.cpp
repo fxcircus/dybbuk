@@ -845,6 +845,15 @@ void exportPattern()
     rs.stepSeconds = p.stepSeconds;
     rs.length01 = p.length01;
     const int total = BurstEngine::renderPattern (copy, rs, rendered);
+
+    // The file is what plays, not what is held: lower the ceiling and the
+    // render is shorter, because the steps beyond it are silent.
+    BurstEngine::RenderSettings capped = rs;
+    capped.maxSteps = 2;
+    juce::AudioBuffer<float> shorter;
+    const int cappedTotal = BurstEngine::renderPattern (copy, capped, shorter);
+    check ("the export is only the steps that sound", cappedTotal == 2 * juce::roundToInt (0.2 * sr),
+           juce::String (cappedTotal) + " samples at Steps 2 against " + juce::String (total) + " at the ceiling");
     check ("one cycle is steps times step", total == 4 * juce::roundToInt (0.2 * sr), juce::String (total) + " samples");
 
     std::vector<float> ren ((size_t) total);
@@ -1528,6 +1537,281 @@ void wraithRelease()
            "rms in the gap after the second step is " + juce::String (gap, 4));
 }
 
+
+// A gate that is open when the situation which opened it goes away: freezing
+// or bypassing mid-note used to bank the truncated step anyway, because the
+// capture branch consulted neither.
+void gateAbandon()
+{
+    std::printf ("gate abandon: freezing or bypassing mid-note banks nothing\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 2.5, { { 0.10, 0.600, 220.0, 0.5 } });
+
+    for (int which = 0; which < 2; ++which)
+    {
+        auto p = wetParams();
+        const auto r = runBurst (in, p, sr, 128, [which] (BurstEngine&, BurstEngine::Params& q, double t) {
+            if (t >= 0.30)   // the note is still ringing
+            {
+                if (which == 0) q.record = false;
+                else            q.bypass = true;
+            }
+        });
+        check (which == 0 ? "frozen mid-note, no step is banked" : "bypassed mid-note, no step is banked",
+               r.stepCount == 0, juce::String (r.stepCount) + " steps");
+    }
+
+    // And the gate does not stay open: re-arming captures cleanly afterwards.
+    auto p = wetParams();
+    const auto again = burstInput (sr, 3.5, { { 0.10, 0.600, 220.0, 0.5 }, { 2.00, 0.100, 440.0, 0.5 } });
+    const auto r = runBurst (again, p, sr, 128, [] (BurstEngine&, BurstEngine::Params& q, double t) {
+        q.record = ! (t >= 0.30 && t < 1.50);
+    });
+    check ("and the gate is left shut, so the next note captures cleanly", r.stepCount == 1,
+           juce::String (r.stepCount) + " steps");
+}
+
+// State that only the step clock unwinds must not outlive the step clock.
+// Three counters had that shape; the hauntings were the fourth.
+void orphanState()
+{
+    std::printf ("orphan state: nothing the clock feeds outlives the clock\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 6.0, kFour);
+
+    // A fill running when the pattern empties used to latch the lamp's fill
+    // flag at 1 forever, and left the next pattern reading a dead order.
+    {
+        // A note at 2.0 s, after the pattern is frozen, is what fires a fill.
+        auto phrase = kFour;
+        phrase.push_back ({ 2.0, 0.080, 1100.0, 0.5 });
+        const auto withTrigger = burstInput (sr, 6.0, phrase);
+        auto p = wetParams();
+        p.fills01 = 1.0f;
+        float fillAtEnd = 1.0f, fillSeen = 0.0f;
+        int stepsAtEnd = -1;
+        runBurst (withTrigger, p, sr, 128, [&] (BurstEngine& e, BurstEngine::Params& q, double t) {
+            if (t >= 1.5) q.record = false;      // freeze, so the note at 2.0 s scrambles instead of capturing
+            if (t >= 2.06) q.feedback01 = 0.0f;  // then let the pattern die UNDER the fill, mid-scramble
+            fillSeen = juce::jmax (fillSeen, e.uiFill.load());
+            fillAtEnd = e.uiFill.load();
+            stepsAtEnd = e.uiStepCount.load();
+        });
+        check ("the fill did fire", fillSeen > 0.5f, juce::String (fillSeen, 1));
+        check ("a fill does not outlive the pattern it was scrambling",
+               stepsAtEnd == 0 && fillAtEnd == 0.0f,
+               juce::String (stepsAtEnd) + " steps left, fill flag " + juce::String (fillAtEnd, 1));
+    }
+
+    // Preparing again is not a clear: the acknowledgement counter the editor
+    // watches must never go backwards, or the plate flashes unprompted.
+    {
+        BurstEngine e;
+        e.prepare (sr, 128);
+        juce::AudioBuffer<float> buf (2, 128);
+        BurstEngine::Params p = wetParams();
+        e.requestClear();
+        juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, 128);
+        buf.clear();
+        e.process (view, p);
+        const int served = e.uiClearsServed.load();
+        e.prepare (sr, 128);
+        check ("preparing again does not look like a clear", served == 1 && e.uiClearsServed.load() >= served,
+               "served " + juce::String (served) + " before, " + juce::String (e.uiClearsServed.load()) + " after");
+    }
+}
+
+// At the bottom of the Steps range the pattern is full on every commit, so
+// "the pattern just came alive" had to stop being read as "count is 1".
+void singleStepPhase()
+{
+    std::printf ("steps 1: a new note does not re-phase the clock\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 4.0, { { 0.10, 0.080, 220.0, 0.5 }, { 1.37, 0.080, 880.0, 0.5 } });
+    auto p = wetParams();
+    p.maxSteps = 1;
+    p.stepSeconds = 0.5;
+    const auto r = runBurst (in, p, sr, 128);
+    const auto on = onsetsOf (r.out, sr);
+    int worst = 0;
+    juce::String phases;
+    if (on.size() >= 4)
+        for (size_t k = 1; k < on.size(); ++k)
+        {
+            const int gap = on[k].sample - on[k - 1].sample;
+            worst = juce::jmax (worst, std::abs (gap - juce::roundToInt (0.5 * sr)));
+            phases += juce::String (gap) + " ";
+        }
+    check ("every tick stays on the original phase", on.size() >= 4 && worst <= 2,
+           "gaps between onsets: " + phases.trim() + " samples, wanted " + juce::String (juce::roundToInt (0.5 * sr)));
+}
+
+
+// A ratchet restarts the step inside its own step. Golem just rewinds a read
+// head, but the grain players and the buzz carry a budget of output samples
+// sized to one ratchet window, so a restart has to give them the window back
+// or they fall silent for every window after the first.
+void ratchetModes()
+{
+    std::printf ("ratchet: a restarted step sounds for the whole step, in every mode\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 5.0, kFour);
+    struct M { BurstEngine::Mode mode; const char* name; };
+    const M modes[] = { { BurstEngine::Mode::golem, "Golem" },   { BurstEngine::Mode::trance, "Trance" },
+                        { BurstEngine::Mode::rattle, "Rattle" }, { BurstEngine::Mode::miasma, "Miasma" } };
+    double golemRatio = 1.0;
+    for (const auto& m : modes)
+    {
+        auto still = wetParams();
+        still.mode = m.mode;
+        still.stepSeconds = 0.25;
+        auto wild = still;
+        wild.chaos01 = 1.0f;
+        const auto a = runBurst (in, still, sr, 128, [] (BurstEngine& e, BurstEngine::Params&, double t) { if (t == 0.0) e.seedForTests (4); });
+        const auto b = runBurst (in, wild, sr, 128, [] (BurstEngine& e, BurstEngine::Params&, double t) { if (t == 0.0) e.seedForTests (4); });
+        const int from = (int) (2.0 * sr), n = (int) (2.8 * sr);
+        const double ratio = rmsOf (b.out, from, n) / juce::jmax (1.0e-9, rmsOf (a.out, from, n));
+        if (m.mode == BurstEngine::Mode::golem)
+        {
+            golemRatio = ratio;
+            note ("Golem, chaos full against still", juce::String (dbfs (ratio), 1) + " dB");
+        }
+        else
+        {
+            check ((juce::String (m.name) + " keeps sounding through a ratchet").toRawUTF8(),
+                   dbfs (ratio) > dbfs (golemRatio) - 6.0,
+                   juce::String (dbfs (ratio), 1) + " dB against Golem's " + juce::String (dbfs (golemRatio), 1));
+        }
+    }
+}
+
+
+// A haunting outlives its step by several ticks and keeps reading the slice
+// it was frozen from, so that slice is not free: pointing capture at it
+// writes the next note into a sounding ghost.
+void wraithSlots()
+{
+    std::printf ("wraith slots: capture is never pointed at a slice a ghost is reading\n");
+    const double sr = 48000.0;
+    std::vector<ToneBurst> stream;
+    for (int i = 0; i < 10; ++i)
+        stream.push_back ({ 0.10 + 0.45 * i, 0.080, 220.0 * (1.0 + 0.12 * i), 0.5 });
+    const auto in = burstInput (sr, 6.0, stream);
+
+    auto p = wetParams();
+    p.mode = BurstEngine::Mode::wraith;
+    p.maxSteps = 1;            // every commit drops the only step, the hard case
+    p.stepSeconds = 0.25;
+    p.length01 = 1.0f;         // eight ticks of haunting, so ghosts are always in the air
+    bool clashed = false;
+    runBurst (in, p, sr, 128, [&] (BurstEngine& e, BurstEngine::Params&, double) {
+        clashed = clashed || e.captureSlotIsHaunted();
+    });
+    check ("no slice is written while a haunting reads it", ! clashed, clashed ? "capture landed on a haunted slice" : "clean over 10 captures");
+}
+
+// Feedback is the level a step keeps every play. A haunting is a copy of a
+// step, so it has to be born at the level that step is sounding at, or the
+// pattern fades while its ghosts do not and the knob inverts.
+void wraithFade()
+{
+    std::printf ("wraith fade: a haunting is born at the level of the step it came from\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 5.0, { { 0.10, 0.080, 220.0, 0.5 } });
+    auto p = wetParams();
+    p.mode = BurstEngine::Mode::wraith;
+    p.maxSteps = 1;
+    p.stepSeconds = 0.25;
+    p.length01 = 1.0f;
+    p.feedback01 = 0.5f;       // 6 dB a play
+    const auto r = runBurst (in, p, sr, 128, [] (BurstEngine&, BurstEngine::Params& q, double t) {
+        if (t >= 0.5) q.record = false;   // freeze, so nothing new is captured
+    });
+    const int w = (int) (0.25 * sr);
+    const double first = rmsOf (r.out, (int) (0.6 * sr), w);
+    const double last = rmsOf (r.out, (int) (2.6 * sr), w);
+    check ("eight plays later the whole thing is down, ghosts included",
+           first > 0.02 && dbfs (last / juce::jmax (first, 1.0e-9)) < -12.0,
+           juce::String (dbfs (first), 1) + " dBFS at the first play, " + juce::String (dbfs (last), 1) + " eight plays later");
+}
+
+
+// The meters and the smoothers are the plugin telling the truth about itself.
+void meterTruth()
+{
+    std::printf ("meters: OUT reads the rail, and preparing again keeps the mix\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 3.0, kFour);
+
+    // Out at its floor is silence, so the meter must read silence too.
+    {
+        BurstEngine e;
+        e.prepare (sr, 128);
+        auto p = wetParams();
+        p.outDb = -60.0f;
+        juce::AudioBuffer<float> buf (2, 128);
+        float worst = 0.0f;
+        for (size_t pos = 0; pos < in.size(); pos += 128)
+        {
+            const int n = (int) juce::jmin ((size_t) 128, in.size() - pos);
+            for (int i = 0; i < n; ++i) { buf.setSample (0, i, in[pos + (size_t) i]); buf.setSample (1, i, in[pos + (size_t) i]); }
+            juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, n);
+            e.process (view, p);
+            worst = juce::jmax (worst, e.uiOutputLevel.load());
+        }
+        check ("Out at the floor meters silence", worst < 1.0e-4f, "highest OUT reading " + juce::String (worst, 6));
+    }
+
+    // Blend fully dry: the meter is the dry that is actually leaving.
+    {
+        BurstEngine e;
+        e.prepare (sr, 128);
+        auto p = wetParams();
+        p.blend01 = 0.0f;
+        juce::AudioBuffer<float> buf (2, 128);
+        float worst = 0.0f;
+        for (size_t pos = 0; pos < in.size(); pos += 128)
+        {
+            const int n = (int) juce::jmin ((size_t) 128, in.size() - pos);
+            for (int i = 0; i < n; ++i) { buf.setSample (0, i, in[pos + (size_t) i]); buf.setSample (1, i, in[pos + (size_t) i]); }
+            juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, n);
+            e.process (view, p);
+            worst = juce::jmax (worst, e.uiOutputLevel.load());
+        }
+        check ("fully dry, OUT meters the dry", std::abs (dbfs (worst) - dbfs (0.5)) < 1.0,
+               juce::String (dbfs (worst), 1) + " dBFS against the 0.5 peak going in");
+    }
+
+    // Preparing again is not a reason to open at a mix the player never set.
+    {
+        BurstEngine e;
+        e.prepare (sr, 128);
+        auto p = wetParams();
+        p.outDb = -60.0f;      // silence, held for a second
+        juce::AudioBuffer<float> buf (2, 128);
+        std::vector<float> out;
+        for (int b = 0; b < 400; ++b)
+        {
+            for (int i = 0; i < 128; ++i)
+            {
+                const float v = 0.5f * std::sin (juce::MathConstants<float>::twoPi * 220.0f * (float) (b * 128 + i) / (float) sr);
+                buf.setSample (0, i, v);
+                buf.setSample (1, i, v);
+            }
+            if (b == 200)
+                e.prepare (sr, 128);   // a device change mid-stream
+            juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, 128);
+            e.process (view, p);
+            if (b >= 200 && b < 212)
+                for (int i = 0; i < 128; ++i)
+                    out.push_back (buf.getSample (0, i));
+        }
+        const double burst = peakOf (out, 0, (int) out.size());
+        check ("preparing again does not burst the old mix through", dbfs (burst) < -60.0,
+               "peak in the 32 ms after prepare is " + juce::String (dbfs (burst), 1) + " dBFS");
+    }
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -1537,7 +1821,9 @@ const Scenario kScenarios[] = {
     { "hostile", hostile },   { "pitch", pitch },     { "glue", glueTest },       { "spread", spreadTest },
     { "bar", barreset },      { "trance", trance },   { "legion", legion },       { "wraith", wraith },
     { "tremor", tremor },       { "modesexport", modesExport },
-    { "wraithrelease", wraithRelease },
+    { "wraithrelease", wraithRelease },  { "gateabandon", gateAbandon },
+    { "orphanstate", orphanState },      { "steps1phase", singleStepPhase },  { "ratchetmodes", ratchetModes },
+    { "wraithslots", wraithSlots },      { "wraithfade", wraithFade },       { "metertruth", meterTruth },
     { "rattle", rattle },     { "mirror", mirror },   { "miasma", miasma },
 };
 

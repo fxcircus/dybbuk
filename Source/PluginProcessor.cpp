@@ -184,13 +184,10 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         // whole division late; the epsilon absorbs the host's rounding.
         if (playing && havePpq)
         {
-            const double rel = ppq - barStart;
-            const double k = std::ceil (rel / divBeats - 1.0e-6);
-            const double offsetBeats = juce::jmax (0.0, k * divBeats - rel);
-            p.gridOffsetSamples = juce::roundToInt (offsetBeats * 60.0 / bpm * currentSampleRate);
-            // The next bar line, for Bar: a block that starts on one gets 0.
-            const double toBar = rel < 1.0e-6 ? 0.0 : juce::jmax (0.0, barBeats - rel);
-            p.barOffsetSamples = juce::roundToInt (toBar * 60.0 / bpm * currentSampleRate);
+            const auto off = timemap::offsetsFrom (ppq - barStart, divBeats, barBeats);
+            const double toSamples = 60.0 / bpm * currentSampleRate;
+            p.gridOffsetSamples = juce::roundToInt (off.toGrid * toSamples);
+            p.barOffsetSamples = juce::roundToInt (off.toBar * toSamples);
         }
     }
     else
@@ -259,7 +256,7 @@ juce::File DybbukProcessor::exportFolder()
 
 juce::String DybbukProcessor::exportFileName() const
 {
-    const int n = getStepCount();
+    const int n = getActiveStepCount();
     juce::String name = "Dybbuk pattern " + juce::String (n) + (n == 1 ? " step " : " steps ");
 
     if (isSynced())
@@ -292,6 +289,7 @@ bool DybbukProcessor::writePatternWav (const juce::File& dest) const
     settings.glue01 = pGlue->load() * 0.01f;
     settings.spread01 = pSpread->load() * 0.01f;
     settings.mode = modeParam();
+    settings.maxSteps = juce::jlimit (1, BurstEngine::kMaxSteps, juce::roundToInt (pSteps->load()));
     const int samples = BurstEngine::renderPattern (pattern, settings, rendered);
     if (samples <= 0)
         return false;

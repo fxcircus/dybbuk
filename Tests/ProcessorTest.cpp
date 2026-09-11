@@ -1023,6 +1023,41 @@ void randomFields()
     file.deleteFile();
 }
 
+// The sync arithmetic is the whole of the transport feature and a wrong ceil
+// is invisible in review and very audible in a DAW, so it is a pure function
+// with its own checks.
+void syncOffsets()
+{
+    std::printf ("sync offsets: the next grid line and the next bar line\n");
+
+    const auto a = timemap::offsetsFrom (0.0, 0.25, 4.0);
+    check ("on a line, both offsets are zero", a.toGrid == 0.0 && a.toBar == 0.0,
+           juce::String (a.toGrid, 4) + " / " + juce::String (a.toBar, 4));
+
+    const auto b = timemap::offsetsFrom (1.1, 0.25, 4.0);
+    check ("mid bar, the next sixteenth and the bar line",
+           std::abs (b.toGrid - 0.15) < 1.0e-9 && std::abs (b.toBar - 2.9) < 1.0e-9,
+           juce::String (b.toGrid, 4) + " / " + juce::String (b.toBar, 4));
+
+    // A host that reports no bar start leaves the position growing without
+    // bound; unwrapped, the bar line read as zero for ever and fired the
+    // pattern's reset on every block.
+    const auto c = timemap::offsetsFrom (9.7, 0.5, 4.0);
+    check ("a position past the bar wraps instead of clamping to zero",
+           c.toBar > 0.0 && std::abs (c.toBar - 2.3) < 1.0e-9,
+           juce::String (c.toBar, 4) + " beats to the bar line");
+
+    // A dotted sixteenth does not divide the bar: the line after 3.75 would
+    // be 4.125, past the bar line, and one step a bar was stretched.
+    const auto d = timemap::offsetsFrom (3.8, 0.375, 4.0);
+    check ("a division that overshoots the bar is clamped to it",
+           std::abs (d.toGrid - 0.2) < 1.0e-9,
+           juce::String (d.toGrid, 4) + " beats to the next line");
+
+    const auto e = timemap::offsetsFrom (2.0, 0.0, 4.0);
+    check ("a nonsense division is not a crash", e.toGrid == 0.0 && e.toBar == 0.0, "");
+}
+
 void ordering()
 {
     std::printf ("parameter order: Push bank 1 is the eight that matter\n");
@@ -1086,6 +1121,7 @@ int main (int argc, char* argv[])
 
     juce::ScopedJuceInitialiser_GUI juceInit;
 
+    syncOffsets();
     ordering();
     randomFields();
     readouts();

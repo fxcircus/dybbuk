@@ -42,6 +42,7 @@ void BurstEngine::Grains::begin (const float* d, int n, double headStart, double
     data = d;
     len = n;
     head = juce::jlimit (0.0, (double) juce::jmax (0, n - 1), headStart);
+    this->headStart = head;
     advance = adv;
     size = juce::jmax (2, grainSize);
     left = outSamples;
@@ -131,15 +132,20 @@ bool BurstEngine::StepVoice::sounding() const noexcept
     return false;
 }
 
-void BurstEngine::StepVoice::restart() noexcept
+void BurstEngine::StepVoice::restart (int windowSamples) noexcept
 {
     for (int k = 0; k < voices; ++k)
         v[k].pos = v[k].start;
+    if (rattleLeft >= 0 && rattleWindow > 0)
+        rattleLeft = windowSamples > 0 ? windowSamples : rattleWindow;
     if (stretch.data != nullptr)
     {
-        stretch.head = stretch.start[0];
+        stretch.head = stretch.headStart;
+        stretch.start[0] = stretch.headStart;
+        stretch.start[1] = stretch.headStart;
         stretch.age[0] = 0;
         stretch.age[1] = stretch.size / 2;
+        stretch.left = juce::jmax (stretch.left, windowSamples);
     }
 }
 
@@ -150,6 +156,7 @@ void BurstEngine::StepVoice::stop() noexcept
     voices = 0;
     stretch = {};
     rattleLeft = 0;
+    rattleWindow = 0;
 }
 
 float BurstEngine::StepVoice::next (float rate, Rng& rng) noexcept
@@ -182,7 +189,20 @@ int BurstEngine::StepVoice::materialLen() const noexcept
 
 double BurstEngine::StepVoice::reached() const noexcept
 {
-    return stretch.data != nullptr ? stretch.head : (voices > 0 ? juce::jmin (v[0].pos, (double) v[0].len) : 0.0);
+    if (stretch.data != nullptr)
+        return stretch.head;
+    if (voices <= 0)
+        return 0.0;
+    // A reversed voice reads from the far end, so where it got to in the
+    // material is not its forward counter: freezing that would take the
+    // moment from the opposite end of the note.
+    return v[0].reverse ? juce::jmax (0.0, (double) (v[0].len - 1) - v[0].pos)
+                        : juce::jmin (v[0].pos, (double) v[0].len);
+}
+
+float BurstEngine::StepVoice::playedGain() const noexcept
+{
+    return stretch.data != nullptr ? stretch.gain : (voices > 0 ? v[0].gain : 0.0f);
 }
 
 void BurstEngine::Haunts::clear() noexcept
@@ -190,6 +210,7 @@ void BurstEngine::Haunts::clear() noexcept
     for (int k = 0; k < kMax; ++k)
     {
         layer[k] = {};
+        spawnGain[k] = 0.0f;
         panL[k] = panR[k] = 1.0f;
     }
 }
@@ -214,6 +235,7 @@ void BurstEngine::Haunts::spawn (const float* material, int len, double reached,
     const double at = juce::jlimit (0.0, (double) (len - grainSize - 1), reached - (double) grainSize);
     layer[slot].begin (material, len, at, 0.0, grainSize, 1 << 30, rng);
     layer[slot].gain = gain;
+    spawnGain[slot] = gain;
     panL[slot] = pl;
     panR[slot] = pr;
 }
@@ -223,7 +245,9 @@ void BurstEngine::Haunts::tick (float decayPerTick) noexcept
     for (int k = 0; k < kMax; ++k)
     {
         layer[k].gain *= decayPerTick;
-        if (layer[k].gain < kWraithGain * 0.1f)   // -20 dB down: gone
+        // Relative to what it was born at: a haunting of a step that had already
+        // faded starts quiet, and an absolute floor would delete it at once.
+        if (layer[k].gain < spawnGain[k] * 0.1f)   // -20 dB down: gone
             layer[k] = {};
     }
 }
@@ -259,7 +283,7 @@ void BurstEngine::prepare (double sampleRate, int maxBlockSize)
     juce::ignoreUnused (maxBlockSize);
     sr = sampleRate;
     capacity = (int) std::ceil (kMaxStepSeconds * sr);
-    pool.assign ((size_t) (kMaxSteps + 1) * (size_t) capacity, 0.0f);
+    pool.assign ((size_t) kSlotCount * (size_t) capacity, 0.0f);
 
     preRollSamples = juce::jmax (1, juce::roundToInt (kPreRollMs * 0.001 * sr));
     preRoll.assign ((size_t) preRollSamples, 0.0f);
@@ -289,16 +313,16 @@ void BurstEngine::reset() noexcept
     preRollPos = 0;
     std::fill (preRoll.begin(), preRoll.end(), 0.0f);
     doClear();
-    uiClearsServed.store (0, std::memory_order_relaxed);
-    inGain.setCurrentAndTargetValue (1.0f);
-    outGain.setCurrentAndTargetValue (1.0f);
-    rate.setCurrentAndTargetValue (1.0f);
+    // uiClearsServed is NOT zeroed: it is a monotone acknowledgement the
+    // editor compares against its own last value, so winding it back makes a
+    // device change look like a Clear the player never asked for.
+    // The smoothers are NOT reset to invented values: each one holds a
+    // parameter the player has set, and snapping In, Out and Blend to 1, 1
+    // and -3 dB made every re-prepare open with 20 ms of the wrong mix.
+    // prepare() has already snapped them to their own targets.
     currentRate = 1.0f;
-    glueAmount.setCurrentAndTargetValue (0.0f);
     glueL.reset();
     glueR.reset();
-    wetMix.setCurrentAndTargetValue (std::sin (juce::MathConstants<float>::halfPi * 0.5f));
-    dryMix.setCurrentAndTargetValue (std::cos (juce::MathConstants<float>::halfPi * 0.5f));
 }
 
 void BurstEngine::doClear() noexcept
@@ -339,6 +363,7 @@ void BurstEngine::publishSteps() noexcept
         uiStepGain[(size_t) i].store (i < count ? stepGain[(size_t) i] : 0.0f, std::memory_order_relaxed);
     }
     uiStepCount.store (count, std::memory_order_relaxed);
+    uiActiveSteps.store (juce::jmin (count, juce::jlimit (1, kMaxSteps, cur.maxSteps)), std::memory_order_relaxed);
 }
 
 // --- capture -----------------------------------------------------------------
@@ -376,7 +401,8 @@ void BurstEngine::dropStep (int index) noexcept
         voice.stop();
     if (index <= playIndex)
         --playIndex;
-    if (! gateOpen)
+    // Only if nothing is still reading it: a haunting outlives its step.
+    if (! gateOpen && ! slotBusy (slot))
         captureSlot = slot;
 }
 
@@ -402,6 +428,11 @@ void BurstEngine::commit() noexcept
     }
     capWrite = 0;
 
+    // Read emptiness BEFORE the ceiling drops anything: at Steps 1 the drop
+    // loop below takes the count to zero on every commit, so "count == 1"
+    // afterwards would mean "alive again" every time and re-phase the clock.
+    const bool wasEmpty = count == 0;
+
     const int ceiling = juce::jlimit (1, kMaxSteps, cur.maxSteps);
     if (count >= ceiling)
     {
@@ -421,18 +452,14 @@ void BurstEngine::commit() noexcept
     ++count;
     endMutation();
 
-    // Any slot the pattern does not hold is free; the spare guarantees one.
-    for (int s = 0; s <= kMaxSteps; ++s)
-    {
-        bool held = false;
-        for (int i = 0; i < count; ++i)
-            held = held || pattern[(size_t) i] == s;
-        if (! held) { captureSlot = s; break; }
-    }
+    // Any slot nothing is reading is free: not the pattern's, and not one a
+    // haunting is still frozen on. The spares guarantee one exists.
+    for (int s = 0; s < kSlotCount; ++s)
+        if (! slotBusy (s)) { captureSlot = s; break; }
     publishSteps();
     uiCommits.fetch_add (1, std::memory_order_relaxed);
 
-    if (count == 1)
+    if (wasEmpty)
     {
         playIndex = -1;
         pendulumDir = 1;
@@ -585,6 +612,7 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
         }
     }
     sv.rattleLeft = s.mode == Mode::rattle ? window : 0;
+    sv.rattleWindow = sv.rattleLeft;
 }
 
 void BurstEngine::startStep (int index, int stepSamples, const Deviation& d) noexcept
@@ -691,7 +719,8 @@ void BurstEngine::advance() noexcept
         wraiths.tick (hauntDecayPerTick (cur.length01));
         if (voice.material() != nullptr)
             wraiths.spawn (voice.material(), voice.materialLen(), voice.reached(),
-                          grainSizeFor (sr, voice.materialLen()), kWraithGain, voice.panL, voice.panR, rng);
+                          grainSizeFor (sr, voice.materialLen()), kWraithGain * voice.playedGain(),
+                          voice.panL, voice.panR, rng);
     }
 
     if (count <= 0)
@@ -835,6 +864,17 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
                 }
             }
         }
+        else if (! p.record || p.bypass)
+        {
+            // The situation that opened this gate has gone: the player froze
+            // the pattern or took the plugin out of circuit while a note was
+            // still ringing. Abandon what was half heard rather than bank a
+            // truncated step, and do not leave the gate open behind us.
+            gateOpen = false;
+            openedFor = 0;
+            capWrite = 0;
+            uiGate.store (0.0f, std::memory_order_relaxed);
+        }
         else
         {
             ++openedFor;
@@ -880,7 +920,7 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
             else if (ratchetCounter > 0 && --ratchetCounter == 0 && ratchetsLeft > 0)
             {
                 // The ratchet: the same slice again, from where it began.
-                voice.restart();
+                voice.restart (ratchetPeriod);
                 --ratchetsLeft;
                 ratchetCounter = ratchetsLeft > 0 ? ratchetPeriod : 0;
             }
@@ -909,13 +949,17 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
             wetL = glueL.process (wetL, drive);
             wetR = glueR.process (wetR, drive);
         }
-        outPeak = juce::jmax (outPeak, juce::jmax (std::abs (wetL), std::abs (wetR)));
-
         const float wg = wetMix.getNextValue(), dg = dryMix.getNextValue(), og = outGain.getNextValue();
         for (int ch = 0; ch < numCh; ++ch)
         {
             const float w = numCh < 2 ? 0.5f * (wetL + wetR) : (ch == 0 ? wetL : (ch == 1 ? wetR : 0.5f * (wetL + wetR)));
-            buffer.setSample (ch, i, (buffer.getSample (ch, i) * ig * dg + w * wg) * og);
+            const float written = (buffer.getSample (ch, i) * ig * dg + w * wg) * og;
+            buffer.setSample (ch, i, written);
+            // The OUT meter reads what is on the rail, so it is taken from
+            // what was written: past Blend, past Out. Taken from the wet bus
+            // before them, it climbed with Out at -Inf and metered a pattern
+            // nobody could hear at Blend 0.
+            outPeak = juce::jmax (outPeak, std::abs (written));
         }
     }
 
@@ -924,6 +968,27 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
 }
 
 // --- export ------------------------------------------------------------------
+
+bool BurstEngine::slotBusy (int slot) const noexcept
+{
+    for (int i = 0; i < count; ++i)
+        if (pattern[(size_t) i] == slot)
+            return true;
+    const float* const s = pool.data() + (size_t) slot * (size_t) capacity;
+    for (int k = 0; k < Haunts::kMax; ++k)
+        if (wraiths.layer[k].data == s)
+            return true;
+    return false;
+}
+
+bool BurstEngine::captureSlotIsHaunted() const noexcept
+{
+    const float* const s = pool.data() + (size_t) captureSlot * (size_t) capacity;
+    for (int k = 0; k < Haunts::kMax; ++k)
+        if (wraiths.layer[k].data == s)
+            return true;
+    return false;
+}
 
 bool BurstEngine::copyPattern (PatternCopy& out) const
 {
@@ -960,7 +1025,9 @@ bool BurstEngine::copyPattern (PatternCopy& out) const
 int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings& st, juce::AudioBuffer<float>& out)
 {
     const float playRate = rateForSemitones (juce::jlimit (-24.0f, 24.0f, st.pitchSemitones));
-    const int n = (int) pattern.steps.size();
+    // Only what plays: a pattern may hold more steps than the ceiling lets
+    // sound, and a file of steps nobody hears is not the pattern.
+    const int n = juce::jmin ((int) pattern.steps.size(), juce::jlimit (1, kMaxSteps, st.maxSteps));
     if (n == 0 || pattern.sampleRate <= 0.0)
     {
         out.setSize (2, 0);
@@ -1018,7 +1085,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
             wraiths.tick (hauntDecayPerTick (st.length01));
             if (sv.material() != nullptr)
                 wraiths.spawn (sv.material(), sv.materialLen(), sv.reached(), grainSizeFor (pattern.sampleRate, sv.materialLen()),
-                              kWraithGain, sv.panL, sv.panR, rng);
+                              kWraithGain * sv.playedGain(), sv.panL, sv.panR, rng);
         }
         setup.index = idx;
         Deviation none;

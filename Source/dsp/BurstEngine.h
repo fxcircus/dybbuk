@@ -90,6 +90,9 @@ public:
     // so a session recall can never empty the pattern on load.
     void requestClear() noexcept { clearRequests.fetch_add (1, std::memory_order_relaxed); }
     void seedForTests (unsigned int s) noexcept { rng.seed (s); }
+    // For the harness: capture must never be pointed at a slice a haunting is
+    // still reading, or the next note is written into a sounding ghost.
+    bool captureSlotIsHaunted() const noexcept;
 
     // Message-thread read of the pattern: retries while the audio thread is
     // changing it, returns false if it never settles. Allocates.
@@ -105,6 +108,7 @@ public:
         float glue01 = 0.0f;
         float spread01 = 0.0f;
         Mode mode = Mode::golem;
+        int maxSteps = kMaxSteps;   // the ceiling: a pattern holding more than this plays only the first N
     };
 
     // One pass through a pattern, offline, with the same voice as the live
@@ -114,7 +118,8 @@ public:
     static int renderPattern (const PatternCopy& pattern, const RenderSettings& settings, juce::AudioBuffer<float>& out);
 
     // Polled by the editor; the lamp is the pattern.
-    std::atomic<int> uiStepCount { 0 };
+    std::atomic<int> uiStepCount { 0 };          // steps the pattern holds
+    std::atomic<int> uiActiveSteps { 0 };        // steps that actually play: the rest are held under the ceiling
     std::atomic<int> uiCurrentStep { -1 };     // -1 while listening
     std::atomic<int> uiTicks { 0 };            // counts step-clock ticks, for a pulse
     std::atomic<int> uiCommits { 0 };          // counts steps joining the pattern, so the plate can grow a new limb
@@ -192,7 +197,7 @@ private:
     {
         const float* data = nullptr;
         int len = 0;
-        double head = 0.0, advance = 0.0;
+        double head = 0.0, headStart = 0.0, advance = 0.0;
         int size = 0;
         double start[2] { 0.0, 0.0 };
         int age[2] { 0, 0 };
@@ -212,15 +217,24 @@ private:
         int voices = 0;
         Grains stretch;
         int rattleLeft = 0;        // Rattle: output samples of buzz still to play; the slice restarts when it ends
+        int rattleWindow = 0;      // ... and what a ratchet gives it back
         float panL = 1.0f, panR = 1.0f;
         bool sounding() const noexcept;
-        void restart() noexcept;   // the ratchet: from the start again
+        // The ratchet: from the start again, for the whole window it is
+        // restarting into. The grain players and the buzz carry a budget of
+        // output samples sized to one window, so rewinding the read head
+        // without giving the budget back leaves them silent from the second
+        // window on.
+        void restart (int windowSamples) noexcept;
         void stop() noexcept;
         float next (float rate, Rng& rng) noexcept;
         // The material this step was playing and how far it got, for Wraith.
         const float* material() const noexcept;
         int materialLen() const noexcept;
         double reached() const noexcept;
+        // The level this step is actually sounding at, chaos and Feedback
+        // included: what a haunting of it should be born at.
+        float playedGain() const noexcept;
     };
 
     // Wraith's frozen moments: up to four, each a held grain fading over the
@@ -230,6 +244,7 @@ private:
         static constexpr int kMax = 4;
         Grains layer[kMax];
         float panL[kMax] {}, panR[kMax] {};
+        float spawnGain[kMax] {};   // what it was born at, so the prune is relative to it
         void clear() noexcept;
         void spawn (const float* material, int len, double reached, int grainSize, float gain, float pl, float pr, Rng& rng) noexcept;
         void tick (float decayPerTick) noexcept;
@@ -274,6 +289,12 @@ private:
     static float hauntDecayPerTick (float length01) noexcept;
     void startStep (int index, int stepSamples, const Deviation& d) noexcept;
 
+    // Slots: the pattern's ceiling, one spare so capture never writes into a
+    // slice the sequencer may be reading, and one per haunt layer, because a
+    // haunting outlives its step by several ticks and keeps reading the slice
+    // it was frozen from.
+    static constexpr int kSlotCount = kMaxSteps + 1 + Haunts::kMax;
+    bool slotBusy (int slot) const noexcept;
     float* slice (int slot) noexcept { return pool.data() + (size_t) slot * (size_t) capacity; }
     const float* slice (int slot) const noexcept { return pool.data() + (size_t) slot * (size_t) capacity; }
     void onset() noexcept;
@@ -342,8 +363,8 @@ private:
     // One spare slot beyond the ceiling so capture never writes into a slice
     // the sequencer may be reading.
     std::vector<float> pool;
-    std::array<int, kMaxSteps + 1> sliceLen {};
-    std::array<float, kMaxSteps + 1> slicePeak {};
+    std::array<int, kSlotCount> sliceLen {};
+    std::array<float, kSlotCount> slicePeak {};
     std::array<int, kMaxSteps> pattern {};
     std::array<float, kMaxSteps> stepGain {};   // fade state, in pattern order
     int count = 0;

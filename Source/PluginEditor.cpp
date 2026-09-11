@@ -734,7 +734,9 @@ void DybbukEditor::timerCallback()
     const int count = proc.getStepCount();
     for (int i = 0; i < BurstEngine::kMaxSteps; ++i)
         lamp.setStep (i, proc.getStepLevel (i), proc.getStepGain (i));
-    lamp.setPattern (count, proc.getCurrentStep(), proc.getTicks());
+    // The limbs are what sounds: a pattern holding more than Steps allows
+    // keeps the rest, but drawing them would stack two limbs on one ray.
+    lamp.setPattern (juce::jmin (count, proc.getActiveStepCount()), proc.getCurrentStep(), proc.getTicks());
     lamp.setCommits (commits);
     lamp.setCeiling (juce::roundToInt (raw (params::id::steps)), false);
     lamp.setGateOpen (proc.isGateOpen());
