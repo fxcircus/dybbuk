@@ -16,20 +16,13 @@ namespace
     // state).
     //
     // Ordered plainest first and strangest last, because that is how the list
-    // is read. Every mode has at least one; Golem has four because it is the
-    // base player and each one is a different argument.
+    // is read. Every mode has at least one; Golem has three because it is the
+    // base player and each one is a different argument. There is no plain
+    // preset: Init is the parameter defaults and is already that, and a
+    // Deadpan that differed from it only in Fills (which does nothing unless
+    // the pattern is frozen) was a wasted slot.
 
-    // Deadpan: no fills, no chaos, nothing choked, nothing forgotten. The
-    // last eight things you played, in order, forever. The one to learn the
-    // gate on: what you hear is your own playing and the threshold.
-    const PresetValue deadpan[] = {
-        { id::step, params::knob01ForStepSeconds (0.250) },
-        { id::steps, 8.0f },          { id::blend, 50.0f },    { id::fills, 0.0f },
-        { id::chaos, 0.0f },          { id::direction, 0.0f }, { id::length, 100.0f },
-        { id::feedback, 100.0f }
-    };
-
-    // Footfall: the same thing on the host's grid, with the ring cut off each
+    // Footfall: the gate on the host's grid, with the ring cut off each
     // note so only the knock is left, and the pattern starting again from its
     // first step on every bar line. Decay 45 leaves about 56 ms of a step
     // sounding at 120 BPM.
@@ -147,7 +140,6 @@ namespace
     constexpr int countOf (const PresetValue (&)[N]) { return N; }
 
     const FactoryPreset kPresets[] = {
-        { "Deadpan", "The last eight things you played, in order.", deadpan, countOf (deadpan) },
         { "Footfall", "Sixteenths on the host's grid, cut to their strikes.", footfall, countOf (footfall) },
         { "Unsay", "Six steps backwards, last one first.", unsay, countOf (unsay) },
         { "Overhang", "Each step leaves its last moment behind.", overhang, countOf (overhang) },

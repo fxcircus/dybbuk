@@ -92,9 +92,11 @@ disagree with what is written here, this wins.
 - `ProcessorTest`: ordering, readouts, session and preset round-trips, five
   factory presets load and sound, dice, mono to stereo, stereo dry, bypass
   crossfade with the engine deaf, WAV export (0 failures)
-- Eleven factory presets, plainest first and strangest last, every mode
-  covered: Deadpan, Footfall, Unsay, Overhang, Stack, Drag, Undertow, Lean,
-  Drill, Dust, Misfire (Init is the parameter defaults and is untouched)
+- Ten factory presets, plainest first and strangest last, every mode
+  covered: Footfall, Unsay, Overhang, Stack, Drag, Undertow, Lean, Drill,
+  Dust, Misfire. Init is the parameter defaults and is untouched, and is
+  also the plain one: Deadpan differed from it only in Fills, which does
+  nothing unless the pattern is frozen, so Roy cut it (2026-09-12)
 - UI: the same plate, both sheets. The header is Shalal's, zone for zone
   and glyph for glyph: nameplate | bypass cap | preset station | RANDOM,
   CLEAR, EXPORT as glyph-over-label buttons | theme, with hairlines between.
@@ -266,7 +268,6 @@ organising idea:
 
 | Preset | Mode | What it is |
 |---|---|---|
-| Deadpan | Golem | the gate and nothing else, the one to learn the threshold on |
 | Footfall | Golem | sixteenths on the host's grid, choked to their strikes, Bar on |
 | Unsay | Mirror | six steps backwards over a reversed order |
 | Overhang | Wraith | Decay at four ticks, exactly what the haunt slots hold |
@@ -278,8 +279,8 @@ organising idea:
 | Dust | Miasma | a small grain, a dry crackle rather than a wash |
 | Misfire | Golem | Chaos past half depth, two and three events a step, all on the clock |
 
-Golem holds four because it is the base player and each is a different
-argument. The old five are gone by name: Deadpan kept unchanged, Sixteenths
+Golem holds three because it is the base player and each is a different
+argument. The old five are gone by name: Sixteenths
 absorbed into Footfall (which also ships Bar demonstrated), Erosion into
 Undertow (which adds the octave), Pendulum's direction into Drill, and
 Stutter cut outright as a tremolo rather than a sequencer. `ProcessorTest`
