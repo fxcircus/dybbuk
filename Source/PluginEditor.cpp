@@ -617,7 +617,7 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
         if (mode == Lamp::miasma)  return "The grain the cloud is made of, 10 to 80 ms.";
         return "How much of each step sounds before it is cut.";
     }
-    if (c == fadeKnob.get())      return "Level a step keeps every play, like a delay's feedback. Under Inf a step fades and leaves the pattern.";
+    if (c == fadeKnob.get())      return "Level a step keeps every play, like a delay's feedback. Under Inf a step fades and leaves the pattern. Frozen, nothing fades.";
     if (c == directionKnob.get()) return "The order the steps play: forward, reverse, pendulum, drunk, random.";
     if (c == pitchKnob.get())
         return mode == Lamp::legion ? "The interval between the three voices, in semitones; octaves at zero."
@@ -769,10 +769,17 @@ void DybbukEditor::timerCallback()
     // ratchet's density whenever you play), so it dims while it can do
     // nothing, the way the BAR diamond dims unsynced.
     {
-        const bool fillsLive = raw (params::id::freeze) >= 0.5f || mode == (int) Lamp::tremor;
+        const bool frozen = raw (params::id::freeze) >= 0.5f;
+        const bool fillsLive = frozen || mode == (int) Lamp::tremor;
         const float wantedAlpha = fillsLive ? 1.0f : 0.4f;
         if (std::abs (fillsKnob->getAlpha() - wantedAlpha) > 0.01f)
             fillsKnob->setAlpha (wantedAlpha);
+
+        // And its opposite: frozen, no step pays Feedback, so the knob dims
+        // while it can do nothing. The two swap as FREEZE lights.
+        const float feedbackAlpha = frozen ? 0.4f : 1.0f;
+        if (std::abs (fadeKnob->getAlpha() - feedbackAlpha) > 0.01f)
+            fadeKnob->setAlpha (feedbackAlpha);
     }
 
     // The hint line: the sentence fades out before it is swapped, so a

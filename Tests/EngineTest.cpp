@@ -1591,8 +1591,11 @@ void orphanState()
         float fillAtEnd = 1.0f, fillSeen = 0.0f;
         int stepsAtEnd = -1;
         runBurst (withTrigger, p, sr, 128, [&] (BurstEngine& e, BurstEngine::Params& q, double t) {
-            if (t >= 1.5) q.record = false;      // freeze, so the note at 2.0 s scrambles instead of capturing
-            if (t >= 2.06) q.feedback01 = 0.0f;  // then let the pattern die UNDER the fill, mid-scramble
+            // Freeze so the note at 2.0 s scrambles instead of capturing, then
+            // thaw with no Feedback so the pattern dies UNDER the fill: frozen
+            // it cannot die at all any more, which is the point of Freeze.
+            q.record = t < 1.5 || t >= 2.06;
+            if (t >= 2.06) q.feedback01 = 0.0f;
             fillSeen = juce::jmax (fillSeen, e.uiFill.load());
             fillAtEnd = e.uiFill.load();
             stepsAtEnd = e.uiStepCount.load();
@@ -1724,9 +1727,10 @@ void wraithFade()
     p.stepSeconds = 0.25;
     p.length01 = 1.0f;
     p.feedback01 = 0.5f;       // 6 dB a play
-    const auto r = runBurst (in, p, sr, 128, [] (BurstEngine&, BurstEngine::Params& q, double t) {
-        if (t >= 0.5) q.record = false;   // freeze, so nothing new is captured
-    });
+    // Armed throughout: there is no input after the first note, so nothing
+    // new is captured, and Feedback is paid the way it is while playing.
+    // (Frozen it would not be paid at all: Freeze holds the pattern whole.)
+    const auto r = runBurst (in, p, sr, 128);
     const int w = (int) (0.25 * sr);
     const double first = rmsOf (r.out, (int) (0.6 * sr), w);
     const double last = rmsOf (r.out, (int) (2.6 * sr), w);
@@ -1812,6 +1816,46 @@ void meterTruth()
     }
 }
 
+
+// Freeze holds the pattern whole: no new steps, and no step paying Feedback
+// either, or what you play over would quietly die underneath you.
+void freezeHolds()
+{
+    std::printf ("freeze holds: a frozen pattern does not fade\n");
+    const double sr = 48000.0;
+    const auto in = burstInput (sr, 11.0, kFour);
+    auto p = wetParams();
+    p.stepSeconds = 0.2;
+    p.feedback01 = 0.5f;      // 6 dB a play while it is running
+
+    // A window of one whole cycle, so the measurement is the pattern and not
+    // which of its four steps happened to fall inside.
+    const int cycle = (int) (0.8 * sr);
+
+    // Frozen at 1.6 s, thawed at 6.4 s.
+    const auto r = runBurst (in, p, sr, 128, [] (BurstEngine&, BurstEngine::Params& q, double t) {
+        q.record = ! (t >= 1.6 && t < 6.4);
+    });
+    const double held1 = rmsOf (r.out, (int) (2.0 * sr), cycle);
+    const double held2 = rmsOf (r.out, (int) (5.6 * sr), cycle);
+    const double thawed = rmsOf (r.out, (int) (8.8 * sr), cycle);
+
+    check ("frozen, the level holds over four seconds",
+           held1 > 0.02 && std::abs (dbfs (held2 / juce::jmax (held1, 1.0e-9))) < 0.5,
+           juce::String (dbfs (held1), 1) + " dBFS at the start of the hold, " + juce::String (dbfs (held2), 1) + " at its end");
+    check ("and thawing lets it fade again",
+           dbfs (thawed / juce::jmax (held2, 1.0e-9)) < -15.0,
+           juce::String (dbfs (thawed), 1) + " dBFS two cycles after thawing, from " + juce::String (dbfs (held2), 1));
+
+    // Armed throughout, the same pattern is long gone by then: the hold is
+    // what is doing the work, not the step times.
+    const auto n = runBurst (in, p, sr, 128);
+    check ("armed throughout, it is gone by then",
+           rmsOf (n.out, (int) (5.6 * sr), cycle) < held2 * 0.1,
+           juce::String (dbfs (rmsOf (n.out, (int) (5.6 * sr), cycle)), 1) + " dBFS where the held one was "
+               + juce::String (dbfs (held2), 1));
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -1824,6 +1868,7 @@ const Scenario kScenarios[] = {
     { "wraithrelease", wraithRelease },  { "gateabandon", gateAbandon },
     { "orphanstate", orphanState },      { "steps1phase", singleStepPhase },  { "ratchetmodes", ratchetModes },
     { "wraithslots", wraithSlots },      { "wraithfade", wraithFade },       { "metertruth", meterTruth },
+    { "freezeholds", freezeHolds },
     { "rattle", rattle },     { "mirror", mirror },   { "miasma", miasma },
 };
 

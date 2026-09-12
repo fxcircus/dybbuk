@@ -636,8 +636,10 @@ void BurstEngine::startStep (int index, int stepSamples, const Deviation& d) noe
     ratchetCounter = ratchetPeriod;
 
     // Feedback is paid on the way in, so the play you hear is at the level
-    // the step had, and the next one is quieter.
-    if (cur.feedback01 < 1.0f)
+    // the step had, and the next one is quieter. Frozen, nothing is paid:
+    // Freeze holds the pattern whole, and a pattern you are playing over
+    // while it quietly dies underneath you is not held (Roy).
+    if (cur.record && cur.feedback01 < 1.0f)
         stepGain[(size_t) index] *= juce::jmax (0.0f, cur.feedback01);
     uiCurrentStep.store (index, std::memory_order_relaxed);
 }

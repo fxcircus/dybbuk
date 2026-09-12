@@ -85,7 +85,7 @@ disagree with what is written here, this wins.
   input is copied to both sides before the engine), and mono in to mono out
   for hosts that run mono tracks mono; stereo in to mono out is refused.
   `ProcessorTest` covers all three
-- `EngineTest`: 30 scenarios plus `render` (119 checks, 0 failures, 0.4 s):
+- `EngineTest`: 31 scenarios plus `render` (122 checks, 0 failures, 0.5 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
   levels, cpu, hostile, pitch, glue, spread, bar, linger, legion, haunt,
   tremor, modesexport
@@ -149,6 +149,26 @@ expected, three notes.
    instrument and the room, not the patch; the dice touches only what
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
+
+## Freeze holds the decay too (2026-09-12)
+
+Roy: while Freeze is on, Feedback should stop and the sound should not
+fade. It is the right reading of the switch. A pattern you are playing
+over while it quietly dies underneath you is not held, and the two
+controls were fighting: Fills only acts frozen, Feedback only mattered
+unfrozen, and nothing said so.
+
+No step pays Feedback while the pattern is frozen, and the knob dims to
+40 % as FREEZE lights, exactly as Fills brightens. Its hint ends "Frozen,
+nothing fades". `EngineTest freezeholds` measures the level across four
+seconds of hold (-21.3 dBFS at both ends, a window of one whole cycle so
+the measurement is the pattern and not which steps fell inside it), then
+18 dB of fade two cycles after thawing, against the same pattern left
+armed being 30 dB down by the same moment.
+
+Two older scenarios had premises this invalidates: both emptied a frozen
+pattern with Feedback, which can no longer happen. They now thaw first,
+which is the honest way to say what they were testing.
 
 ## A hunt for the same class of bug (2026-09-11)
 

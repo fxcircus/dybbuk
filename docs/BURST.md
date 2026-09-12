@@ -169,7 +169,8 @@ holding; the transport phase and the knob map were left to me.
 - **Decay** (was Length): a choke, the fraction of the step a slice may sound.
 - **Feedback** (was Fade, with the opposite polarity): the level a step
   keeps every play, like a delay's feedback; Inf keeps every step, under
-  it a step fades and, under -60 dB, leaves the pattern, so an armed pattern evolves like a delay instead of
+  it a step fades and, under -60 dB, leaves the pattern. Frozen, nothing
+  is paid: Freeze holds the pattern whole, so an armed pattern evolves like a delay instead of
   piling up.
 - **Fills:** disarmed, a gated onset scrambles the order for one cycle,
   depth being how many pairs are swapped. The hardware's one trick.
