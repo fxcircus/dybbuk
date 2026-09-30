@@ -43,6 +43,8 @@ public:
         return i >= 0 && i < BurstEngine::kMaxSteps
                    ? engine.uiStepGain[(size_t) i].load (std::memory_order_relaxed) : 0.0f;
     }
+    // Where the glide has actually got to, for the Pitch knob's arc.
+    float getLivePitchSemitones() const noexcept { return engine.uiPitchSemitones.load (std::memory_order_relaxed); }
     bool isGateOpen() const noexcept { return engine.uiGate.load (std::memory_order_relaxed) > 0.5f; }
     bool isFillRunning() const noexcept { return engine.uiFill.load (std::memory_order_relaxed) > 0.5f; }
     int getClearsServed() const noexcept { return engine.uiClearsServed.load (std::memory_order_relaxed); }
@@ -125,6 +127,7 @@ private:
     std::atomic<float>* pBlend;
     std::atomic<float>* pFreeze;
     std::atomic<float>* pPitch;
+    std::atomic<float>* pGlide;
     std::atomic<float>* pGlue;
     std::atomic<float>* pSpread;
     std::atomic<float>* pMode;

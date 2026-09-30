@@ -67,8 +67,8 @@ disagree with what is written here, this wins.
 - Parameter count: 19, in Push 3 page order (Roy, 2026-09-10: the most
   useful eight on page one, which is not the plate's order): page one Mode,
   Freeze, Time (id `step`), Steps, Blend, Chaos, Direction, Pitch; page two
-  Decay (id `length`), Feedback (id `feedback`, was Fade), Fills, Glue, Spread, Threshold, Sync, Bar;
-  page three In, Out, Bypass last. Pitch is B3's Clock under the
+  Glide, Decay (id `length`), Feedback, Fills, Glue, Spread, Threshold, Sync;
+  page three Bar, In, Out, Bypass last. Pitch is B3's Clock under the
   name Roy chose: -12..+12 semitones on every step's material, the step
   clock untouched (a departure from the pedal, where CLOCK also slows the
   pattern), a fractional read with linear interpolation so a decimated
@@ -85,7 +85,7 @@ disagree with what is written here, this wins.
   input is copied to both sides before the engine), and mono in to mono out
   for hosts that run mono tracks mono; stereo in to mono out is refused.
   `ProcessorTest` covers all three
-- `EngineTest`: 31 scenarios plus `render` (122 checks, 0 failures, 0.5 s):
+- `EngineTest`: 33 scenarios plus `render` (130 checks, 0 failures, 0.5 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
   levels, cpu, hostile, pitch, glue, spread, bar, linger, legion, haunt,
   tremor, modesexport
@@ -151,6 +151,54 @@ expected, three notes.
    instrument and the room, not the patch; the dice touches only what
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
+
+## Pitch glides (2026-09-30)
+
+Roy plays Pitch as a performance control, twisting the Push encoder to turn
+a captured loop into a different chord, and asked whether the change could
+glide into place instead of arriving at once. It can, and two thirds of it
+was already there: the engine keeps ONE playback rate, smoothed over a
+fixed 20 ms, and every player reads it fresh every sample. That is why a
+pitch change never clicked, and it is why the glide is polyphonic for
+nothing: a captured chord slides as a chord, and the ghosts still ringing
+under it slide in parallel, because there is one number and everything
+reads it.
+
+- **Glide**, 0 to 2 s, default 120 ms, reading "Snap" at zero. Zero is
+  exactly the behaviour that shipped before, so the switch he asked for and
+  the time he will want to tune are one knob.
+- **The travel is even in semitones, not in tape speed.** JUCE has a
+  multiplicative smoother, so this is a type on the member rather than any
+  new arithmetic. Measured: an 800 ms glide down an octave reads -3.0,
+  -6.0, -9.0 and -12.0 semitones at each quarter, in the plain voice and in
+  the grain player alike, and is still exactly 220.0 Hz two steps later.
+- **It lands, it does not slide, when the value did not come from a hand on
+  the knob**: a session recall, a preset, a roll of the dice, and crossing
+  into or out of Legion (which moves the shared rate between the pitch and
+  unity for reasons that have nothing to do with the knob).
+- **No new knob on the plate**: both rows are full, and a sixth knob means
+  relaying out a row. Glide is first on Push page two, one flip from Pitch,
+  which cost a renumber of eight version hints. That is safe, because AU
+  identity is a hash of the id string and the hints only sort the list.
+  Instead the Pitch knob grew the modulation arc that was written into the
+  knob class long ago and called from nowhere: where the pitch actually is,
+  chasing the needle.
+
+**Two bugs had to be fixed first, both shipped and both wrong today.**
+
+- *A grain's read position was recomputed from its age times the rate NOW*,
+  which is exact only while the rate is still. At the instant the rate
+  changes it moves every sounding grain by its whole age times the change:
+  a grain 40 ms old jumps 20 ms through the material. Each grain now
+  carries its own read head that advances by the rate each sample, and the
+  phase-matching search aims at that instead. Bit-identical at a still
+  rate; measured, a still-rate Wraith tear fell from 0.37 to 0.06.
+- *A step sized its material from the rate at its start*, so a falling rate
+  meant the material had not run out by the time the tick cut it: measured,
+  the largest sample step went from 0.022 with the pitch left alone to
+  0.064 across a change. Each step now also fades over the last couple of
+  milliseconds of its own step time, which is rate independent and survives
+  the target moving mid step.
 
 ## Freeze holds the decay too (2026-09-12)
 

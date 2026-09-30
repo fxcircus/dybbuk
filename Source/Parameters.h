@@ -11,8 +11,13 @@
 // AU sorts them by (version hint, hash of id), so the two only agree if every
 // parameter carries its own ascending hint declared in the same order. The
 // first eight are the Push 3 bank 1: Mode, Freeze, Time, Steps, Blend, Chaos,
-// Direction, Pitch; then Decay, Fade, Fills, Glue, Spread, Threshold, Sync,
-// Bar; then In, Out, Bypass. The plate's order is a different thing.
+// Direction, Pitch; then Glide (first on page two, one flip from the Pitch
+// knob it belongs to), Decay, Feedback, Fills, Glue, Spread, Threshold, Sync;
+// then Bar, In, Out, Bypass. The plate's order is a different thing.
+//
+// Renumbering hints is safe: AU parameter identity is a hash of the id string
+// and the hints only sort the list, so an insertion reorders the Push pages
+// without touching a saved automation lane.
 namespace params
 {
 namespace id
@@ -28,6 +33,7 @@ namespace id
     inline constexpr auto length    = "length";
     inline constexpr auto feedback  = "feedback";
     inline constexpr auto pitch     = "pitch";
+    inline constexpr auto glide     = "glide";
     inline constexpr auto glue      = "glue";
     inline constexpr auto spread    = "spread";
     inline constexpr auto mode      = "mode";

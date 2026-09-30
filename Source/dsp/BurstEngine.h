@@ -67,6 +67,7 @@ public:
         float length01 = 1.0f;        // choke: the fraction of the step a slice may sound
         float feedback01 = 1.0f;      // the level a step keeps every play, like a delay's feedback; under 1 it fades and leaves
         float pitchSemitones = 0.0f;  // resamples every step's material; the step clock is untouched
+        float glideMs = 0.0f;         // how long Pitch takes to arrive; 0 is the 20 ms ramp that reads as a snap
         float glue01 = 0.0f;          // the end-of-chain saturator on the pattern: warmth to thrash
         float spread01 = 0.0f;        // alternate steps left and right, this far
         Mode mode = Mode::golem;
@@ -90,6 +91,9 @@ public:
     // so a session recall can never empty the pattern on load.
     void requestClear() noexcept { clearRequests.fetch_add (1, std::memory_order_relaxed); }
     void seedForTests (unsigned int s) noexcept { rng.seed (s); }
+    // Pitch must LAND rather than slide when the value did not come from a
+    // hand on the knob: a session recall, a preset, a roll of the dice.
+    void requestPitchSnap() noexcept { snapRate = true; }
     // For the harness: capture must never be pointed at a slice a haunting is
     // still reading, or the next note is written into a sounding ghost.
     bool captureSlotIsHaunted() const noexcept;
@@ -125,6 +129,7 @@ public:
     std::atomic<int> uiCommits { 0 };          // counts steps joining the pattern, so the plate can grow a new limb
     std::atomic<int> uiClearsServed { 0 };
     std::atomic<float> uiGate { 0.0f };        // 1 while capturing
+    std::atomic<float> uiPitchSemitones { 0.0f };   // where the glide has actually got to, for the knob's arc
     std::atomic<float> uiFill { 0.0f };        // 1 while a fill's scrambled order is running
     std::atomic<float> uiInputLevel { 0.0f };
     std::atomic<float> uiOutputLevel { 0.0f };
@@ -146,6 +151,10 @@ private:
     static constexpr float kReattackRatio = 2.5f;
     static constexpr float kBaselineRiseMs = 30.0f;
     static constexpr float kBaselineFallMs = 80.0f;
+    // The shortest ramp Pitch ever takes: fast enough to read as a snap, long
+    // enough that a jump does not click.
+    static constexpr float kPitchSnapMs = 20.0f;
+
     // Detection lags the transient; the pre-roll is prepended so attacks keep
     // their front edge. Fades are applied on playback, never to the material.
     static constexpr float kPreRollMs = 4.0f;
@@ -200,6 +209,12 @@ private:
         double head = 0.0, headStart = 0.0, advance = 0.0;
         int size = 0;
         double start[2] { 0.0, 0.0 };
+        // Each grain advances its own read head. Recomputing it from the
+        // grain's age times the rate NOW is only true while the rate is
+        // still: moving, a grain is read at a speed that was never true for
+        // most of its life, which bends it away from the pitch and, on a
+        // fast fall, momentarily reads it backwards.
+        double readPos[2] { 0.0, 0.0 };
         int age[2] { 0, 0 };
         float gain = 1.0f, rateMul = 1.0f;
         int left = 0;              // output samples still to play
@@ -216,6 +231,13 @@ private:
         Voice v[3];
         int voices = 0;
         Grains stretch;
+        // How much of the STEP is left, so a step that is still sounding when
+        // the tick comes fades out instead of being cut. The per voice fades
+        // are anchored to the material, which is the right anchor only while
+        // the rate is still: slow the rate mid step and the material has not
+        // run out by the time the next tick cuts it.
+        int stepLeft = 0;
+        int fadeSamples = 1;
         int rattleLeft = 0;        // Rattle: output samples of buzz still to play; the slice restarts when it ends
         int rattleWindow = 0;      // ... and what a ratchet gives it back
         float panL = 1.0f, panR = 1.0f;
@@ -395,7 +417,15 @@ private:
     Params cur;                                 // this block's params, read at commit/tick time
     Rng rng;
 
-    juce::SmoothedValue<float> inGain, outGain, wetMix, dryMix, rate, glueAmount;
+    juce::SmoothedValue<float> inGain, outGain, wetMix, dryMix, glueAmount;
+    // The rate is smoothed MULTIPLICATIVELY, so the travel is even in
+    // semitones rather than even in tape speed: half way through an octave
+    // drop a linear ramp has moved only five of the twelve semitones, which
+    // is not what a glide means to an ear.
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> rate { 1.0f };
+    int rateRampSamples = 1;
+    bool snapRate = true;
+    bool lastWasLegion = false;
     float currentRate = 1.0f;
     GlueStage glueL, glueR;
 

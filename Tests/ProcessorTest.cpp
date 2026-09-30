@@ -581,6 +581,9 @@ void readouts()
         { params::id::pitch, 7.0f, "+7 st" },
         { params::id::pitch, -12.0f, "-12 st" },
         { params::id::pitch, 0.0f, "0 st" },
+        { params::id::glide, 0.0f, "Snap" },
+        { params::id::glide, 60.0f, "60 ms" },
+        { params::id::glide, 800.0f, "0.80 s" },
         { params::id::glue, 0.0f, "Clean" },
         { params::id::glue, 40.0f, "40 %" },
         { params::id::spread, 0.0f, "Mono" },
@@ -1077,7 +1080,7 @@ void ordering()
             ok = false;
     }
     check ("first eight parameters", ok, order.trim());
-    check ("nineteen parameters in all", all.size() == 19, juce::String (all.size()));
+    check ("twenty parameters in all", all.size() == 20, juce::String (all.size()));
     // Every parameter must reach the DAW: automatable, and the stepped ones
     // (Mode, Direction, Steps, Pitch, the switches) declared discrete so a
     // host maps them to their steps rather than a continuous ramp.

@@ -43,6 +43,32 @@ flutter, dropouts on the material), which is the Crust idea from the delay
 days. Not worth it: Mosaic (Legion covers it), Swapper (Freeze covers it),
 Habit's Collect (that is overdubbing, which the ring already is).
 
+## Left open by the pitch glide (2026-09-30)
+
+- **Legion does not glide, and it is the chord mode.** It pins the shared
+  rate to unity and bakes the interval into each voice when the step starts,
+  so twisting Pitch there already changes nothing that is sounding: the new
+  chord arrives on the next step. Making it glide is about ten lines (give
+  each voice a small exponent and read the shared rate raised to it), but
+  the blocker is not the plumbing. Legion's zero means octaves, so sweeping
+  down past the detent targets +2, +1, +12, -1: snapping that is one
+  surprising chord, gliding it is an eleven semitone swoop up followed by a
+  thirteen semitone swoop down through unison, in the middle of exactly the
+  gesture the glide is for. The first decision is what Legion's zero should
+  mean, and that changes a sound that already exists, so it is Roy's.
+- **A tear at Wraith's grain respawn**, older than the glide and unrelated
+  to it: with a still rate and no pitch change at all, the sample step at a
+  respawn measures about 0.06 against 0.02 in ordinary playback, and it
+  grows while the rate moves. The phase-matching search picks the best
+  continuation it can find within a quarter grain of the head, and when the
+  material has no good match there, the seam shows. Suspect the search
+  window rather than the read head, which is now correct. Worth a look with
+  ears on a sustained Wraith chord.
+- **Fixed time against fixed rate.** Glide is a time to arrive, so every
+  move takes the same wall clock whether it is one semitone or twelve. The
+  alternative is a constant cents per second, where a nudge is instant and
+  an octave takes six times as long. One line apart; Roy decides by ear.
+
 ## Parked by the Burst pivot (2026-09-09)
 
 - **Radio mode** is now B5 in `docs/BURST.md` (six stations proposed, with

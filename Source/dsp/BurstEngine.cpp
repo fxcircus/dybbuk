@@ -51,6 +51,7 @@ void BurstEngine::Grains::begin (const float* d, int n, double headStart, double
     for (int k = 0; k < 2; ++k)
     {
         start[k] = head;
+        readPos[k] = head;
         age[k] = k == 0 ? 0 : size / 2;
     }
     juce::ignoreUnused (rng);
@@ -75,7 +76,7 @@ float BurstEngine::Grains::next (float rate, Rng& rng) noexcept
             // The reference is what the OTHER grain is reading right now, so
             // the two stay in phase with each other, not each with its own past.
             const int other = k ^ 1;
-            const double continuing = start[other] + (double) age[other] * (double) (rate * rateMul);
+            const double continuing = readPos[other];
             double best = scatter ? (double) (rng.unit() * (float) juce::jmax (1, len - size - 1)) : head;
             const int win = juce::jmin (256, size / 2);
             const int reach = size / 4;
@@ -104,10 +105,12 @@ float BurstEngine::Grains::next (float rate, Rng& rng) noexcept
                 }
             }
             start[k] = juce::jlimit (0.0, lastIndex, best);
+            readPos[k] = start[k];
             age[k] = 0;
         }
         const float w = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::twoPi * (float) age[k] / (float) size);
-        double rp = start[k] + (double) age[k] * (double) (rate * rateMul);
+        double rp = readPos[k];
+        readPos[k] += (double) (rate * rateMul);
         if (rp > lastIndex)
             rp = lastIndex;
         const int i0 = (int) rp;
@@ -143,6 +146,8 @@ void BurstEngine::StepVoice::restart (int windowSamples) noexcept
         stretch.head = stretch.headStart;
         stretch.start[0] = stretch.headStart;
         stretch.start[1] = stretch.headStart;
+        stretch.readPos[0] = stretch.headStart;
+        stretch.readPos[1] = stretch.headStart;
         stretch.age[0] = 0;
         stretch.age[1] = stretch.size / 2;
         stretch.left = juce::jmax (stretch.left, windowSamples);
@@ -155,14 +160,25 @@ void BurstEngine::StepVoice::stop() noexcept
         x = {};
     voices = 0;
     stretch = {};
+    stepLeft = 0;
     rattleLeft = 0;
     rattleWindow = 0;
 }
 
 float BurstEngine::StepVoice::next (float rate, Rng& rng) noexcept
 {
+    // The step's own fade: the players' fades are anchored to their material,
+    // which does not line up with the tick once the rate has moved.
+    float stepFade = 1.0f;
+    if (stepLeft > 0)
+    {
+        if (stepLeft < fadeSamples)
+            stepFade = (float) stepLeft / (float) fadeSamples;
+        --stepLeft;
+    }
+
     if (stretch.data != nullptr)
-        return stretch.next (rate, rng);
+        return stretch.next (rate, rng) * stepFade;
     if (rattleLeft > 0)
     {
         // The buzz: the slice again the moment it ends, for as long as the step lasts.
@@ -174,7 +190,7 @@ float BurstEngine::StepVoice::next (float rate, Rng& rng) noexcept
     for (int k = 0; k < voices; ++k)
         if (v[k].active())
             out += v[k].next (rate);
-    return out;
+    return out * stepFade;
 }
 
 const float* BurstEngine::StepVoice::material() const noexcept
@@ -297,8 +313,11 @@ void BurstEngine::prepare (double sampleRate, int maxBlockSize)
     aWraithRelease = std::pow (0.001f, 1.0f / (kWraithReleaseMs * 0.001f * (float) sr));
     aBaseFall = coeff (kBaselineFallMs);
 
-    for (auto* s : { &inGain, &outGain, &wetMix, &dryMix, &rate, &glueAmount })
+    for (auto* s : { &inGain, &outGain, &wetMix, &dryMix, &glueAmount })
         s->reset (sr, 0.02);
+    rateRampSamples = juce::jmax (1, juce::roundToInt (kPitchSnapMs * 0.001 * sr));
+    rate.reset (rateRampSamples);
+    snapRate = true;
     glueL.prepare (sr);
     glueR.prepare (sr);
 
@@ -526,6 +545,8 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
 {
     sv.stop();
     panFor (s.index, s.spread01, sv.panL, sv.panR);
+    sv.stepLeft = s.stepSamples;
+    sv.fadeSamples = s.fadeSamples;
     const int window = juce::jmax (1, s.stepSamples / juce::jmax (1, d.ratchets));
     const float share = juce::jlimit (0.05f, 1.0f, s.length01 * d.choke01);
     const int offset = juce::jlimit (0, juce::jmax (0, len - s.fadeSamples * 4), juce::roundToInt ((float) len * d.offset01));
@@ -810,7 +831,38 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
     wetMix.setTargetValue (std::sin (juce::MathConstants<float>::halfPi * blend));
     // Legion reads Pitch as the interval between its voices, so the global
     // rate goes to unity there.
-    rate.setTargetValue (p.mode == Mode::legion ? 1.0f : rateForSemitones (juce::jlimit (-24.0f, 24.0f, p.pitchSemitones)));
+    const bool legionNow = p.mode == Mode::legion;
+    const float wantedRate = legionNow ? 1.0f : rateForSemitones (juce::jlimit (-24.0f, 24.0f, p.pitchSemitones));
+
+    // The glide's length, re-aimed from wherever the pitch has got to rather
+    // than snapped, so turning the Glide knob mid slide does not jump.
+    const int wantedRamp = juce::jmax (1, juce::roundToInt (juce::jmax (kPitchSnapMs, p.glideMs) * 0.001f * (float) sr));
+    if (wantedRamp != rateRampSamples)
+    {
+        const float here = rate.getCurrentValue();
+        rateRampSamples = wantedRamp;
+        rate.reset (rateRampSamples);
+        rate.setCurrentAndTargetValue (here);
+    }
+
+    // Crossing into or out of Legion moves the shared rate between the pitch
+    // and unity for a reason that has nothing to do with the knob, so it
+    // lands rather than sweeping an octave behind the mode change.
+    if (legionNow != lastWasLegion)
+    {
+        lastWasLegion = legionNow;
+        snapRate = true;
+    }
+
+    if (snapRate)
+    {
+        snapRate = false;
+        rate.setCurrentAndTargetValue (wantedRate);
+    }
+    else
+    {
+        rate.setTargetValue (wantedRate);
+    }
     glueAmount.setTargetValue (juce::jlimit (0.0f, 1.0f, p.glue01));
     dryMix.setTargetValue (blend >= 1.0f ? 0.0f : std::cos (juce::MathConstants<float>::halfPi * blend));   // cos (pi/2) is not 0 in float
 
@@ -965,6 +1017,7 @@ void BurstEngine::process (juce::AudioBuffer<float>& buffer, const Params& p)
         }
     }
 
+    uiPitchSemitones.store (12.0f * std::log2 (juce::jmax (1.0e-6f, currentRate)), std::memory_order_relaxed);
     uiInputLevel.store (inPeak, std::memory_order_relaxed);
     uiOutputLevel.store (outPeak, std::memory_order_relaxed);
 }

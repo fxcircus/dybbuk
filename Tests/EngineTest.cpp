@@ -1856,6 +1856,140 @@ void freezeHolds()
                + juce::String (dbfs (held2), 1));
 }
 
+
+// Pitch is a tape speed, so moving it while a step sounds is a slide. Two
+// things in the engine assume the speed is still, and both are wrong today
+// over the 20 ms the rate takes to move.
+void pitchMoving()
+{
+    std::printf ("pitch moving: what a rate change does to a step already sounding\n");
+    const double sr = 48000.0;
+
+    // A note far longer than the step, so a step is always cut at its
+    // boundary rather than running out of material first.
+    const auto in = burstInput (sr, 3.0, { { 0.10, 0.800, 330.0, 0.5 } });
+
+    auto still = wetParams();
+    still.stepSeconds = 0.15;
+    const auto a = runBurst (in, still, sr, 128);
+    double stillJump = 0.0;
+    for (int i = (int) (1.2 * sr); i < (int) (2.6 * sr); ++i)
+        stillJump = juce::jmax (stillJump, (double) std::abs (a.out[(size_t) i] - a.out[(size_t) (i - 1)]));
+
+    auto moved = still;
+    const auto b = runBurst (in, moved, sr, 128, [] (BurstEngine&, BurstEngine::Params& q, double t) {
+        q.pitchSemitones = t >= 1.5 ? -12.0f : 0.0f;
+    });
+    double movedJump = 0.0;
+    for (int i = (int) (1.2 * sr); i < (int) (2.6 * sr); ++i)
+        movedJump = juce::jmax (movedJump, (double) std::abs (b.out[(size_t) i] - b.out[(size_t) (i - 1)]));
+
+    check ("a step cut at its boundary does not click when the pitch moves",
+           movedJump < juce::jmax (0.04, stillJump * 1.5),
+           "largest sample step " + juce::String (movedJump, 4) + " while the pitch moves, against "
+               + juce::String (stillJump, 4) + " while it is still");
+
+    // The grain players used to work out where to read from the grain's age
+    // times the rate NOW, which is only true while the rate is still. What
+    // that costs is measured in the glide scenario, where the rate moves for
+    // long enough to see it. (A separate tear at Wraith's grain respawn is
+    // older than either and is written up in docs/IDEAS.md.)
+    const double settled = cycleFreq (runBurst (burstInput (sr, 4.0, { { 0.10, 0.200, 440.0, 0.5 } }),
+                                                [&] { auto q = wetParams(); q.mode = BurstEngine::Mode::wraith;
+                                                      q.stepSeconds = 0.3; q.length01 = 1.0f;
+                                                      q.pitchSemitones = -12.0f; return q; }(),
+                                                sr, 128).out,
+                                      (int) (2.2 * sr), (int) (0.2 * sr), sr);
+    check ("a frozen grain reads an octave down as an octave down",
+           std::abs (12.0 * std::log2 (settled / 220.0)) < 0.2,
+           juce::String (settled, 1) + " Hz, wanted 220");
+}
+
+// Glide: Pitch is a tape speed, so giving it a travel time turns a knob twist
+// into a slide. The travel must be even in SEMITONES, must land exactly on
+// the semitone and stay there, and must not touch the step clock.
+void glide()
+{
+    std::printf ("glide: Pitch slides, evenly in semitones, and lands\n");
+    const double sr = 48000.0;
+    // One long note, one step, a step long enough to hold the whole slide.
+    // The note runs 0.10 to 1.10, so the step starts sounding at about 1.13
+    // and has a second of material to read.
+    const auto in = burstInput (sr, 8.0, { { 0.10, 1.000, 440.0, 0.5 } });
+    const double t0 = 1.4;    // the twist, well inside the first step
+
+    struct M { BurstEngine::Mode mode; const char* name; };
+    const M through[] = { { BurstEngine::Mode::golem, "Golem" }, { BurstEngine::Mode::wraith, "Wraith" } };
+    for (const auto& m : through)
+    {
+        auto p = wetParams();
+        p.mode = m.mode;
+        p.maxSteps = 1;
+        p.stepSeconds = 2.0;
+        p.length01 = 1.0f;
+        p.glideMs = 800.0f;
+        const auto r = runBurst (in, p, sr, 128, [t0] (BurstEngine&, BurstEngine::Params& q, double t) {
+            q.pitchSemitones = t >= t0 ? -12.0f : 0.0f;
+        });
+
+        // Even in semitones means a quarter of the way down is three
+        // semitones, not the six an even-in-tape-speed ramp would give.
+        double worst = 0.0;
+        juce::String walked;
+        for (int q = 1; q <= 4; ++q)
+        {
+            const double at = t0 + 0.8 * 0.25 * q;
+            const double f = cycleFreq (r.out, (int) ((at - 0.015) * sr), (int) (0.03 * sr), sr);
+            const double st = 12.0 * std::log2 (f / 440.0);
+            walked += juce::String (st, 1) + " ";
+            worst = juce::jmax (worst, std::abs (st - (-3.0 * q)));
+        }
+        check ((juce::String (m.name) + " walks down evenly in semitones").toRawUTF8(), worst < 1.2,
+               "at each quarter: " + walked.trim() + " semitones, wanted -3 -6 -9 -12");
+
+        // And it is still exactly there two steps later.
+        const double landed = cycleFreq (r.out, (int) (3.5 * sr), (int) (0.2 * sr), sr);
+        check ((juce::String (m.name) + " lands on the semitone and stays").toRawUTF8(),
+               std::abs (12.0 * std::log2 (landed / 220.0)) < 0.2,
+               juce::String (landed, 1) + " Hz two seconds after arriving, wanted 220");
+    }
+
+    // Snap is the floor of the same knob: at zero it arrives within the 20 ms
+    // ramp that keeps a jump from clicking.
+    {
+        auto p = wetParams();
+        p.maxSteps = 1;
+        p.stepSeconds = 2.0;
+        p.glideMs = 0.0f;
+        const auto r = runBurst (in, p, sr, 128, [t0] (BurstEngine&, BurstEngine::Params& q, double t) {
+            q.pitchSemitones = t >= t0 ? -12.0f : 0.0f;
+        });
+        const double f = cycleFreq (r.out, (int) ((t0 + 0.03) * sr), (int) (0.04 * sr), sr);
+        check ("Snap arrives inside 50 ms", std::abs (12.0 * std::log2 (f / 220.0)) < 0.5,
+               juce::String (f, 1) + " Hz 30 ms after the twist, wanted 220");
+    }
+
+    // A tape speed is not a clock: the steps must not move. A slower read
+    // stretches each attack, so the detected onset drifts by a fraction of a
+    // millisecond; the spacing itself is the step, to within that.
+    {
+        const auto phrase = burstInput (sr, 6.0, kFour);
+        auto p = wetParams();
+        p.stepSeconds = 0.25;
+        p.glideMs = 1000.0f;
+        const auto r = runBurst (phrase, p, sr, 128, [] (BurstEngine&, BurstEngine::Params& q, double t) {
+            q.pitchSemitones = t >= 2.0 ? -7.0f : 0.0f;
+        });
+        const auto on = onsetsOf (r.out, sr, (int) (1.8 * sr));
+        int worst = 0;
+        for (size_t k = 1; k < on.size(); ++k)
+            worst = juce::jmax (worst, std::abs (on[k].sample - on[k - 1].sample - juce::roundToInt (0.25 * sr)));
+        check ("the step clock does not move with the pitch", on.size() >= 8 && worst <= 150,
+               juce::String ((int) on.size()) + " onsets, worst spacing " + juce::String (worst)
+                   + " samples off a 12000 sample step");
+    }
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -1868,7 +2002,7 @@ const Scenario kScenarios[] = {
     { "wraithrelease", wraithRelease },  { "gateabandon", gateAbandon },
     { "orphanstate", orphanState },      { "steps1phase", singleStepPhase },  { "ratchetmodes", ratchetModes },
     { "wraithslots", wraithSlots },      { "wraithfade", wraithFade },       { "metertruth", meterTruth },
-    { "freezeholds", freezeHolds },
+    { "freezeholds", freezeHolds },  { "pitchmoving", pitchMoving },  { "glide", glide },
     { "rattle", rattle },     { "mirror", mirror },   { "miasma", miasma },
 };
 

@@ -620,8 +620,8 @@ juce::String DybbukEditor::hintFor (juce::Component* component, juce::Point<int>
     if (c == fadeKnob.get())      return "Level a step keeps every play, like a delay's feedback. Under Inf a step fades and leaves the pattern. Frozen, nothing fades.";
     if (c == directionKnob.get()) return "The order the steps play: forward, reverse, pendulum, drunk, random.";
     if (c == pitchKnob.get())
-        return mode == Lamp::legion ? "The interval between the three voices, in semitones; octaves at zero."
-                                    : "Transposes every step's material, in semitones.";
+        return mode == Lamp::legion ? "The interval between the three voices, in semitones; octaves at zero. It lands on the next step, it does not glide."
+                                    : "Transposes every step's material, in semitones. Glide is how long it takes to arrive.";
     if (c == glueKnob.get())      return "Saturation on the pattern, level matched: colour and squash, not volume.";
     if (c == fillsKnob.get())
         return mode == Lamp::tremor ? "How many times the held step repeats within each step, 1 to 4."
@@ -763,6 +763,16 @@ void DybbukEditor::timerCallback()
         fillsKnob->setAccent (mode == (int) Lamp::tremor);
         for (auto* knob : { lengthKnob.get(), pitchKnob.get(), fillsKnob.get() })
             knob->repaint();
+    }
+
+    // Pitch is a tape speed with a travel time, so the knob shows where the
+    // pitch has actually got to as an arc chasing the needle. Without it a
+    // long Glide reads as a knob that has stopped responding.
+    {
+        const float live = juce::jlimit (-12.0f, 12.0f, proc.getLivePitchSemitones());
+        const float set = raw (params::id::pitch);
+        const bool travelling = std::abs (live - set) > 0.05f;
+        pitchKnob->setModulation (travelling, (live + 12.0f) / 24.0f);
     }
 
     // Fills only acts on a frozen pattern (except in Tremor, where it is the

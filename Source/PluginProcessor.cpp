@@ -41,6 +41,7 @@ DybbukProcessor::DybbukProcessor()
     pBlend     = apvts.getRawParameterValue (params::id::blend);
     pFreeze    = apvts.getRawParameterValue (params::id::freeze);
     pPitch     = apvts.getRawParameterValue (params::id::pitch);
+    pGlide     = apvts.getRawParameterValue (params::id::glide);
     pGlue      = apvts.getRawParameterValue (params::id::glue);
     pSpread    = apvts.getRawParameterValue (params::id::spread);
     pMode      = apvts.getRawParameterValue (params::id::mode);
@@ -79,6 +80,7 @@ void DybbukProcessor::releaseResources() {}
 void DybbukProcessor::randomiseParameters()
 {
     Randomiser::randomise (apvts, randomiserRng, randomMask);
+    engine.requestPitchSnap();   // a roll is not a performance: it lands
 }
 
 void DybbukProcessor::setRandomField (unsigned int field, bool enabled) noexcept
@@ -209,6 +211,7 @@ void DybbukProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     p.feedback01 = pFade->load() * 0.01f;
     p.direction = directionParam();
     p.pitchSemitones = pPitch->load();
+    p.glideMs = pGlide->load();
     p.glue01 = pGlue->load() * 0.01f;
     p.spread01 = pSpread->load() * 0.01f;
     p.mode = modeParam();
@@ -322,6 +325,7 @@ void DybbukProcessor::stampExtraState (juce::ValueTree& state) const
 void DybbukProcessor::applyExtraState (const juce::ValueTree& state)
 {
     randomMask = (unsigned int) (int) state.getProperty ("randomFields", (int) Randomiser::fieldDefault);
+    engine.requestPitchSnap();   // a recall or a preset arrives at its pitch, it does not slide into it
     juce::ignoreUnused (state);
 }
 

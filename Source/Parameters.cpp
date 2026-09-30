@@ -110,7 +110,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // Sync is built first so Step's readout can see it, but added at its own
     // slot so declaration order still matches the hint order.
     auto stepSync = std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { id::stepsync, 15 }, "Sync", false,
+        juce::ParameterID { id::stepsync, 16 }, "Sync", false,
         juce::AudioParameterBoolAttributes().withStringFromValueFunction (
             [] (bool v, int) { return juce::String (v ? "Sync" : "Free"); }));
     // Captured by value into Step's readout below, NOT held in a file static:
@@ -122,7 +122,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // 1. Threshold: the gate's open level, the hardware's Sensitivity. It
     // closes 6 dB under this, so a decaying tail cannot chatter it. First,
     // because it is the first thing the signal meets (Roy, playing it).
-    auto pThreshold = floatParam (14, id::threshold, "Threshold", { -60.0f, 0.0f }, -30.0f, "dB");
+    auto pThreshold = floatParam (15, id::threshold, "Threshold", { -60.0f, 0.0f }, -30.0f, "dB");
 
     // 2. Time. The knob is 0..1; what it means is a step time, and while Sync
     // is on it reads as a note division (Push shows the host's string, so a
@@ -162,7 +162,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
         juce::AudioParameterBoolAttributes().withStringFromValueFunction (
             [] (bool v, int) { return juce::String (v ? "Frozen" : "Off"); }));
 
-    auto pFills = percentWithWord (11, id::fills, "Fills", 30.0f, "Off");
+    auto pFills = percentWithWord (12, id::fills, "Fills", 30.0f, "Off");
     auto pChaos = percentWithWord (6, id::chaos, "Chaos", 0.0f, "Still");
 
     // 8. Direction. The choice order is BurstEngine::Direction's, so the index
@@ -175,12 +175,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // shortened step is still a click and not silence.
     // 9. Decay: the choke, how much of each step its material may sound.
     // Was "Length", which read as the pattern's length beside Steps and Time.
-    auto pDecay = floatParam (9, id::length, "Decay", { 5.0f, 100.0f, 1.0f }, 100.0f, "%");
+    auto pDecay = floatParam (10, id::length, "Decay", { 5.0f, 100.0f, 1.0f }, 100.0f, "%");
 
     // 10. Feedback: the level a step keeps every play, like a delay's. 100 %
     // reads Inf and keeps every step; under it a step fades and leaves.
     auto pFade = std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { id::feedback, 10 }, "Feedback",
+        juce::ParameterID { id::feedback, 11 }, "Feedback",
         juce::NormalisableRange<float> (0.0f, 100.0f, 1.0f), 100.0f,
         juce::AudioParameterFloatAttributes()
             .withLabel ("")
@@ -202,17 +202,36 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
             return (v > 0 ? "+" : "") + juce::String (v) + " st";
         }));
 
+    // 9. Glide: how long Pitch takes to arrive. Zero is Snap, the 20 ms ramp
+    // that keeps a jump from clicking and reads as instant. Above it, Pitch
+    // becomes a slide: the rate is a tape speed and every player reads it
+    // per sample, so a captured chord bends as a chord and the ghosts under
+    // it bend with it. The travel is even in semitones, not in tape speed,
+    // which is what a portamento circuit does and what the ear measures.
+    auto pGlide = std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { id::glide, 9 }, "Glide",
+        juce::NormalisableRange<float> (0.0f, 2000.0f, 1.0f, 0.4f), 120.0f,
+        juce::AudioParameterFloatAttributes()
+            .withLabel ("")
+            .withStringFromValueFunction ([] (float v, int)
+            {
+                if (v < 0.5f)
+                    return juce::String ("Snap");
+                return v >= 100.0f ? juce::String (v * 0.001, 2) + " s"
+                                   : juce::String (juce::roundToInt (v)) + " ms";
+            }));
+
     auto pSync = std::move (stepSync); // 12
 
     // 13, 14. The trims, one on each edge of the window.
-    auto pIn = trimParam (17, id::input, "In");
-    auto pOut = trimParam (18, id::out, "Out");
+    auto pIn = trimParam (18, id::input, "In");
+    auto pOut = trimParam (19, id::out, "Out");
 
     // 15, 16. Glue and Spread, the end of the pattern's chain: the old loop's
     // saturator as a drive, and alternate steps sat left and right. Both off
     // by default, with a word at zero.
-    auto pGlue = percentWithWord (12, id::glue, "Glue", 0.0f, "Clean");
-    auto pSpread = percentWithWord (13, id::spread, "Spread", 0.0f, "Mono");
+    auto pGlue = percentWithWord (13, id::glue, "Glue", 0.0f, "Clean");
+    auto pSpread = percentWithWord (14, id::spread, "Spread", 0.0f, "Mono");
 
     // 17. Mode: what a step does with its material. Golem is the sequencer
     // as it is; the rest are other players for the same pattern (B5).
@@ -223,7 +242,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // 18. Bar: synced, the pattern restarts from its first step on every bar
     // line. Off, it keeps its own phase on the grid.
     auto pBar = std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { id::barreset, 16 }, "Bar", false,
+        juce::ParameterID { id::barreset, 17 }, "Bar", false,
         juce::AudioParameterBoolAttributes().withStringFromValueFunction (
             [] (bool v, int) { return juce::String (v ? "On" : "Off"); }));
 
@@ -243,7 +262,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     std::unique_ptr<juce::RangedAudioParameter> ordered[] = {
         std::move (pMode),  std::move (pFreeze), std::move (pTime),      std::move (pSteps),
         std::move (pBlend), std::move (pChaos),  std::move (pDirection), std::move (pPitch),
-        std::move (pDecay), std::move (pFade),   std::move (pFills),     std::move (pGlue),
+        std::move (pGlide), std::move (pDecay),  std::move (pFade),      std::move (pFills),
+        std::move (pGlue),
         std::move (pSpread), std::move (pThreshold), std::move (pSync),  std::move (pBar),
         std::move (pIn),    std::move (pOut),    std::move (pBypass) };
     for (auto& prm : ordered)
