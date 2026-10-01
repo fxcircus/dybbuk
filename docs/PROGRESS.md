@@ -85,7 +85,7 @@ disagree with what is written here, this wins.
   input is copied to both sides before the engine), and mono in to mono out
   for hosts that run mono tracks mono; stereo in to mono out is refused.
   `ProcessorTest` covers all three
-- `EngineTest`: 33 scenarios plus `render` (130 checks, 0 failures, 0.5 s):
+- `EngineTest`: 34 scenarios plus `render` (132 checks, 0 failures, 0.5 s):
   burst, sync, direction, length, fade, fills, chaos, ceiling, export, deaf,
   levels, cpu, hostile, pitch, glue, spread, bar, linger, legion, haunt,
   tremor, modesexport
@@ -151,6 +151,40 @@ expected, three notes.
    instrument and the room, not the patch; the dice touches only what
    shapes the pattern (Time, Steps, Fills, Chaos, Direction, Length, Fade,
    Pitch).
+
+## The seam at a slice's edges (2026-09-30)
+
+Roy, playing: "depending on the kinds of samples and capturing there can be
+a sort of clipping on the samples themselves. Like they start from a not 0
+volume endpoint and need to be smoothed out with the attack." Exactly
+right, and measurable.
+
+A slice does not begin at silence. The gate opens on a LEVEL, and the 4 ms
+of pre-roll before it is whatever was already sounding, so anything held
+is captured starting and ending mid waveform. Measured with `copyPattern`:
+a plucked note captured at a -30 dB gate begins 27 dB under its own peak,
+which is nearly silence, but a HELD note begins at its peak exactly, and a
+held bass note at a high gate begins 1 dB under it. The only thing between
+that and a click on every repeat is the fade, and the fade was 2 ms of
+linear ramp.
+
+Two things were wrong with it. Two milliseconds is a corner, not a fade,
+for anything low: on a held 60 Hz note the repeat rang 43 dB under the
+tone at 200 Hz and 70 dB under at 800 Hz. And a linear ramp has a corner
+at each end, which is broadband by definition.
+
+So the fade is now a raised cosine, and as long as what it is fading can
+afford: up to 8 ms, never more than a quarter of the piece being played,
+never less than 1.5 ms. It cannot simply BE 8 ms because Rattle's slice is
+10 ms and two fades would swallow it. The choke's floor moved to the
+minimum fade rather than the working one, so Decay's own floor is
+unchanged.
+
+Measured on the held 60 Hz note, against the tone: 800 Hz went from -70 to
+-104 dB, 1.6 kHz from -91 to -127, 3.2 kHz from -95 to -130. Twelve dB at
+200 Hz, thirty-four higher up, which is where the ear hears a click.
+`EngineTest sliceedges` keeps both halves: the note showing WHY (what the
+slices actually begin on) and the check that the seam stays 80 dB under.
 
 ## Pitch glides (2026-09-30)
 

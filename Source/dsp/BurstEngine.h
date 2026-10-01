@@ -158,7 +158,26 @@ private:
     // Detection lags the transient; the pre-roll is prepended so attacks keep
     // their front edge. Fades are applied on playback, never to the material.
     static constexpr float kPreRollMs = 4.0f;
-    static constexpr float kFadeMs = 2.0f;
+    // A slice does not begin at silence: the gate opens on a level, and the
+    // pre-roll before it is whatever was already sounding, so anything held
+    // is captured starting and ending mid waveform. The fade is all that
+    // stands between that and a click on every repeat, and 2 ms was not
+    // enough: on a held bass note it left a buzz 43 dB under the tone, which
+    // 8 ms and a raised cosine put 20 dB further down. It cannot simply BE
+    // 8 ms, because Rattle's slice is 10 ms and two fades would swallow it,
+    // so it is as long as what it is fading can afford.
+    static constexpr float kFadeMaxMs = 8.0f;
+    static constexpr float kFadeMinMs = 1.5f;
+    static int fadeFor (int playSamples, int minFade, int maxFade) noexcept
+    {
+        return juce::jlimit (minFade, maxFade, playSamples / 4);
+    }
+    // No corner at either end: a linear ramp has one, and a corner is
+    // broadband.
+    static float fadeShape (double t) noexcept
+    {
+        return (float) (0.5 - 0.5 * std::cos (juce::MathConstants<double>::pi * juce::jlimit (0.0, 1.0, t)));
+    }
     // Grains: the size Trance and Wraith read with, capped so short material
     // still gets two grains; the jitter that keeps two grains from combing.
     static constexpr float kGrainMs = 40.0f;
@@ -302,7 +321,8 @@ private:
         int index = 0;
         int stepSamples = 1;
         float rate = 1.0f;         // the global pitch rate now
-        int fadeSamples = 1;
+        int fadeSamples = 1;      // the longest a fade may be
+        int fadeMinSamples = 1;   // and the shortest, for a slice that cannot afford more
         double sampleRate = 48000.0;
     };
     static void startStepVoice (StepVoice& sv, const float* material, int len, float stepGain,
@@ -378,7 +398,7 @@ private:
 
     double sr = 48000.0;
     int capacity = 0;                       // samples per slice
-    int preRollSamples = 0, fadeSamples = 1, holdOffSamples = 0;
+    int preRollSamples = 0, fadeSamples = 1, fadeMinSamples = 1, holdOffSamples = 0;
     float aRelease = 0.0f, aBaseRise = 0.0f, aBaseFall = 0.0f;
     float aWraithRelease = 0.0f;
 

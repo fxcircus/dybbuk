@@ -1990,6 +1990,107 @@ void glide()
     }
 }
 
+
+// A slice does not begin at silence. The gate opens on a level, and the
+// pre-roll before it is whatever was already sounding, so capturing anything
+// sustained hands the player a slice that starts and ends mid waveform.
+void sliceEdges()
+{
+    std::printf ("slice edges: what the captured slices actually begin and end on\n");
+    const double sr = 48000.0;
+
+    struct Case { const char* name; double hz; bool sustained; float threshold; };
+    const Case cases[] = {
+        { "a plucked note, gate at -30 dB", 220.0, false, -30.0f },
+        { "a held note, gate at -30 dB",    220.0, true,  -30.0f },
+        { "a held note, gate at -8 dB",     220.0, true,  -8.0f },
+        { "a held bass note, gate at -8 dB", 60.0, true,  -8.0f },
+    };
+
+    for (const auto& c : cases)
+    {
+        // Sustained: the tone is already at full swing well before the gate
+        // can open, which is what happens when you engage over a pad or when
+        // a louder re-attack splits a note that was already ringing.
+        std::vector<float> in ((size_t) (5.0 * sr), 0.0f);
+        for (int i = (int) (0.05 * sr); i < (int) (2.60 * sr); ++i)
+        {
+            const double t = (i - 0.05 * sr) / sr;
+            const double env = c.sustained ? 1.0 : std::exp (-6.0 * std::fmod (t, 0.5));
+            in[(size_t) i] = (float) (0.5 * env * std::sin (juce::MathConstants<double>::twoPi * c.hz * t));
+        }
+
+        BurstEngine e;
+        e.prepare (sr, 128);
+        auto p = wetParams();
+        p.thresholdDb = c.threshold;
+        p.stepSeconds = 0.4;
+        juce::AudioBuffer<float> buf (2, 128);
+        for (size_t pos = 0; pos < in.size(); pos += 128)
+        {
+            const int n = (int) juce::jmin ((size_t) 128, in.size() - pos);
+            for (int i = 0; i < n; ++i) { buf.setSample (0, i, in[pos + (size_t) i]); buf.setSample (1, i, in[pos + (size_t) i]); }
+            juce::AudioBuffer<float> view (buf.getArrayOfWritePointers(), 2, n);
+            e.process (view, p);
+        }
+
+        BurstEngine::PatternCopy copy;
+        if (! e.copyPattern (copy) || copy.steps.empty())
+        {
+            note (c.name, "nothing captured");
+            continue;
+        }
+        // How far from silence does a slice begin and end, against its own peak?
+        double worstHead = 0.0, worstTail = 0.0;
+        for (const auto& step : copy.steps)
+        {
+            if (step.size() < 16)
+                continue;
+            double peak = 1.0e-9;
+            for (float v : step)
+                peak = juce::jmax (peak, (double) std::abs (v));
+            worstHead = juce::jmax (worstHead, std::abs ((double) step.front()) / peak);
+            worstTail = juce::jmax (worstTail, std::abs ((double) step.back()) / peak);
+        }
+        note (c.name, juce::String ((int) copy.steps.size()) + " steps, worst first sample "
+                          + juce::String (dbfs (worstHead), 1) + " dB under its peak, last sample "
+                          + juce::String (dbfs (worstTail), 1));
+    }
+
+    // And what that costs when the slice is played: a held note captured at a
+    // high gate, so every slice begins and ends at full swing, and the seam
+    // is whatever the fade fails to hide. Broadband, well above the tone.
+    for (double hz : { 60.0, 220.0 })
+    {
+        std::vector<float> in ((size_t) (5.0 * sr), 0.0f);
+        for (int i = (int) (0.05 * sr); i < (int) (2.60 * sr); ++i)
+            in[(size_t) i] = (float) (0.5 * std::sin (juce::MathConstants<double>::twoPi * hz * (i - 0.05 * sr) / sr));
+        auto p = wetParams();
+        p.thresholdDb = -8.0f;
+        p.stepSeconds = 0.4;
+        const auto r = runBurst (in, p, sr, 128);
+        // The material is one pure tone, so anything well above it is the
+        // seam. Measure over a second of playback, and the worst single
+        // sample step, which is what a click is.
+        const int from = (int) (3.0 * sr), n = (int) (1.0 * sr);
+        // The material is one pure tone, so anything well above it is the
+        // seam ringing at the repeat rate. The bar is what the fade has to
+        // hide it under; with 2 ms of linear ramp this sat 20 to 35 dB
+        // louder in every band.
+        const double tone = goertzelAmp (r.out, from, n, hz, sr);
+        juce::String spectrum;
+        double worst = -1000.0;
+        for (double f : { 800.0, 1600.0, 3200.0 })
+        {
+            const double under = dbfs (goertzelAmp (r.out, from, n, f, sr)) - dbfs (tone);
+            spectrum += juce::String (juce::roundToInt (f)) + " Hz " + juce::String (under, 0) + " dB, ";
+            worst = juce::jmax (worst, under);
+        }
+        check ((juce::String (hz, 0) + " Hz held: the seam stays under the tone").toRawUTF8(), worst < -80.0,
+               spectrum.trimCharactersAtEnd (", "));
+    }
+}
+
 struct Scenario { const char* name; void (*fn)(); };
 
 const Scenario kScenarios[] = {
@@ -2002,7 +2103,7 @@ const Scenario kScenarios[] = {
     { "wraithrelease", wraithRelease },  { "gateabandon", gateAbandon },
     { "orphanstate", orphanState },      { "steps1phase", singleStepPhase },  { "ratchetmodes", ratchetModes },
     { "wraithslots", wraithSlots },      { "wraithfade", wraithFade },       { "metertruth", meterTruth },
-    { "freezeholds", freezeHolds },  { "pitchmoving", pitchMoving },  { "glide", glide },
+    { "freezeholds", freezeHolds },  { "pitchmoving", pitchMoving },  { "glide", glide },  { "sliceedges", sliceEdges },
     { "rattle", rattle },     { "mirror", mirror },   { "miasma", miasma },
 };
 

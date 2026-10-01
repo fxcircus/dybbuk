@@ -21,10 +21,10 @@ float BurstEngine::Voice::next (float playRate) noexcept
     // in time: still enough to take the click off a cut.
     float g = gain;
     if (p - start < (double) fadeSamples)
-        g *= (float) ((p - start) / (double) fadeSamples);
+        g *= fadeShape ((p - start) / (double) fadeSamples);
     const double remaining = (double) len - p;
     if (remaining < (double) fadeSamples)
-        g *= (float) (remaining / (double) fadeSamples);
+        g *= fadeShape (remaining / (double) fadeSamples);
 
     double rp = reverse ? (double) (len - 1) - p : p;
     if (rp < 0.0)
@@ -173,7 +173,7 @@ float BurstEngine::StepVoice::next (float rate, Rng& rng) noexcept
     if (stepLeft > 0)
     {
         if (stepLeft < fadeSamples)
-            stepFade = (float) stepLeft / (float) fadeSamples;
+            stepFade = fadeShape ((double) stepLeft / (double) fadeSamples);
         --stepLeft;
     }
 
@@ -303,7 +303,8 @@ void BurstEngine::prepare (double sampleRate, int maxBlockSize)
 
     preRollSamples = juce::jmax (1, juce::roundToInt (kPreRollMs * 0.001 * sr));
     preRoll.assign ((size_t) preRollSamples, 0.0f);
-    fadeSamples = juce::jmax (1, juce::roundToInt (kFadeMs * 0.001 * sr));
+    fadeSamples = juce::jmax (1, juce::roundToInt (kFadeMaxMs * 0.001 * sr));
+    fadeMinSamples = juce::jmax (1, juce::roundToInt (kFadeMinMs * 0.001 * sr));
     holdOffSamples = juce::roundToInt (kHoldOffMs * 0.001 * sr);
 
     const auto coeff = [this] (float ms) { return 1.0f - std::exp (-1.0f / (ms * 0.001f * (float) sr)); };
@@ -546,10 +547,10 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
     sv.stop();
     panFor (s.index, s.spread01, sv.panL, sv.panR);
     sv.stepLeft = s.stepSamples;
-    sv.fadeSamples = s.fadeSamples;
+    sv.fadeSamples = fadeFor (s.stepSamples, s.fadeMinSamples, s.fadeSamples);
     const int window = juce::jmax (1, s.stepSamples / juce::jmax (1, d.ratchets));
     const float share = juce::jlimit (0.05f, 1.0f, s.length01 * d.choke01);
-    const int offset = juce::jlimit (0, juce::jmax (0, len - s.fadeSamples * 4), juce::roundToInt ((float) len * d.offset01));
+    const int offset = juce::jlimit (0, juce::jmax (0, len - s.fadeMinSamples * 4), juce::roundToInt ((float) len * d.offset01));
     const float gain = stepGain * d.gainMul;
 
     if (s.mode == Mode::miasma)
@@ -601,8 +602,8 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
     const int choke = s.mode == Mode::wraith
                           ? len
                           : (s.mode == Mode::rattle
-                                 ? juce::jmax (s.fadeSamples * 2, rattleSlice)
-                                 : juce::jmax (s.fadeSamples * 2, juce::roundToInt ((float) window * share * (s.mode == Mode::trance ? 1.0f : stepRate))));
+                                 ? juce::jmax (s.fadeMinSamples * 2, rattleSlice)
+                                 : juce::jmax (s.fadeMinSamples * 2, juce::roundToInt ((float) window * share * (s.mode == Mode::trance ? 1.0f : stepRate))));
     const int n = s.mode == Mode::legion ? 3 : 1;
     sv.voices = n;
     for (int k = 0; k < n; ++k)
@@ -614,7 +615,7 @@ void BurstEngine::startStepVoice (StepVoice& sv, const float* material, int len,
         v.pos = v.start;
         v.len = juce::jmin (len, offset + choke);
         v.reverse = s.mode == Mode::mirror ? ! d.reverse : d.reverse;   // Mirror: everything backwards; chaos flips it back now and then
-        v.fadeSamples = s.fadeSamples;
+        v.fadeSamples = fadeFor (v.len - (int) v.start, s.fadeMinSamples, s.fadeSamples);
         v.gain = gain;
         v.rateMul = d.rateMulOr1();
         if (s.mode == Mode::legion)
@@ -648,6 +649,7 @@ void BurstEngine::startStep (int index, int stepSamples, const Deviation& d) noe
     s.stepSamples = stepSamples;
     s.rate = currentRate;
     s.fadeSamples = fadeSamples;
+    s.fadeMinSamples = fadeMinSamples;
     s.sampleRate = sr;
     startStepVoice (voice, slice (slot), sliceLen[(size_t) slot], stepGain[(size_t) index], s, d, rng);
 
@@ -1089,7 +1091,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
         return 0;
     }
     const int stepSamples = juce::jmax (1, juce::roundToInt (st.stepSeconds * pattern.sampleRate));
-    const int fade = juce::jmax (1, juce::roundToInt (kFadeMs * 0.001 * pattern.sampleRate));
+    const int fade = juce::jmax (1, juce::roundToInt (kFadeMaxMs * 0.001 * pattern.sampleRate));
 
     // One cycle in the direction's own order; random and drunk have no
     // cycle, so they export forward.
@@ -1126,6 +1128,7 @@ int BurstEngine::renderPattern (const PatternCopy& pattern, const RenderSettings
     setup.stepSamples = stepSamples;
     setup.rate = st.mode == Mode::legion ? 1.0f : playRate;
     setup.fadeSamples = fade;
+    setup.fadeMinSamples = juce::jmax (1, juce::roundToInt (kFadeMinMs * 0.001 * pattern.sampleRate));
     setup.sampleRate = pattern.sampleRate;
 
     const int total = (int) order.size() * stepSamples;
